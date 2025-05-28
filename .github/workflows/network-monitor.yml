@@ -1,0 +1,40 @@
+name: Network Monitor
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+  push:
+
+jobs:
+  network-monitor:
+    runs-on: linux-amd64-gpu-rtxa6000-latest-2-nemo
+    steps:
+      - name: Start tcpdump
+        run: |
+          sudo tcpdump -i any -w network.pcap &
+          TCPDUMP_PID=$!
+          echo "TCPDUMP_PID=$TCPDUMP_PID" >> $GITHUB_ENV
+
+      - name: Install Azure CLI
+        run: |
+          curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Stop tcpdump
+        run: |
+          sudo kill $TCPDUMP_PID
+          sleep 2  # Give tcpdump time to finish writing
+
+      - name: Create network capture
+        run: |
+          sudo tcpdump -r network.pcap -tttt -q > network.txt
+
+      - name: Upload network captures
+        uses: actions/upload-artifact@v4
+        with:
+          name: network-capture-${{ github.run_id }}
+          path: network.txt
+          retention-days: 3
