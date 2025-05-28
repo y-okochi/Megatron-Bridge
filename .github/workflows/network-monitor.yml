@@ -26,7 +26,7 @@ jobs:
       - name: Stop tcpdump
         run: |
           sudo kill $TCPDUMP_PID
-          sleep 2  # Give tcpdump time to finish writing
+          timeout 300 bash -c 'while [ ! -f network.pcap ]; do sleep 30; done'
 
       - name: Create network capture
         run: |
