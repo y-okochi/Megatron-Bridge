@@ -15,6 +15,51 @@
 # Import model providers for easy access
 from megatron.hub.models.gpt_provider import GPTModelProvider
 from megatron.hub.models.t5_provider import T5ModelProvider
+from megatron.hub.models.llama import (
+    LlamaModelProvider,
+    Llama2ModelProvider7B,
+    Llama2ModelProvider13B,
+    Llama2ModelProvider70B,
+    Llama3ModelProvider,
+    Llama3ModelProvider8B,
+    Llama3ModelProvider70B,
+    Llama31ModelProvider,
+    Llama31ModelProvider8B,
+    Llama31ModelProvider70B,
+    Llama31ModelProvider405B,
+    Llama32ModelProvider1B,
+    Llama32ModelProvider3B,
+    CodeLlamaModelProvider7B,
+    CodeLlamaModelProvider13B,
+    CodeLlamaModelProvider34B,
+    CodeLlamaModelProvider70B,
+    Llama4ModelProvider,
+    Llama4Experts16ModelProvider,
+    Llama4Experts128ModelProvider,
+)
 
 
-__all__ = ["GPTModelProvider", "T5ModelProvider"]
+__all__ = [
+    "GPTModelProvider",
+    "T5ModelProvider",
+    "LlamaModelProvider",
+    "Llama2ModelProvider7B",
+    "Llama2ModelProvider13B",
+    "Llama2ModelProvider70B",
+    "Llama3ModelProvider",
+    "Llama3ModelProvider8B",
+    "Llama3ModelProvider70B",
+    "Llama31ModelProvider",
+    "Llama31ModelProvider8B",
+    "Llama31ModelProvider70B",
+    "Llama31ModelProvider405B",
+    "Llama32ModelProvider1B",
+    "Llama32ModelProvider3B",
+    "CodeLlamaModelProvider7B",
+    "CodeLlamaModelProvider13B",
+    "CodeLlamaModelProvider34B",
+    "CodeLlamaModelProvider70B",
+    "Llama4ModelProvider",
+    "Llama4Experts16ModelProvider",
+    "Llama4Experts128ModelProvider",
+]

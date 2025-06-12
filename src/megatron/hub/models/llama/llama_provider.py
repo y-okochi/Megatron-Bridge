@@ -7,7 +7,6 @@ import torch
 import torch.nn.functional as F
 from megatron.core.models.gpt import GPTModel as MCoreGPTModel
 from megatron.core.transformer import ModuleSpec
-
 from megatron.hub.models.gpt_provider import GPTModelProvider
 from megatron.hub.models.llama.llama4_utils import get_llama4_layer_spec
 

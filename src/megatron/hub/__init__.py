@@ -11,3 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+from megatron.hub import models as _models
+from megatron.hub.models import *   # noqa: F401
+from megatron.hub.bridge import CausalLMBridge, AutoBridge
+
+__all__ = [
+    "AutoBridge",
+    "CausalLMBridge",
+    *_models.__all__,
+]
