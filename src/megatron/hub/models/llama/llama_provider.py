@@ -125,7 +125,9 @@ class Llama31ModelProvider(LlamaModelProvider):
     old_context_len: int = 8192
     init_method_std: float = 0.02
 
-    def provide(self, tokenizer=None, pre_process=None, post_process=None) -> "MCoreGPTModel":
+    def provide(
+        self, tokenizer=None, pre_process=None, post_process=None
+    ) -> "MCoreGPTModel":
         """Configure and instantiate a Megatron Core Llama 3.1 model.
 
         Extends the base configuration with Llama 3.1 specific RoPE scaling.

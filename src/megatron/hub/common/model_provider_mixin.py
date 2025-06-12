@@ -12,7 +12,6 @@ from megatron.core.transformer.module import MegatronModule
 from megatron.hub.common.config import ConfigProtocol, from_pretrained, save_pretrained
 from megatron.hub.core.models.model_provider import get_model
 
-
 ModelT = TypeVar("ModelT", bound=MegatronModule)
 
 

@@ -2,6 +2,7 @@ from unittest.mock import Mock, call, patch
 
 import pytest
 import torch
+
 from megatron.core.distributed import DistributedDataParallelConfig
 from megatron.core.enums import ModelType
 from megatron.core.transformer.module import MegatronModule
@@ -91,11 +92,15 @@ class TestCreateModel:
         assert len(result) == 2
         assert all(model.model_type == ModelType.encoder_or_decoder for model in result)
         assert model_provider.call_count == 2
-        mock_parallel_state.set_virtual_pipeline_model_parallel_rank.assert_has_calls([call(0), call(1)])
+        mock_parallel_state.set_virtual_pipeline_model_parallel_rank.assert_has_calls(
+            [call(0), call(1)]
+        )
 
     @patch("megatron.hub.core.models.model_provider.parallel_state")
     @patch("megatron.hub.core.models.model_provider.tensor_parallel")
-    def test_create_model_encoder_decoder_single_pipeline(self, mock_tensor_parallel, mock_parallel_state):
+    def test_create_model_encoder_decoder_single_pipeline(
+        self, mock_tensor_parallel, mock_parallel_state
+    ):
         """Test creation of encoder-decoder model with single pipeline."""
         # Setup mocks
         mock_parallel_state.get_pipeline_model_parallel_world_size.return_value = 1
@@ -116,7 +121,9 @@ class TestCreateModel:
 
     @patch("megatron.hub.core.models.model_provider.parallel_state")
     @patch("megatron.hub.core.models.model_provider.tensor_parallel")
-    def test_create_model_encoder_decoder_multi_pipeline(self, mock_tensor_parallel, mock_parallel_state):
+    def test_create_model_encoder_decoder_multi_pipeline(
+        self, mock_tensor_parallel, mock_parallel_state
+    ):
         """Test creation of encoder-decoder model with multiple pipeline stages."""
         # Setup mocks
         mock_parallel_state.get_pipeline_model_parallel_world_size.return_value = 4
@@ -139,7 +146,9 @@ class TestCreateModel:
 
     @patch("megatron.hub.core.models.model_provider.parallel_state")
     @patch("megatron.hub.core.models.model_provider.tensor_parallel")
-    def test_create_model_sets_tensor_parallel_attributes(self, mock_tensor_parallel, mock_parallel_state):
+    def test_create_model_sets_tensor_parallel_attributes(
+        self, mock_tensor_parallel, mock_parallel_state
+    ):
         """Test that tensor parallel attributes are set on parameters."""
         # Setup mocks
         mock_parallel_state.get_pipeline_model_parallel_world_size.return_value = 1
@@ -155,8 +164,9 @@ class TestCreateModel:
 
         # Verify tensor parallel attributes are set
         # Check that the function was called for each parameter
-        assert mock_tensor_parallel.set_defaults_if_not_set_tensor_model_parallel_attributes.call_count == len(
-            list(mock_model.parameters())
+        assert (
+            mock_tensor_parallel.set_defaults_if_not_set_tensor_model_parallel_attributes.call_count
+            == len(list(mock_model.parameters()))
         )
 
 
@@ -534,7 +544,9 @@ class TestEdgeCases:
     @patch("megatron.hub.core.models.model_provider._create_model")
     @patch("megatron.hub.core.models.model_provider._print_num_params")
     @patch("megatron.hub.core.models.model_provider.get_model_config")
-    def test_get_model_with_meta_device(self, mock_get_model_config, mock_print_params, mock_create_model):
+    def test_get_model_with_meta_device(
+        self, mock_get_model_config, mock_print_params, mock_create_model
+    ):
         """Test get_model with meta device initialization (skip GPU allocation)."""
         # Setup mocks
         config = create_test_config()
