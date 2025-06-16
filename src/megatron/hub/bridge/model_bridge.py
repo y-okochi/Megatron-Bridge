@@ -129,6 +129,11 @@ _BridgeImplClass = TypeVar("_BridgeImplClass", bound="MegatronModelBridge")
 
 
 @dispatch
+def get_model_bridge(hf_architecture) -> "MegatronModelBridge":
+    ...
+
+
+@dispatch
 def to_megatron(hf_architecture, hf_pretrained, load_weights: bool = True) -> ModelProviderProtocol:
     ...
 
@@ -187,22 +192,10 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         def decorator(decorated_class: _BridgeImplClass) -> _BridgeImplClass:
             decorated_class_name = decorated_class.__name__
 
-            @to_megatron.impl(source)
-            def _to_megatron_registered_impl(_, hf_pretrained: HFPreTrained, load_weights: bool = True) -> ModelProviderTarget:
+            @get_model_bridge.impl(source)
+            def _get_model_bridge_impl(_, hf_pretrained: HFPreTrained) -> "MegatronModelBridge":
                 bridge = decorated_class()
-                provider = bridge.provider_bridge(hf_pretrained)
-
-                if load_weights:
-                    provider.model_transform = partial(bridge.load_state_from_hf, hf_pretrained)
-                
-                return provider
-            
-
-            @bridge_state_to_megatron.impl(source)
-            def _bridge_weights_impl(_, hf_pretrained: HFPreTrained) -> Iterable[MegatronWeightTuple]:
-                bridge = decorated_class()
-                return bridge.bridge_state_from_hf(hf_pretrained)
-            
+                return bridge
 
             @bridge_state_to_hf.impl((source, target))
             def _from_megatron_registered_impl(
@@ -217,8 +210,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
                 return bridge.bridge_state_to_hf(megatron_models, hf_pretrained, cpu=cpu, order=order, show_progress=show_progress)
             
             
-            _to_megatron_registered_impl.__name__ = f"_to_megatron_with_{decorated_class_name}"
-            _bridge_weights_impl.__name__ = f"_bridge_weights_with_{decorated_class_name}"
+            _get_model_bridge_impl.__name__ = f"_bridge_with_{decorated_class_name}"
             _from_megatron_registered_impl.__name__ = f"_from_megatron_with_{decorated_class_name}"
 
             return decorated_class

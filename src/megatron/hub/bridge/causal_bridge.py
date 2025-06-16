@@ -1,9 +1,14 @@
-from typing import Generic, TypeVar, overload, Iterable, Literal, Any
+from typing import Generic, TypeVar, overload, Iterable, Literal, Any, Type
 from pathlib import Path
+from functools import partial
+import dataclasses
 
 import torch.distributed
 import transformers
+from transformers import AutoConfig
+from transformers.configuration_utils import PretrainedConfig
 from megatron.core.transformer.module import MegatronModule
+from megatron.core.transformer.transformer_config import TransformerConfig, MLATransformerConfig
 
 from megatron.hub.bridge.hf_pretrained.causal_lm import PreTrainedCausalLM
 from megatron.hub.common.state import SafeTensorsStateSource
@@ -11,11 +16,14 @@ from megatron.hub.bridge import model_bridge
 from megatron.hub.models.gpt_provider import GPTModelProvider
 
 MegatronModelT = TypeVar("ModelT", bound=MegatronModule)
+DataclassT = TypeVar("DataclassT")
 
 
 class CausalLMBridge(Generic[MegatronModelT]):
-    def __init__(self, hf_pretrained: PreTrainedCausalLM):
-        self.hf_pretrained: PreTrainedCausalLM = hf_pretrained
+    def __init__(self, hf_pretrained: PreTrainedCausalLM | PretrainedConfig):
+        if not isinstance(hf_pretrained, (PreTrainedCausalLM, PretrainedConfig)):
+            raise ValueError("hf_pretrained must be a PreTrainedCausalLM or PretrainedConfig instance")
+        self.hf_pretrained: PreTrainedCausalLM | PretrainedConfig = hf_pretrained
 
     @classmethod
     def list_supported_models(cls) -> list[str]:
@@ -54,6 +62,11 @@ class CausalLMBridge(Generic[MegatronModelT]):
             return False
         
         return any(arch.endswith('ForCausalLM') for arch in architectures)
+    
+    @classmethod
+    def from_config(cls, config: PretrainedConfig) -> "CausalLMBridge":
+        cls._validate_config(config)
+        return cls(config)
 
     @classmethod
     def from_pretrained(cls, path: str | Path, **kwargs) -> "CausalLMBridge":
@@ -71,9 +84,177 @@ class CausalLMBridge(Generic[MegatronModelT]):
             ValueError: If the model architecture is not supported
         """
         # First load just the config to check architecture support
-        from transformers import AutoConfig
         config = AutoConfig.from_pretrained(path)
+        cls._validate_config(config, path)
         
+        return cls(PreTrainedCausalLM.from_pretrained(path, **kwargs))
+
+    @overload
+    def __call__(
+        self,
+        model: list[MegatronModelT],
+        order: Literal["megatron", "hf", "safetensors"] = "megatron",
+        cpu: bool = False,
+        show_progress: bool = True,
+    ) -> Iterable[model_bridge.HFWeightTuple]: ...
+
+    def __call__(
+        self,
+        model,
+        order: Literal["megatron", "hf", "safetensors"] = "megatron",
+        cpu: bool = False,
+        show_progress: bool = True,
+    ) -> Iterable[model_bridge.HFWeightTuple]:
+        return self.export_weights(model=model, order=order, cpu=cpu, show_progress=show_progress)
+    
+    def load_weights(self, model: list[MegatronModelT], hf_path: str | Path | None = None) -> None:
+        if hf_path is None:
+            if not isinstance(self.hf_pretrained, PreTrainedCausalLM):
+                raise ValueError("hf_path is required when hf_pretrained is not a PreTrainedCausalLM instance")
+            pre_trained = self.hf_pretrained
+        else:
+            pre_trained = PreTrainedCausalLM.from_pretrained(hf_path)
+        self._model_bridge.load_weights(model, pre_trained)
+
+        return model
+    
+    @overload
+    def export_weights(
+        self,
+        model: list[MegatronModelT],
+        order: Literal["megatron", "hf", "safetensors"] = "megatron",
+        cpu: bool = False,
+        show_progress: bool = True,
+    ) -> Iterable[model_bridge.HFWeightTuple]: ...
+
+    def export_weights(
+        self,
+        model,
+        order: Literal["megatron", "hf", "safetensors"] = "megatron",
+        cpu: bool = False,
+        show_progress: bool = True,
+    ) -> Iterable[model_bridge.HFWeightTuple]:
+        query = (self._get_causal_lm_architecture(), self._get_model_instance(model))
+        return model_bridge.bridge_state_to_hf(
+            query, model, self.hf_pretrained, order=order, cpu=cpu, show_progress=show_progress
+        )
+
+    @overload
+    def save_pretrained(
+        self, model: list[MegatronModelT], path: str | Path
+    ) -> None: ...
+
+    def save_pretrained(self, model, path: str | Path, show_progress: bool = True) -> None:
+        if torch.distributed.get_rank() == 0:
+            self.hf_pretrained.save_artifacts(path)
+
+        self.save_weights(model, path, show_progress)
+        
+    @overload
+    def save_weights(
+        self, model: list[MegatronModelT], path: str | Path, show_progress: bool = True
+    ) -> None: ...
+    
+    def save_weights(self, model, path: str | Path, show_progress: bool = True) -> None:
+        torch.distributed.barrier()
+        query = (self._get_causal_lm_architecture(), self._get_model_instance(model))
+        generator = model_bridge.bridge_state_to_hf(
+            query, model, self.hf_pretrained, order="safetensors", cpu=True, show_progress=show_progress
+        )
+
+        # Check if the state source is SafeTensorsStateSource for streaming save.
+        if (
+            hasattr(self.hf_pretrained, "state")
+            and hasattr(self.hf_pretrained.state, "source")
+            and isinstance(self.hf_pretrained.state.source, SafeTensorsStateSource)
+        ):
+            self.hf_pretrained.state.source.save_generator(generator, path)
+        else:
+            raise ValueError(
+                "The state source is not a SafeTensorsStateSource, cannot save in streaming mode."
+            )
+
+        if torch.distributed.is_available() and torch.distributed.is_initialized():
+            torch.distributed.barrier()
+
+    def push_to_hub(self, path: str | Path) -> None: ...
+
+    def bridge_state_to_megatron(self) -> Iterable[model_bridge.MegatronWeightTuple]:
+        return self._model_bridge.bridge_state_to_megatron(self.hf_pretrained)
+
+    def to_megatron(self, load_weights: bool = True) -> GPTModelProvider:
+        provider = self._model_bridge.provider_bridge(self.hf_pretrained)
+
+        if load_weights:
+            provider.model_transform = partial(self._model_bridge.load_state_from_hf, self.hf_pretrained)
+        
+        return provider
+        
+    @property
+    def transformer_config(self) -> TransformerConfig:
+        _model_provider = self.to_megatron(load_weights=False)
+        return self._create_config_from_provider(_model_provider, TransformerConfig)
+    
+    @property
+    def mla_transformer_config(self) -> MLATransformerConfig:
+        _model_provider = self.to_megatron(load_weights=False)
+        return self._create_config_from_provider(_model_provider, MLATransformerConfig)
+
+    @property
+    def _model_bridge(self) -> model_bridge.MegatronModelBridge:
+        return model_bridge.get_model_bridge(self._get_causal_lm_architecture())
+
+    def _get_causal_lm_architecture(self):
+        """
+        Get the CausalLM architecture class from the HuggingFace model.
+        
+        Returns:
+            The transformers class for the CausalLM architecture
+            
+        Raises:
+            ValueError: If no CausalLM architecture is found or if the class cannot be imported
+        """
+        if isinstance(self.hf_pretrained, PreTrainedCausalLM):
+            architectures = getattr(self.hf_pretrained.config, 'architectures', [])
+        else:
+            architectures = getattr(self.hf_pretrained, 'architectures', [])
+        
+        if not architectures:
+            raise ValueError(
+                f"\n✗ No architectures found in model config\n\n"
+                f"The model configuration does not specify any architectures.\n"
+                f"This is required for determining the model type."
+            )
+        
+        causal_lm_arch = None
+        for architecture_name in architectures:
+            if architecture_name.endswith("ForCausalLM"):
+                causal_lm_arch = architecture_name
+                break
+        
+        if not causal_lm_arch:
+            raise ValueError(
+                f"\n✗ No CausalLM architecture found\n\n"
+                f"Model architectures: {architectures}\n\n"
+                f"None of the architectures end with 'ForCausalLM'.\n"
+                f"This bridge only supports causal language models.\n"
+                f"For other model types, use a different bridge class."
+            )
+        
+        try:
+            return getattr(transformers, causal_lm_arch)
+        except AttributeError:
+            raise ValueError(
+                f"\n✗ Architecture class '{causal_lm_arch}' not found in transformers\n\n"
+                f"This could mean:\n"
+                f"1. The model requires a newer version of transformers\n"
+                f"2. The model uses a custom modeling file not in the standard library\n"
+                f"3. There's a typo in the architecture name\n\n"
+                f"Please verify your transformers installation and the model requirements."
+            )
+    
+    @classmethod
+    def _validate_config(cls, config: PretrainedConfig, path: str | None = None) -> None:
         # Check if this is a causal LM model
         if not cls.supports(config):
             architectures = getattr(config, 'architectures', [])
@@ -143,125 +324,21 @@ class CausalLMBridge(Generic[MegatronModelT]):
                     f"3. The architecture name is incorrect\n\n"
                     f"Please check your transformers installation and model requirements."
                 )
-
-        return cls(PreTrainedCausalLM.from_pretrained(path, **kwargs))
-
-    @overload
-    def __call__(
-        self,
-        model: list[MegatronModelT],
-        order: Literal["megatron", "hf", "safetensors"] = "megatron",
-        cpu: bool = False,
-        show_progress: bool = True,
-    ) -> Iterable[model_bridge.HFWeightTuple]: ...
-
-    def __call__(
-        self,
-        model,
-        order: Literal["megatron", "hf", "safetensors"] = "megatron",
-        cpu: bool = False,
-        show_progress: bool = True,
-    ) -> Iterable[model_bridge.HFWeightTuple]:
-        query = (self._get_causal_lm_architecture(), self._get_model_instance(model))
-        return model_bridge.bridge_state_to_hf(
-            query, model, self.hf_pretrained, order=order, cpu=cpu, show_progress=show_progress
-        )
-
-    @overload
-    def save_pretrained(
-        self, model: list[MegatronModelT], path: str | Path
-    ) -> None: ...
-
-    def save_pretrained(self, model, path: str | Path, show_progress: bool = True) -> None:
-        if torch.distributed.get_rank() == 0:
-            self.hf_pretrained.save_artifacts(path)
-
-        torch.distributed.barrier()
-        query = (self._get_causal_lm_architecture(), self._get_model_instance(model))
-        generator = model_bridge.bridge_state_to_hf(
-            query, model, self.hf_pretrained, order="safetensors", cpu=True, show_progress=show_progress
-        )
-
-        # Check if the state source is SafeTensorsStateSource for streaming save.
-        if (
-            hasattr(self.hf_pretrained, "state")
-            and hasattr(self.hf_pretrained.state, "source")
-            and isinstance(self.hf_pretrained.state.source, SafeTensorsStateSource)
-        ):
-            self.hf_pretrained.state.source.save_generator(generator, path)
-        else:
-            raise ValueError(
-                "The state source is not a SafeTensorsStateSource, cannot save in streaming mode."
-            )
-
-        if torch.distributed.is_available() and torch.distributed.is_initialized():
-            torch.distributed.barrier()
-
-    def push_to_hub(self, path: str | Path) -> None: ...
-
-    def bridge_state_to_megatron(self) -> Iterable[model_bridge.MegatronWeightTuple]:
-        return model_bridge.bridge_state_to_megatron(
-            self._get_causal_lm_architecture(), self.hf_pretrained
-        )
-
-    def to_megatron(self, load_weights: bool = True) -> GPTModelProvider:
-        return model_bridge.to_megatron(
-            self._get_causal_lm_architecture(),
-            self.hf_pretrained,
-            load_weights=load_weights,
-        )
-
-    def _get_causal_lm_architecture(self):
-        """
-        Get the CausalLM architecture class from the HuggingFace model.
-        
-        Returns:
-            The transformers class for the CausalLM architecture
-            
-        Raises:
-            ValueError: If no CausalLM architecture is found or if the class cannot be imported
-        """
-        architectures = getattr(self.hf_pretrained.config, 'architectures', [])
-        
-        if not architectures:
-            raise ValueError(
-                f"\n✗ No architectures found in model config\n\n"
-                f"The model configuration does not specify any architectures.\n"
-                f"This is required for determining the model type."
-            )
-        
-        causal_lm_arch = None
-        for architecture_name in architectures:
-            if architecture_name.endswith("ForCausalLM"):
-                causal_lm_arch = architecture_name
-                break
-        
-        if not causal_lm_arch:
-            raise ValueError(
-                f"\n✗ No CausalLM architecture found\n\n"
-                f"Model architectures: {architectures}\n\n"
-                f"None of the architectures end with 'ForCausalLM'.\n"
-                f"This bridge only supports causal language models.\n"
-                f"For other model types, use a different bridge class."
-            )
-        
-        try:
-            return getattr(transformers, causal_lm_arch)
-        except AttributeError:
-            raise ValueError(
-                f"\n✗ Architecture class '{causal_lm_arch}' not found in transformers\n\n"
-                f"This could mean:\n"
-                f"1. The model requires a newer version of transformers\n"
-                f"2. The model uses a custom modeling file not in the standard library\n"
-                f"3. There's a typo in the architecture name\n\n"
-                f"Please verify your transformers installation and the model requirements."
-            )
-            
+    
     def _get_model_instance(self, model: list[MegatronModelT]) -> MegatronModelT:
         model_instance = model[0]
         while hasattr(model_instance, 'module'):
             model_instance = model_instance.module
         return model_instance
+
+    def _create_config_from_provider(
+        self, source_obj: Any, target_dataclass: Type[DataclassT]
+    ) -> DataclassT:
+        kwargs = {}
+        for field in dataclasses.fields(target_dataclass):
+            if hasattr(source_obj, field.name):
+                kwargs[field.name] = getattr(source_obj, field.name)
+        return target_dataclass(**kwargs)
 
     def __repr__(self) -> str:
         class_name = self.__class__.__name__
