@@ -1,4 +1,4 @@
-from typing import Generic, TypeVar, overload, Iterable, Literal, Any, Type
+from typing import Generic, TypeVar, overload, Iterable, Literal, Any, Type, Union
 from pathlib import Path
 from functools import partial
 import dataclasses
@@ -13,6 +13,7 @@ from megatron.core.transformer.transformer_config import TransformerConfig, MLAT
 from megatron.hub.bridge.hf_pretrained.causal_lm import PreTrainedCausalLM
 from megatron.hub.common.state import SafeTensorsStateSource
 from megatron.hub.bridge import model_bridge
+from megatron.hub.bridge.model_bridge import WeightDistributionMode
 from megatron.hub.models.gpt_provider import GPTModelProvider
 
 MegatronModelT = TypeVar("ModelT", bound=MegatronModule)
@@ -96,6 +97,7 @@ class CausalLMBridge(Generic[MegatronModelT]):
         order: Literal["megatron", "hf", "safetensors"] = "megatron",
         cpu: bool = False,
         show_progress: bool = True,
+        mode: Union[str, WeightDistributionMode] = WeightDistributionMode.CONSOLIDATE,
     ) -> Iterable[model_bridge.HFWeightTuple]: ...
 
     def __call__(
@@ -104,8 +106,9 @@ class CausalLMBridge(Generic[MegatronModelT]):
         order: Literal["megatron", "hf", "safetensors"] = "megatron",
         cpu: bool = False,
         show_progress: bool = True,
+        mode: Union[str, WeightDistributionMode] = WeightDistributionMode.CONSOLIDATE,
     ) -> Iterable[model_bridge.HFWeightTuple]:
-        return self.export_weights(model=model, order=order, cpu=cpu, show_progress=show_progress)
+        return self.export_weights(model=model, order=order, cpu=cpu, show_progress=show_progress, mode=mode)
     
     def load_weights(self, model: list[MegatronModelT], hf_path: str | Path | None = None) -> None:
         if hf_path is None:
@@ -125,6 +128,7 @@ class CausalLMBridge(Generic[MegatronModelT]):
         order: Literal["megatron", "hf", "safetensors"] = "megatron",
         cpu: bool = False,
         show_progress: bool = True,
+        mode: Union[str, WeightDistributionMode] = WeightDistributionMode.CONSOLIDATE,
     ) -> Iterable[model_bridge.HFWeightTuple]: ...
 
     def export_weights(
@@ -133,10 +137,11 @@ class CausalLMBridge(Generic[MegatronModelT]):
         order: Literal["megatron", "hf", "safetensors"] = "megatron",
         cpu: bool = False,
         show_progress: bool = True,
+        mode: Union[str, WeightDistributionMode] = WeightDistributionMode.CONSOLIDATE,
     ) -> Iterable[model_bridge.HFWeightTuple]:
         query = (self._get_causal_lm_architecture(), self._get_model_instance(model))
         return model_bridge.bridge_state_to_hf(
-            query, model, self.hf_pretrained, order=order, cpu=cpu, show_progress=show_progress
+            query, model, self.hf_pretrained, order=order, cpu=cpu, show_progress=show_progress, mode=mode
         )
 
     @overload

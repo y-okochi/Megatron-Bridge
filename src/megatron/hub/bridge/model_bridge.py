@@ -13,6 +13,7 @@ from typing import Generic, TypeVar, Type, Callable, List, Tuple, Iterable, Opti
 from functools import partial
 from dataclasses import dataclass
 from collections import defaultdict
+from enum import Enum
 
 
 import torch
@@ -29,6 +30,18 @@ from megatron.hub.common.decorators import dispatch
 
 
 WeightBridgeT = TypeVar("WeightBridgeT", bound=MegatronWeightBridge)
+
+
+class WeightDistributionMode(Enum):
+    """Weight distribution modes following PyTorch conventions."""
+    REPLICATE = "replicate"      # All ranks get full replicated tensors (like broadcast)
+    CONSOLIDATE = "consolidate"  # Consolidate to rank 0 (like gather)
+    DISTRIBUTE = "distribute"    # Each rank gets its shard (like scatter)
+    
+    # Aliases for compatibility
+    BROADCAST = "replicate"
+    GATHER = "consolidate"
+    SCATTER = "distribute"
 
 
 class MegatronWeightTuple(NamedTuple):
@@ -150,7 +163,8 @@ def bridge_state_to_hf(
     hf_pretrained: HFPreTrained, 
     cpu: bool = True, 
     order: Literal["megatron", "hf", "safetensors"] = "safetensors",
-    show_progress: bool = True
+    show_progress: bool = True,
+    mode: Union[str, WeightDistributionMode] = WeightDistributionMode.CONSOLIDATE
 ) -> Iterable[HFWeightTuple]:
     ...
 
@@ -204,10 +218,11 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
                 hf_pretrained: HFPreTrained,
                 cpu: bool = True,
                 order: Literal["megatron", "hf", "safetensors"] = "safetensors",
-                show_progress: bool = True
+                show_progress: bool = True,
+                mode: Union[str, WeightDistributionMode] = WeightDistributionMode.CONSOLIDATE
             ) -> Iterable[HFWeightTuple]:
                 bridge = decorated_class()
-                return bridge.bridge_state_to_hf(megatron_models, hf_pretrained, cpu=cpu, order=order, show_progress=show_progress)
+                return bridge.bridge_state_to_hf(megatron_models, hf_pretrained, cpu=cpu, order=order, show_progress=show_progress, mode=mode)
             
             
             _get_model_bridge_impl.__name__ = f"_bridge_with_{decorated_class_name}"
@@ -306,8 +321,22 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         cpu: bool = True,
         order: Literal["megatron", "hf", "safetensors"] = "safetensors",
         show_progress: bool = True,
+        mode: Union[str, WeightDistributionMode] = WeightDistributionMode.CONSOLIDATE,
     ) -> Iterable[HFWeightTuple]:
         """Export Megatron weights ➜ HF format.  Bridges handle everything."""
+
+        # Normalize mode parameter
+        if isinstance(mode, str):
+            # Handle string mode and aliases
+            mode_str = mode.lower()
+            if mode_str in ["replicate", "broadcast"]:
+                mode = WeightDistributionMode.REPLICATE
+            elif mode_str in ["consolidate", "gather"]:
+                mode = WeightDistributionMode.CONSOLIDATE
+            elif mode_str in ["distribute", "scatter"]:
+                mode = WeightDistributionMode.DISTRIBUTE
+            else:
+                raise ValueError(f"Invalid mode: {mode}. Must be one of: replicate, consolidate, distribute")
 
         save_plan = list(self._build_plan_to_hf(src, hf_pretrained, order))
 
@@ -337,9 +366,28 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
 
                 kv_pairs = task.from_megatron(weight, module)
 
-                for name, tensor in kv_pairs.items():
-                    yield HFWeightTuple(name, tensor.cpu() if cpu else tensor)
-
+                # Handle distribution modes
+                if mode == WeightDistributionMode.REPLICATE:
+                    # All ranks get the full tensor
+                    for name, tensor in kv_pairs.items():
+                        yield HFWeightTuple(name, tensor.cpu() if cpu else tensor)
+                elif mode == WeightDistributionMode.CONSOLIDATE:
+                    # Only rank 0 gets the tensor (current default behavior)
+                    if is_main_rank:
+                        for name, tensor in kv_pairs.items():
+                            yield HFWeightTuple(name, tensor.cpu() if cpu else tensor)
+                elif mode == WeightDistributionMode.DISTRIBUTE:
+                    # Each rank gets its shard (no gathering)
+                    # In this mode, we need to modify the behavior to skip gathering
+                    # This would require changes to the weight bridges themselves
+                    # For now, we'll yield whatever shard this rank has
+                    if task.pp_rank == mpu.get_pipeline_model_parallel_rank() and weight is not None:
+                        # Return the local shard without gathering
+                        yield HFWeightTuple(
+                            task.param_name + f"_rank{mpu.get_tensor_model_parallel_rank()}", 
+                            weight.cpu() if cpu else weight
+                        )
+                    
                 progress.update(task_id, advance=1)
 
     def dtype_from_hf(self, config):

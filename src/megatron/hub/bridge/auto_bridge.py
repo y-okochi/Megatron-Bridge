@@ -47,7 +47,7 @@ class AutoBridge:
         Args:
             path: Path to model directory or HuggingFace model ID
             **kwargs: Additional arguments passed to the bridge's from_pretrained
-                     method (e.g., trust_remote_code, device_map, etc.)
+                method (e.g., trust_remote_code, device_map, etc.)
         
         Returns:
             An instance of the appropriate bridge with the model loaded
@@ -77,8 +77,10 @@ class AutoBridge:
                 except Exception as e:
                     # Log but continue - maybe another bridge will work
                     # In production, you might want to use proper logging here
-                    print(f"Warning: {bridge_cls.__name__} supports the config but "
-                          f"failed to load: {e}")
+                    print(
+                        f"Warning: {bridge_cls.__name__} supports the config but "
+                        f"failed to load: {e}"
+                    )
                     continue
         
         # No bridge found
