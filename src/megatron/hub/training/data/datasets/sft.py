@@ -26,13 +26,13 @@ import torch
 from datasets import load_dataset
 from torch.utils.data import Dataset
 
-from megatron.hub.data.datasets.utils import (
+from megatron.hub.training.data.datasets.utils import (
     _get_samples_mapping,
     _JSONLMemMapDataset,
     _OnlineSampleMapping,
     _preprocess,
 )
-from megatron.hub.tokenizers.tokenizer import MegatronTokenizer
+from megatron.hub.training.tokenizers.tokenizer import MegatronTokenizer
 
 
 DEFAULT_NEMO_CACHE_HOME = Path.home() / ".cache" / "nemo"

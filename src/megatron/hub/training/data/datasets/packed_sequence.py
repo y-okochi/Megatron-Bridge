@@ -19,9 +19,9 @@ from typing import Optional
 
 import numpy as np
 
-from megatron.hub.data.datasets.packing_utils import create_hist, create_packing_strategy, fill_packing_strategy
-from megatron.hub.data.datasets.sft import create_sft_dataset
-from megatron.hub.tokenizers.tokenizer import MegatronTokenizer
+from megatron.hub.training.data.datasets.packing_utils import create_hist, create_packing_strategy, fill_packing_strategy
+from megatron.hub.training.data.datasets.sft import create_sft_dataset
+from megatron.hub.training.tokenizers.tokenizer import MegatronTokenizer
 
 
 logger = logging.getLogger(__name__)

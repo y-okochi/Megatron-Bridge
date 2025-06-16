@@ -21,7 +21,7 @@ from unittest.mock import patch
 import pytest
 import torch.nn as nn
 
-from megatron.hub.utils.common_utils import (
+from megatron.hub.core.utils.common_utils import (
     get_local_rank_preinit,
     get_rank_safe,
     get_world_size_safe,
@@ -226,7 +226,7 @@ class TestPrintRankLast:
     """Test print_rank_last function."""
 
     @patch("torch.distributed.is_initialized")
-    @patch("megatron.hub.utils.common_utils.is_last_rank")
+    @patch("megatron.hub.core.utils.common_utils.is_last_rank")
     @patch("builtins.print")
     def test_print_on_last_rank_when_initialized(self, mock_print, mock_is_last_rank, mock_is_initialized):
         """Test print_rank_last prints message when torch.distributed is initialized and rank is last."""
@@ -241,7 +241,7 @@ class TestPrintRankLast:
         mock_print.assert_called_once_with(message, flush=True)
 
     @patch("torch.distributed.is_initialized")
-    @patch("megatron.hub.utils.common_utils.is_last_rank")
+    @patch("megatron.hub.core.utils.common_utils.is_last_rank")
     @patch("builtins.print")
     def test_no_print_on_non_last_rank_when_initialized(self, mock_print, mock_is_last_rank, mock_is_initialized):
         """Test print_rank_last does not print message when torch.distributed is initialized and rank is not last."""

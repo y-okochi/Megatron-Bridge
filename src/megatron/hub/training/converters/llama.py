@@ -18,9 +18,9 @@ from typing import TYPE_CHECKING
 
 import torch
 
-from megatron.hub.converters.common import BaseExporter, BaseImporter, dtype_from_hf
-from megatron.hub.converters.state_transform import TransformFns, apply_transforms, state_transform
-from megatron.hub.models.llama import Llama4Config, Llama31Config, LlamaConfig
+from megatron.hub.training.converters.common import BaseExporter, BaseImporter, dtype_from_hf
+from megatron.hub.training.converters.state_transform import TransformFns, apply_transforms, state_transform
+from megatron.hub.models.llama.llama_provider import Llama4ModelProvider, Llama31ModelProvider, LlamaModelProvider
 
 
 if TYPE_CHECKING:
@@ -149,7 +149,7 @@ class HFLlamaExporter(BaseExporter):
 
         rope_scaling = None
         # For Llama 3.1 and Llama 3.2, rope_scaling is used and thus needed to parsed to the config
-        if isinstance(source, Llama31Config):
+        if isinstance(source, Llama31ModelProvider):
             rope_scaling = {
                 "factor": source.scale_factor,
                 "low_freq_factor": source.low_freq_factor,
@@ -335,14 +335,14 @@ class HFLlamaImporter(BaseImporter):
 
         if getattr(source, "rope_scaling", None) is not None and source.rope_scaling.get("rope_type") == "llama3":
             # Apply Llama3.1 customize rope scaling
-            cls = partial(Llama31Config, scale_factor=source.rope_scaling.get("factor", 8.0))
+            cls = partial(Llama31ModelProvider, scale_factor=source.rope_scaling.get("factor", 8.0))
         else:
-            cls = LlamaConfig
+            cls = LlamaModelProvider
 
         args = {}
         if "llama4" in getattr(source, "model_type", None):
             # Llama4 Uses MoE Arch
-            cls = Llama4Config
+            cls = Llama4ModelProvider
             # Parse Llama4 related args
             if getattr(source, "model_type", None) == "llama4":
                 # Passing in a VL Llama4 Config

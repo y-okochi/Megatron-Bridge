@@ -21,8 +21,8 @@ import torch
 from megatron.core.distributed import DistributedDataParallelConfig
 from megatron.core.optimizer import OptimizerConfig
 
-from megatron.hub.models.gpt import GPTConfig
-from megatron.hub.models.t5 import T5Config
+from megatron.hub.models.gpt_provider import GPTModelProvider
+from megatron.hub.models.t5_provider import T5ModelProvider
 from megatron.hub.training.config import (
     CheckpointConfig,
     ConfigContainer,
@@ -56,7 +56,7 @@ def mock_get_world_size_safe(world_size_to_return: int):
     return _mock
 
 
-def create_test_gpt_config(**kwargs: Any) -> GPTConfig:
+def create_test_gpt_config(**kwargs: Any) -> GPTModelProvider:
     """Creates an instance of GPTConfig for testing."""
     defaults = {
         "num_layers": 1,
@@ -66,10 +66,10 @@ def create_test_gpt_config(**kwargs: Any) -> GPTConfig:
         "apply_rope_fusion": False,
     }
     defaults.update(kwargs)
-    return GPTConfig(**defaults)
+    return GPTModelProvider(**defaults)
 
 
-def create_test_t5_config(**kwargs: Any) -> T5Config:
+def create_test_t5_config(**kwargs: Any) -> T5ModelProvider:
     """Creates an instance of T5Config with sensible defaults for testing."""
     defaults = {
         "num_layers": 1,
@@ -79,7 +79,7 @@ def create_test_t5_config(**kwargs: Any) -> T5Config:
         "apply_rope_fusion": False,
     }
     defaults.update(kwargs)
-    return T5Config(**defaults)
+    return T5ModelProvider(**defaults)
 
 
 def create_test_training_config(**kwargs: Any) -> TrainingConfig:
@@ -206,7 +206,7 @@ def create_test_config_container(
     final_dataset_config: Union[GPTDatasetConfig, FinetuningDatasetConfig]
     if dataset_config_override:
         final_dataset_config = dataset_config_override
-    elif isinstance(model_config, (GPTConfig, T5Config)):  # T5 also uses GPTDataset for these tests
+    elif isinstance(model_config, (GPTModelProvider, T5ModelProvider)):  # T5 also uses GPTDataset for these tests
         final_dataset_config = create_test_gpt_dataset_config(sequence_length=model_config.seq_length)
     else:
         raise ValueError(f"Unsupported model_config type for default dataset_config: {type(model_config)}")

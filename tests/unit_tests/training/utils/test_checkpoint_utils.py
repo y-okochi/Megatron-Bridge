@@ -22,7 +22,7 @@ from unittest.mock import mock_open, patch
 import pytest
 import yaml
 
-from megatron.hub.utils.checkpoint_utils import (
+from megatron.hub.training.utils.checkpoint_utils import (
     CONFIG_FILE,
     TRACKER_PREFIX,
     TRAIN_STATE_FILE,

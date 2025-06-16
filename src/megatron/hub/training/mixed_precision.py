@@ -20,8 +20,8 @@ import torch
 from megatron.core.distributed import DistributedDataParallelConfig
 from megatron.core.optimizer import OptimizerConfig
 
-from megatron.hub.models.gpt import GPTConfig
-from megatron.hub.models.t5 import T5Config
+from megatron.hub.models.gpt_provider import GPTModelProvider
+from megatron.hub.models.t5_provider import T5ModelProvider
 
 
 @dataclass(kw_only=True)
@@ -63,7 +63,7 @@ class MixedPrecisionConfig:
 
     def setup(
         self,
-        model_config: GPTConfig | T5Config,
+        model_config: GPTModelProvider | T5ModelProvider,
         optimizer_config: Optional[OptimizerConfig] = None,
         ddp_config: Optional[DistributedDataParallelConfig] = None,
     ) -> None:

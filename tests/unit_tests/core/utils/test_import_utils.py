@@ -18,7 +18,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from packaging.version import Version as PkgVersion
 
-from megatron.hub.utils.import_utils import (
+from megatron.hub.core.utils.import_utils import (
     UnavailableError,
     UnavailableMeta,
     get_torch_version,

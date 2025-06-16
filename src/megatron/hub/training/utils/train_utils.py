@@ -27,8 +27,8 @@ from megatron.core.utils import get_data_parallel_group_if_dtensor, to_local_if_
 
 from megatron.hub.training.config import ConfigContainer
 from megatron.hub.training.state import GlobalState
-from megatron.hub.utils.common_utils import get_world_size_safe, is_last_rank, print_rank_last
-from megatron.hub.utils.theoretical_memory_utils import report_theoretical_memory
+from megatron.hub.core.utils.common_utils import get_world_size_safe, is_last_rank, print_rank_last
+from megatron.hub.training.utils.theoretical_memory_utils import report_theoretical_memory
 
 
 try:

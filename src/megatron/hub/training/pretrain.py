@@ -20,9 +20,9 @@ from megatron.hub.training.config import ConfigContainer
 from megatron.hub.training.eval import evaluate_and_print_results
 from megatron.hub.training.setup import setup
 from megatron.hub.training.train import _finish_train, train
-from megatron.hub.utils.common_utils import print_rank_0
-from megatron.hub.utils.decorators import experimental_fn
-from megatron.hub.utils.log_utils import barrier_and_log
+from megatron.hub.core.utils.common_utils import print_rank_0
+from megatron.hub.core.utils.decorators import experimental_fn
+from megatron.hub.training.utils.log_utils import barrier_and_log
 
 
 @experimental_fn

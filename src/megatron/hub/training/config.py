@@ -23,10 +23,10 @@ from megatron.core.datasets.gpt_dataset import GPTDatasetConfig as MCoreGPTDatas
 from megatron.core.distributed import DistributedDataParallelConfig
 from megatron.core.optimizer import OptimizerConfig
 
-from megatron.hub.models.gpt import GPTConfig
-from megatron.hub.models.t5 import T5Config
-from megatron.hub.utils.common_utils import get_world_size_safe
-from megatron.hub.utils.config_utils import ConfigContainer as Container
+from megatron.hub.models.gpt_provider import GPTModelProvider
+from megatron.hub.models.t5_provider import T5ModelProvider
+from megatron.hub.core.utils.common_utils import get_world_size_safe
+from megatron.hub.training.utils.config_utils import ConfigContainer as Container
 
 
 @dataclass(kw_only=True)
@@ -718,7 +718,7 @@ class ConfigContainer(Container):
     rng: RNGConfig = field(default_factory=RNGConfig)
     rerun_state_machine: RerunStateMachineConfig = field(default_factory=RerunStateMachineConfig)
     train: TrainingConfig
-    model: GPTConfig | T5Config
+    model: GPTModelProvider | T5ModelProvider
     optimizer: OptimizerConfig
     ddp: DistributedDataParallelConfig = field(default_factory=DistributedDataParallelConfig)
     scheduler: SchedulerConfig

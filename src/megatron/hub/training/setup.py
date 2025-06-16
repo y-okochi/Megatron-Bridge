@@ -24,19 +24,19 @@ from megatron.core.optimizer_param_scheduler import OptimizerParamScheduler
 from megatron.core.rerun_state_machine import RerunDataIterator
 from megatron.core.transformer import MegatronModule
 
-from megatron.hub.data.loaders import setup_data_iterators
+from megatron.hub.training.data.loaders import setup_data_iterators
 from megatron.hub.models import get_model_from_config
-from megatron.hub.models.gpt import GPTConfig
-from megatron.hub.models.t5 import T5Config
-from megatron.hub.tokenizers.tokenizer import build_tokenizer
+from megatron.hub.models.gpt_provider import GPTModelProvider
+from megatron.hub.models.t5_provider import T5ModelProvider
+from megatron.hub.training.tokenizers.tokenizer import build_tokenizer
 from megatron.hub.training import fault_tolerance
 from megatron.hub.training.checkpointing import checkpoint_exists, init_checkpointing_context, load_checkpoint, init_async_checkpoint_worker
 from megatron.hub.training.config import ConfigContainer
 from megatron.hub.training.initialize import initialize_megatron, set_jit_fusion_options
 from megatron.hub.training.optim import setup_optimizer
 from megatron.hub.training.state import GlobalState
-from megatron.hub.utils.common_utils import print_rank_0
-from megatron.hub.utils.log_utils import append_to_progress_log, barrier_and_log, setup_logging
+from megatron.hub.core.utils.common_utils import print_rank_0
+from megatron.hub.training.utils.log_utils import append_to_progress_log, barrier_and_log, setup_logging
 
 
 try:
@@ -242,7 +242,7 @@ def setup(
 
 def _update_model_config_funcs(
     model: MegatronModule,
-    model_config: GPTConfig | T5Config,
+    model_config: GPTModelProvider | T5ModelProvider,
     ddp_config: DistributedDataParallelConfig,
     optimizer: MegatronOptimizer,
     *,

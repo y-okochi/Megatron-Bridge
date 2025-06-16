@@ -31,8 +31,7 @@ from megatron.hub.peft.lora_layers import LinearAdapter, LoRALinear, patch_linea
 # Test if Transformer Engine is available
 try:
     import transformer_engine.pytorch as te
-
-    from megatron.hub.peft.lora import TELinearAdapter
+    from megatron.hub.peft.lora_layers import TELinearAdapter
 
     HAVE_TE = True
 except ImportError:
