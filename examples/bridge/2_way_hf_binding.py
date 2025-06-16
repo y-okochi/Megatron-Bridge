@@ -43,7 +43,7 @@ def main(hf_model_id: str = HF_MODEL_ID, output_dir: str = None) -> None:
     table.add_column("Device")
     table.add_column("Matches Original", justify="center")
 
-    model_provider = bridge.to_megatron()
+    model_provider = bridge.to_provider()
     megatron_model = model_provider(wrap_with_ddp=False)
 
     # Check each weight against the original HF-model

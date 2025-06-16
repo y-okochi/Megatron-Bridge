@@ -59,8 +59,7 @@ def generate_sequence(prompt, model, hf_model_path, max_new_tokens=100):
 
 
 if __name__ == "__main__":
-    model_provider = bridge.to_megatron()
-    model = model_provider(wrap_with_ddp=False)
+    model = bridge.to_model(wrap_with_ddp=False)
 
     prompt = "Hello, how are you?"
     generate_sequence(prompt, model, HF_MODEL_ID)

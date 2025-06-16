@@ -1,6 +1,6 @@
 import abc
 import os
-from typing import Generic, TypeVar
+from typing import Generic, TypeVar, TypedDict, Unpack
 
 import torch
 from megatron.core import parallel_state
@@ -13,6 +13,19 @@ from megatron.hub.common.config import ConfigProtocol, from_pretrained, save_pre
 from megatron.hub.core.models.model_provider import get_model
 
 ModelT = TypeVar("ModelT", bound=MegatronModule)
+
+
+class GetModelKwargs(TypedDict, total=False):
+    ddp_config: DistributedDataParallelConfig | None
+    model_type: ModelType
+    overlap_param_gather_with_optimizer_step: bool
+    fp16: bool | None
+    bf16: bool | None
+    use_torch_fsdp2: bool
+    wrap_with_ddp: bool
+    data_parallel_random_init: bool
+    use_cpu_initialization: bool | None
+    init_model_with_meta_device: bool | None
 
 
 class ModelProviderMixin(abc.ABC, Generic[ModelT]):
@@ -104,31 +117,8 @@ class ModelProviderMixin(abc.ABC, Generic[ModelT]):
         if seed is not None:
             model_parallel_cuda_manual_seed(seed)
 
-    def __call__(
-        self,
-        ddp_config: DistributedDataParallelConfig | None = None,
-        model_type=ModelType.encoder_or_decoder,
-        overlap_param_gather_with_optimizer_step: bool = False,
-        fp16: bool | None = None,
-        bf16: bool | None = None,
-        use_torch_fsdp2: bool = False,
-        wrap_with_ddp: bool = True,
-        data_parallel_random_init: bool = True,
-        use_cpu_initialization: None | bool = False,
-        init_model_with_meta_device: bool | None = None,
-    ) -> list[ModelT]:
-        return self.get_model(
-            ddp_config=ddp_config,
-            model_type=model_type,
-            overlap_param_gather_with_optimizer_step=overlap_param_gather_with_optimizer_step,
-            fp16=fp16,
-            bf16=bf16,
-            use_torch_fsdp2=use_torch_fsdp2,
-            wrap_with_ddp=wrap_with_ddp,
-            data_parallel_random_init=data_parallel_random_init,
-            use_cpu_initialization=use_cpu_initialization,
-            init_model_with_meta_device=init_model_with_meta_device,
-        )
+    def __call__(self, **kwargs: Unpack["GetModelKwargs"]) -> list[ModelT]:
+        return self.get_model(**kwargs)
 
     @property
     def meta_model(self) -> list[ModelT]:

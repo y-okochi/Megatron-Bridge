@@ -16,7 +16,7 @@ Example:
     >>> bridge = AutoBridge.from_pretrained("meta-llama/Llama-3-8B")
     >>> 
     >>> # Convert to Megatron format
-    >>> provider = bridge.to_megatron()
+    >>> provider = bridge.to_provider()
     >>> model = provider(wrap_with_ddp=False)
 """
 from typing import List, Type, Union, Any, Protocol
@@ -70,7 +70,7 @@ class AutoBridge:
         supported by implementing the appropriate bridge and adding it to
         the _BRIDGES list.
     """
-    
+
     @classmethod
     def from_pretrained(cls, path: Union[str, Path], **kwargs) -> "BridgeProtocol":
         """
@@ -105,32 +105,57 @@ class AutoBridge:
                 f"Error: {e}"
             )
         
-        # Try each bridge in order
-        for bridge_cls in _BRIDGES:
-            if hasattr(bridge_cls, 'supports') and bridge_cls.supports(config):
-                # Found a supporting bridge - use it to load the model
-                try:
-                    return bridge_cls.from_pretrained(path, **kwargs)
-                except Exception as e:
-                    # Log but continue - maybe another bridge will work
-                    # In production, you might want to use proper logging here
-                    print(
-                        f"Warning: {bridge_cls.__name__} supports the config but "
-                        f"failed to load: {e}"
-                    )
-                    continue
+        bridge_cls = cls._find_bridge_for_config(config, 'from_pretrained', path)
         
-        # No bridge found
-        architectures = getattr(config, 'architectures', ['unknown'])
-        model_type = getattr(config, 'model_type', 'unknown')
+        try:
+            return bridge_cls.from_pretrained(path, **kwargs)
+        except Exception as e:
+            raise ValueError(
+                f"Failed to load model with {bridge_cls.__name__}: {e}"
+            ) from e
+    
+    @classmethod
+    def from_config(cls, config) -> "BridgeProtocol":
+        """
+        Create a bridge from a HuggingFace configuration.
         
-        raise ValueError(
-            f"No bridge found for model at {path}. "
-            f"Model type: {model_type}, architectures: {architectures}. "
-            f"Available bridges: {[b.__name__ for b in _BRIDGES]}. "
-            f"Please use a specific bridge directly or implement a new bridge "
-            f"for this model type."
-        )
+        This method creates a bridge instance from just a model configuration,
+        without loading any weights. This is useful for:
+        - Creating Megatron models with random initialization
+        - Working with model architectures without downloading weights
+        - Testing and development scenarios
+        
+        Args:
+            config: HuggingFace PretrainedConfig instance containing model
+                architecture information
+                
+        Returns:
+            BridgeProtocol: Bridge instance configured for the architecture
+            
+        Raises:
+            ValueError: If no registered bridge supports the configuration
+            
+        Example:
+            >>> from transformers import AutoConfig
+            >>> 
+            >>> # Load just the configuration
+            >>> config = AutoConfig.from_pretrained("meta-llama/Llama-3-8B")
+            >>> 
+            >>> # Create bridge from config (no weights)
+            >>> bridge = AutoBridge.from_config(config)
+            >>> 
+            >>> # Create Megatron model with random initialization
+            >>> provider = bridge.to_provider(load_weights=False)
+            >>> model = provider(wrap_with_ddp=False)
+        """
+        bridge_cls = cls._find_bridge_for_config(config, 'from_config')
+        
+        try:
+            return bridge_cls.from_config(config)
+        except Exception as e:
+            raise ValueError(
+                f"Failed to create {bridge_cls.__name__} from config: {e}"
+            ) from e
     
     @classmethod
     def get_supported_bridges(cls) -> List[str]:
@@ -183,6 +208,51 @@ class AutoBridge:
             )
         except Exception:
             return False
+        
+    @classmethod
+    def _find_bridge_for_config(cls, config, method_name: str, path: Union[str, Path, None] = None):
+        """
+        Find a bridge that supports the given configuration and has the specified method.
+        
+        Args:
+            config: HuggingFace PretrainedConfig instance
+            method_name: Name of the method to check for ('from_config' or 'from_pretrained')
+            path: Optional path for better error messages
+            
+        Returns:
+            Bridge class that supports the config
+            
+        Raises:
+            ValueError: If no suitable bridge is found
+        """
+        # Try each bridge in order
+        for bridge_cls in _BRIDGES:
+            if hasattr(bridge_cls, 'supports') and bridge_cls.supports(config):
+                # Found a supporting bridge - check if it has the required method
+                if hasattr(bridge_cls, method_name):
+                    return bridge_cls
+                else:
+                    # Bridge doesn't have the required method
+                    raise ValueError(
+                        f"{bridge_cls.__name__} supports the configuration but does not "
+                        f"implement {method_name} method. This is likely a bug in the bridge "
+                        f"implementation."
+                    )
+        
+        # No bridge found - create detailed error message
+        architectures = getattr(config, 'architectures', ['unknown'])
+        model_type = getattr(config, 'model_type', 'unknown')
+        
+        error_msg = (
+            f"No bridge found for "
+            f"{'configuration' if path is None else f'model at {path}'}. "
+            f"Model type: {model_type}, architectures: {architectures}. "
+            f"Available bridges: {[b.__name__ for b in _BRIDGES]}. "
+            f"Please use a specific bridge directly or implement a new bridge "
+            f"for this model type."
+        )
+        
+        raise ValueError(error_msg)
 
 
 class BridgeProtocol(Protocol):
@@ -203,6 +273,20 @@ class BridgeProtocol(Protocol):
             
         Returns:
             True if this bridge can handle the model, False otherwise
+        """
+        ...
+    
+    @classmethod
+    def from_config(cls, config: Any) -> "BridgeProtocol":
+        """
+        Create a bridge from a HuggingFace configuration.
+        
+        Args:
+            config: HuggingFace PretrainedConfig instance containing model
+                architecture information
+            
+        Returns:
+            Instance of the bridge configured for the architecture
         """
         ...
     

@@ -49,7 +49,7 @@ def main(hf_model_id: str = HF_MODEL_ID, output_dir: str = None) -> None:
 
     bridge = CausalLMBridge.from_pretrained(hf_model_id)
 
-    model_provider = bridge.to_megatron()
+    model_provider = bridge.to_provider()
     model_provider.tensor_model_parallel_size = int(os.environ.get("WORLD_SIZE", "1"))
     model_provider.initialize_model_parallel(seed=0)
 

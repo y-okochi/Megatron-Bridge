@@ -1,4 +1,4 @@
-from typing import Generic, TypeVar, overload, Iterable, Literal, Any, Type, Union
+from typing import Generic, TypeVar, overload, Iterable, Literal, Any, Type, Union, Unpack
 from pathlib import Path
 from functools import partial
 import dataclasses
@@ -15,6 +15,7 @@ from megatron.hub.common.state import SafeTensorsStateSource
 from megatron.hub.bridge import model_bridge
 from megatron.hub.bridge.model_bridge import WeightDistributionMode
 from megatron.hub.models.gpt_provider import GPTModelProvider
+from megatron.hub.common.mixins.model_mixin import GetModelKwargs
 
 MegatronModelT = TypeVar("ModelT", bound=MegatronModule)
 DataclassT = TypeVar("DataclassT")
@@ -40,7 +41,7 @@ class CausalLMBridge(Generic[MegatronModelT]):
     Example:
         >>> # Load and convert a model to Megatron format
         >>> bridge = CausalLMBridge.from_pretrained("meta-llama/Llama-3-8B")
-        >>> provider = bridge.to_megatron()
+        >>> provider = bridge.to_provider()
         >>> megatron_model = provider(wrap_with_ddp=False)
         
         >>> # Export a Megatron model back to HuggingFace format
@@ -133,7 +134,7 @@ class CausalLMBridge(Generic[MegatronModelT]):
             >>> bridge = CausalLMBridge.from_config(config)
             >>> 
             >>> # Create Megatron model with random initialization
-            >>> provider = bridge.to_megatron(load_weights=False)
+            >>> provider = bridge.to_provider(load_weights=False)
             >>> model = provider(wrap_with_ddp=False)
             
             >>> # Or use for architecture exploration
@@ -406,8 +407,18 @@ class CausalLMBridge(Generic[MegatronModelT]):
 
     def bridge_state_to_megatron(self) -> Iterable[model_bridge.MegatronWeightTuple]:
         return self._model_bridge.bridge_state_to_megatron(self.hf_pretrained)
+    
 
-    def to_megatron(self, load_weights: bool = True, hf_path: str | Path | None = None) -> GPTModelProvider:
+    def to_model(
+        self, 
+        load_weights: bool = True, 
+        hf_path: str | Path | None = None,
+        **kwargs: Unpack[GetModelKwargs],
+    ) -> list[MegatronModelT]:
+        provider = self.to_provider(load_weights, hf_path)
+        return provider(**kwargs)
+
+    def to_provider(self, load_weights: bool = True, hf_path: str | Path | None = None) -> GPTModelProvider:
         """
         Convert to a Megatron model provider.
         
