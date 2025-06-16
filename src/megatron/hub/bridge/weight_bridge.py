@@ -7,17 +7,17 @@ regular (often Hugging-Face–style) tensors.
 Key responsibilities handled here
 ---------------------------------
 1. Tensor-parallel (TP) sharding
-   • scatter / gather helpers for column- and row-parallel layers.
+    • scatter / gather helpers for column- and row-parallel layers.
 2. Pipeline-parallel (PP) ownership
-   • broadcast helpers that find the PP rank that physically owns a tensor or
-     opaque Python object (e.g. a config) and broadcast it to all other ranks.
+    • broadcast helpers that find the PP rank that physically owns a tensor or
+    opaque Python object (e.g. a config) and broadcast it to all other ranks.
 3. Format transformations
-   • QKV interleaving            – `QKVWeightBridge`
-   • SwiGLU / GeGLU concatenation – `GatedMLPWeightBridge`
-   • Simple passthrough           – `DirectWeightBridge`, `ReplicatedWeightBridge`
+    • QKV interleaving            – `QKVWeightBridge`
+    • SwiGLU / GeGLU concatenation – `GatedMLPWeightBridge`
+    • Simple passthrough           – `DirectWeightBridge`, `ReplicatedWeightBridge`
 4. Automatic strategy selection
-   • `TPAwareWeightBridge` decides at runtime whether a layer is column-parallel,
-     row-parallel or fully replicated.
+    • `TPAwareWeightBridge` decides at runtime whether a layer is column-parallel,
+    row-parallel or fully replicated.
 
 The contract for every concrete bridge is a pair of symmetric methods:
 
@@ -47,21 +47,44 @@ WeightType = TypeVar("WeightType", torch.Tensor, Dict[str, torch.Tensor])
 
 class MegatronWeightBridge(ABC, Generic[WeightType]):
     """
-    Base class for weight conversion between Megatron and external formats.
+    Abstract base class for weight conversion between Megatron and external formats.
 
-    This class handles all aspects of weight conversion including:
-    - Format transformation (e.g., QKV merging/splitting)
-    - Tensor parallel distribution/gathering
-    - Pipeline parallelism broadcasting
+    This class provides the foundation for all weight bridges, handling the complex
+    conversions between Megatron-Core's distributed tensor formats and standard
+    (typically HuggingFace) formats. Each concrete bridge implements specific
+    transformation logic while inheriting common parallel communication patterns.
 
-    Most helper methods are public to allow flexible use by subclasses:
-    - broadcast_from_pp_rank: Cross-PP tensor broadcasting
-    - broadcast_obj_from_pp_rank: Cross-PP object broadcasting
-    - broadcast_tensor_to_tp_ranks: TP tensor broadcasting
-    - scatter_to_tp_ranks: TP tensor scattering
-    - gather_from_tp_ranks: TP tensor gathering
+    Key responsibilities:
+    - Format transformation (e.g., QKV merging/splitting, gated MLP handling)
+    - Tensor parallel (TP) distribution and gathering across GPUs
+    - Pipeline parallel (PP) broadcasting between pipeline stages
+    - Wildcard pattern resolution for layer-wise mappings
 
-    Only _validate_patterns and _get_config remain private as implementation details.
+    The bridge abstraction ensures that higher-level code doesn't need to know
+    about the parallel topology or format differences - it just requests a
+    conversion and the bridge handles all the complexity.
+
+    Public helper methods for subclasses:
+    - broadcast_from_pp_rank: Broadcast tensors across pipeline stages
+    - broadcast_obj_from_pp_rank: Broadcast Python objects across PP ranks
+    - broadcast_tensor_to_tp_ranks: Broadcast within TP group
+    - scatter_to_tp_ranks: Distribute tensor shards to TP ranks
+    - gather_from_tp_ranks: Collect tensor shards from TP ranks
+
+    Example implementation:
+        >>> class MyCustomBridge(MegatronWeightBridge[torch.Tensor]):
+        ...     def to_megatron(self, weights, megatron_module):
+        ...         # Custom transformation logic
+        ...         transformed = weights.t()  # Example: transpose
+        ...         # Use helpers for distribution
+        ...         return self.scatter_to_tp_ranks(...)
+        ...     
+        ...     def from_megatron(self, megatron_weight, megatron_module):
+        ...         # Broadcast from owning PP rank
+        ...         weight = self.broadcast_from_pp_rank(megatron_weight)
+        ...         # Gather from TP ranks and transform
+        ...         gathered = self.gather_from_tp_ranks(weight)
+        ...         return {"custom_weight": gathered[0].t()}
     """
 
     def __init__(self, megatron: str, to: Union[str, Dict[str, str]]):
@@ -436,28 +459,44 @@ class DirectWeightBridge(MegatronWeightBridge[torch.Tensor]):
 
 
 class ColumnParallelWeightBridge(MegatronWeightBridge[torch.Tensor]):
-    """Bridge for **column-parallel** linear/embedding weights.
+    """
+    Bridge for column-parallel linear and embedding weights.
 
-    Megatron shards column-parallel tensors along **dimension 0** (the *output*
-    dimension of a linear layer, or the *vocab* dimension of an embedding).
-    Consequently each TP rank stores a contiguous slice of rows while sharing
-    the full set of columns.
+    Column-parallel layers in Megatron split the output dimension across tensor
+    parallel ranks. This is used for layers where each rank computes a portion
+    of the output features independently, such as:
+    - Embedding layers (split vocabulary)
+    - Linear layers producing hidden states (e.g., QKV projections, MLP up projections)
 
-    Forward path (external → Megatron)
-    ----------------------------------
-    1. Rank 0 validates that the first dimension is divisible by `tp_size`.
-    2. Rank 0 splits the tensor with `torch.chunk(..., dim=0)` producing
-       `tp_size` equally-sized shards.
-    3. The shards are **scattered** so that every TP rank receives exactly one
-       shard matching the shape of its local Megatron parameter.
+    The weight matrix is partitioned along dimension 0 (rows), so each TP rank
+    holds a subset of output features while maintaining all input features.
 
-    Reverse path (Megatron → external)
-    ----------------------------------
-    1. The local Megatron parameter (which may live on any PP rank) is
-       broadcast to all PP ranks so that the gather step can be collective.
-    2. All TP ranks **gather** their shard.
-    3. Rank 0 concatenates the gathered list along dim 0 to reconstruct the
-       original unsharded weight and emits it under the external (HF) name.
+    Sharding pattern:
+        Original weight: [output_features, input_features]
+        Rank 0: [output_features/tp_size, input_features]
+        Rank 1: [output_features/tp_size, input_features]
+        ...
+
+    Forward path (HuggingFace → Megatron):
+        1. Validate divisibility: output dimension must be divisible by tp_size
+        2. Split: Chunk tensor along dim 0 into tp_size equal parts
+        3. Scatter: Distribute chunks to respective TP ranks
+
+    Reverse path (Megatron → HuggingFace):
+        1. Broadcast: Ensure all PP ranks have the tensor
+        2. Gather: Collect chunks from all TP ranks
+        3. Concatenate: Reassemble along dim 0 on rank 0
+
+    Example:
+        >>> # For a weight of shape [4096, 1024] with tp_size=4:
+        >>> # Each rank gets [1024, 1024] after column-parallel split
+        >>> bridge = ColumnParallelWeightBridge("linear.weight", "transformer.linear.weight")
+        >>> megatron_weight = bridge.to_megatron(hf_weight, megatron_module)
+        >>> # megatron_weight.shape = [1024, 1024] on each rank
+
+    Note:
+        This bridge also handles bias terms, which are 1D tensors split
+        along their only dimension following the same pattern.
     """
 
     def to_megatron(
@@ -678,20 +717,46 @@ class ReplicatedWeightBridge(MegatronWeightBridge[torch.Tensor]):
 
 
 class TPAwareWeightBridge(MegatronWeightBridge[torch.Tensor]):
-    """**Smart** bridge that infers the parallel-strategy at runtime.
+    """
+    Smart bridge that automatically detects and applies the correct parallelism strategy.
 
-    • Looks at `type(module).__name__` and a small registry of known parallel
-      layer types.
-    • Falls back to Megatron attributes like `tensor_model_parallel` and
-      `partition_dim` when the class name is unknown.
-    • Dispatches to an internal *delegate* bridge:
-        – `ColumnParallelWeightBridge`
-        – `RowParallelWeightBridge`
-        – `ReplicatedWeightBridge`
+    This bridge eliminates the need to manually specify whether a layer is
+    column-parallel, row-parallel, or replicated. It examines the Megatron
+    module at runtime and delegates to the appropriate specialized bridge.
 
-    You can extend the detection logic for custom layers via
+    Detection strategy:
+    1. Check module class name against a registry of known types
+    2. If unknown, examine module attributes (tensor_model_parallel, partition_dim)
+    3. Delegate to appropriate bridge: ColumnParallel, RowParallel, or Replicated
 
-        TPAwareWeightBridge.register_module_type("MyFunkyLinear", "column")
+    This abstraction is particularly useful for model-agnostic code where you
+    don't know the parallelism type ahead of time, or when working with models
+    that mix different parallelism strategies.
+
+    Built-in module recognition:
+    - Column-parallel: ColumnParallelLinear, VocabParallelEmbedding, etc.
+    - Row-parallel: RowParallelLinear, TERowParallelLinear
+    - Replicated: LayerNorm, RMSNorm, and other normalization layers
+
+    Example:
+        >>> # Automatically handles any weight type
+        >>> bridge = TPAwareWeightBridge(
+        ...     megatron="decoder.layers.*.mlp.linear_fc1.weight",
+        ...     to="model.layers.*.mlp.gate_proj.weight"
+        ... )
+        
+        >>> # Works with column-parallel layers
+        >>> megatron_weight = bridge.to_megatron(hf_weight, column_parallel_module)
+        
+        >>> # Also works with normalization layers
+        >>> norm_weight = bridge.to_megatron(hf_norm, layer_norm_module)
+        
+        >>> # Register custom module types
+        >>> TPAwareWeightBridge.register_module_type("MyCustomLinear", "column")
+
+    Note:
+        If the parallelism type cannot be determined, the bridge will raise
+        a descriptive error suggesting how to fix the issue.
     """
     
     # Module type registry
@@ -825,105 +890,50 @@ class TPAwareWeightBridge(MegatronWeightBridge[torch.Tensor]):
             )
 
 
-def merge_qkv_biases(
-    config: TransformerConfig, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor
-) -> torch.Tensor:
-    """
-    Merge separate Q, K, V bias vectors into Megatron's interleaved QKV format.
-
-    Args:
-        config: Transformer configuration
-        q: Query projection biases [hidden_size]
-        k: Key projection biases [kv_hidden_size]
-        v: Value projection biases [kv_hidden_size]
-
-    Returns:
-        Interleaved QKV biases in Megatron format as 1D tensor
-    """
-    head_num = config.num_attention_heads
-    num_query_groups = config.num_query_groups
-    heads_per_group = head_num // num_query_groups
-    head_size = config.kv_channels or (config.hidden_size // head_num)
-
-    # Reshape biases to expose head dimension
-    q = q.view(head_num, head_size)
-    k = k.view(num_query_groups, head_size)
-    v = v.view(num_query_groups, head_size)
-
-    # Interleave in Megatron pattern: [q1...qn, k1, v1, q1...qn, k2, v2, ...]
-    qkv_biases = []
-    for i in range(num_query_groups):
-        qkv_biases.append(q[i * heads_per_group : (i + 1) * heads_per_group, :])
-        qkv_biases.append(k[i : i + 1, :])
-        qkv_biases.append(v[i : i + 1, :])
-
-    # Concatenate and flatten back to 1D
-    qkv = torch.cat(qkv_biases)
-    return qkv.flatten()
-
-
-def split_qkv_biases(
-    config: TransformerConfig, qkv: torch.Tensor
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """
-    Split Megatron's interleaved QKV bias into separate Q, K, V biases.
-
-    Args:
-        config: Transformer configuration
-        qkv: Interleaved QKV biases in Megatron format (1D tensor)
-
-    Returns:
-        Tuple of (Q, K, V) bias vectors
-    """
-    head_num = config.num_attention_heads
-    num_query_groups = config.num_query_groups
-    heads_per_group = head_num // num_query_groups
-    head_size = config.kv_channels or (config.hidden_size // head_num)
-    qkv_total_dim = head_num + 2 * num_query_groups
-
-    # Reshape to expose interleaved structure
-    qkv = qkv.reshape(qkv_total_dim, head_size)
-
-    # Extract Q, K, V from interleaved pattern
-    q_slice = torch.cat(
-        [
-            torch.arange(
-                (heads_per_group + 2) * i, (heads_per_group + 2) * i + heads_per_group
-            )
-            for i in range(num_query_groups)
-        ]
-    )
-    k_slice = torch.arange(heads_per_group, qkv_total_dim, heads_per_group + 2)
-    v_slice = torch.arange(heads_per_group + 1, qkv_total_dim, heads_per_group + 2)
-
-    q = qkv[q_slice].flatten()
-    k = qkv[k_slice].flatten()
-    v = qkv[v_slice].flatten()
-
-    return q, k, v
-
-
 class QKVWeightBridge(MegatronWeightBridge[Dict[str, torch.Tensor]]):
-    """Bridge for *interleaved* Q/K/V projection weights.
+    """
+    Bridge for interleaved Query/Key/Value attention projection weights.
 
-    External checkpoints generally contain three separate projection matrices:
+    This bridge handles the conversion between separate Q, K, V matrices used in
+    standard transformers and Megatron's optimized interleaved format. The
+    interleaving pattern groups queries with their corresponding key-value pairs
+    to maximize GEMM efficiency during attention computation.
 
-        • **Q** ∈ ℝ^{hidden × hidden}
-        • **K** ∈ ℝ^{hidden × hidden}
-        • **V** ∈ ℝ^{hidden × hidden}
+    External format (HuggingFace):
+        - Separate tensors: q_proj, k_proj, v_proj
+        - Each of shape [hidden_size, hidden_size] or [hidden_size, head_dim * num_heads]
 
-    Megatron-Core, in contrast, packs these into one large tensor that is
-    *interleaved by query-group* to maximise GEMM throughput.  Mapping such a
-    tensor therefore involves two independent concerns:
+    Megatron format:
+        - Single interleaved tensor following grouped query attention (GQA) pattern
+        - Interleaving order: [q1...qn, k1, v1, q1...qn, k2, v2, ...]
+        - Where n = num_attention_heads / num_query_groups
 
-    1. **Format conversion** – merging individual \{Q, K, V\} matrices into the
-       interleaved layout (load path) or splitting that layout back into the
-       three matrices (save path).
-    2. **Tensor-parallel distribution** – slicing or gathering the interleaved
-       tensor across TP ranks.  This responsibility is delegated to an
-       internal :class:`TPAwareWeightBridge`, ensuring that the correct
-       strategy (column-parallel, row-parallel or replicated) is selected at
-       runtime according to the module specification.
+    Key features:
+    1. Format conversion: Handles merging/splitting with proper interleaving
+    2. Grouped Query Attention: Supports different numbers of Q and KV heads
+    3. Tensor parallelism: Delegates to TPAwareWeightBridge for distribution
+
+    Example:
+        >>> # Create bridge for attention weights
+        >>> bridge = QKVWeightBridge(
+        ...     megatron="decoder.layers.*.self_attention.linear_qkv.weight",
+        ...     q="model.layers.*.self_attn.q_proj.weight",
+        ...     k="model.layers.*.self_attn.k_proj.weight",
+        ...     v="model.layers.*.self_attn.v_proj.weight"
+        ... )
+        
+        >>> # Convert from HuggingFace to Megatron
+        >>> qkv_weights = {"q": q_tensor, "k": k_tensor, "v": v_tensor}
+        >>> megatron_qkv = bridge.to_megatron(qkv_weights, megatron_module)
+        
+        >>> # Convert from Megatron to HuggingFace
+        >>> hf_weights = bridge.from_megatron(megatron_qkv, megatron_module)
+        >>> # Returns: {"q_proj.weight": ..., "k_proj.weight": ..., "v_proj.weight": ...}
+
+    Note:
+        This bridge automatically handles both regular multi-head attention
+        (same number of Q, K, V heads) and grouped query attention (fewer
+        KV heads than Q heads) based on the model configuration.
     """
 
     def __init__(self, megatron: str, q: str, k: str, v: str):
@@ -1030,10 +1040,10 @@ class GatedMLPWeightBridge(MegatronWeightBridge[Dict[str, torch.Tensor]]):
     Responsibilities handled by this bridge
     ---------------------------------------
     1. **Concatenate / split** – convert between `[G; U]` (Megatron) and the
-       separate \{G, U\} matrices (external).
+    separate \{G, U\} matrices (external).
     2. **Tensor-parallel distribution** – delegated to an internal
-       :class:`TPAwareWeightBridge`, allowing the correct sharding scheme to be
-       selected dynamically.
+    :class:`TPAwareWeightBridge`, allowing the correct sharding scheme to be
+    selected dynamically.
     """
     
     def __init__(self, megatron: str, gate: str, up: str):
@@ -1096,7 +1106,8 @@ class GatedMLPWeightBridge(MegatronWeightBridge[Dict[str, torch.Tensor]]):
             resolved_to["gate"],
             resolved_to["up"],
         )
-    
+
+
 class MOEWeightBridge(MegatronWeightBridge[torch.Tensor]):
     """Bridge for **Mixture of Experts (MoE)** weight distribution.
 
@@ -1324,6 +1335,84 @@ class MOEWeightBridge(MegatronWeightBridge[torch.Tensor]):
         if self.ep_size > 1:
             return mpu.get_expert_model_parallel_group()
         return None
+
+
+def merge_qkv_biases(
+    config: TransformerConfig, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor
+) -> torch.Tensor:
+    """
+    Merge separate Q, K, V bias vectors into Megatron's interleaved QKV format.
+
+    Args:
+        config: Transformer configuration
+        q: Query projection biases [hidden_size]
+        k: Key projection biases [kv_hidden_size]
+        v: Value projection biases [kv_hidden_size]
+
+    Returns:
+        Interleaved QKV biases in Megatron format as 1D tensor
+    """
+    head_num = config.num_attention_heads
+    num_query_groups = config.num_query_groups
+    heads_per_group = head_num // num_query_groups
+    head_size = config.kv_channels or (config.hidden_size // head_num)
+
+    # Reshape biases to expose head dimension
+    q = q.view(head_num, head_size)
+    k = k.view(num_query_groups, head_size)
+    v = v.view(num_query_groups, head_size)
+
+    # Interleave in Megatron pattern: [q1...qn, k1, v1, q1...qn, k2, v2, ...]
+    qkv_biases = []
+    for i in range(num_query_groups):
+        qkv_biases.append(q[i * heads_per_group : (i + 1) * heads_per_group, :])
+        qkv_biases.append(k[i : i + 1, :])
+        qkv_biases.append(v[i : i + 1, :])
+
+    # Concatenate and flatten back to 1D
+    qkv = torch.cat(qkv_biases)
+    return qkv.flatten()
+
+
+def split_qkv_biases(
+    config: TransformerConfig, qkv: torch.Tensor
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """
+    Split Megatron's interleaved QKV bias into separate Q, K, V biases.
+
+    Args:
+        config: Transformer configuration
+        qkv: Interleaved QKV biases in Megatron format (1D tensor)
+
+    Returns:
+        Tuple of (Q, K, V) bias vectors
+    """
+    head_num = config.num_attention_heads
+    num_query_groups = config.num_query_groups
+    heads_per_group = head_num // num_query_groups
+    head_size = config.kv_channels or (config.hidden_size // head_num)
+    qkv_total_dim = head_num + 2 * num_query_groups
+
+    # Reshape to expose interleaved structure
+    qkv = qkv.reshape(qkv_total_dim, head_size)
+
+    # Extract Q, K, V from interleaved pattern
+    q_slice = torch.cat(
+        [
+            torch.arange(
+                (heads_per_group + 2) * i, (heads_per_group + 2) * i + heads_per_group
+            )
+            for i in range(num_query_groups)
+        ]
+    )
+    k_slice = torch.arange(heads_per_group, qkv_total_dim, heads_per_group + 2)
+    v_slice = torch.arange(heads_per_group + 1, qkv_total_dim, heads_per_group + 2)
+
+    q = qkv[q_slice].flatten()
+    k = qkv[k_slice].flatten()
+    v = qkv[v_slice].flatten()
+
+    return q, k, v
 
 
 def merge_qkv_weights(

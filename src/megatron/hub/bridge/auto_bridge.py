@@ -1,12 +1,27 @@
 """
-Automatic bridge selection for mhub models.
+Automatic bridge selection for Megatron-Hub models.
 
 This module provides AutoBridge, which automatically selects the appropriate
 bridge based on the model configuration without requiring users to know which
 specific bridge to use.
+
+The AutoBridge examines model architectures and selects the first compatible
+bridge from a predefined list. This allows users to work with models without
+needing to understand the underlying bridge implementation details.
+
+Example:
+    >>> from megatron.hub import AutoBridge
+    >>> 
+    >>> # Automatically loads with the correct bridge type
+    >>> bridge = AutoBridge.from_pretrained("meta-llama/Llama-3-8B")
+    >>> 
+    >>> # Convert to Megatron format
+    >>> provider = bridge.to_megatron()
+    >>> model = provider(wrap_with_ddp=False)
 """
 from typing import List, Type, Union, Any, Protocol
 from pathlib import Path
+
 from transformers import AutoConfig
 
 from megatron.hub.bridge.causal_bridge import CausalLMBridge
@@ -25,13 +40,35 @@ class AutoBridge:
     that supports it. No dynamic discovery or decorators are used - all bridges
     must be explicitly imported and added to the _BRIDGES list.
     
+    The AutoBridge provides a user-friendly interface similar to HuggingFace's
+    Auto classes, allowing seamless model loading without needing to know the
+    specific bridge implementation required for each model architecture.
+    
     Example:
+        >>> from megatron.hub import AutoBridge
         >>> # Load a Llama model without knowing it needs CausalLMBridge
         >>> bridge = AutoBridge.from_pretrained("meta-llama/Llama-3-8B")
         >>> # Automatically returns a CausalLMBridge instance
         
         >>> # Works with local paths too
         >>> bridge = AutoBridge.from_pretrained("/path/to/model")
+        
+        >>> # Check if a model is supported before loading
+        >>> if AutoBridge.can_handle("microsoft/phi-2"):
+        ...     bridge = AutoBridge.from_pretrained("microsoft/phi-2")
+        
+        >>> # Pass additional arguments to the underlying bridge
+        >>> bridge = AutoBridge.from_pretrained(
+        ...     "meta-llama/Llama-2-7b-hf",
+        ...     torch_dtype=torch.float16,
+        ...     device_map="auto",
+        ...     trust_remote_code=True
+        ... )
+    
+    Note:
+        Currently supports CausalLM models. Additional model types can be
+        supported by implementing the appropriate bridge and adding it to
+        the _BRIDGES list.
     """
     
     @classmethod
@@ -100,8 +137,17 @@ class AutoBridge:
         """
         Get list of all registered bridge class names.
         
+        This method is useful for debugging and for understanding which model
+        types are currently supported by the AutoBridge system.
+        
         Returns:
-            List of bridge class names in priority order
+            List[str]: Bridge class names in priority order. The order matters
+                as bridges are tried sequentially during model loading.
+        
+        Example:
+            >>> bridges = AutoBridge.get_supported_bridges()
+            >>> print(f"Supported bridges: {bridges}")
+            ['CausalLMBridge']
         """
         return [bridge.__name__ for bridge in _BRIDGES]
     
@@ -110,12 +156,24 @@ class AutoBridge:
         """
         Check if any registered bridge can handle the model at the given path.
         
+        This method allows you to verify model compatibility before attempting
+        to load it, which can be useful for validation or UI feedback.
+        
         Args:
             path: Path to model directory or HuggingFace model ID
-            trust_remote_code: Whether to trust remote code when loading config
+                Examples: "meta-llama/Llama-3-8B", "/models/my_model"
+            trust_remote_code: Whether to trust remote code when loading config.
+                Set to True for models that use custom modeling code.
             
         Returns:
-            True if at least one bridge supports the model, False otherwise
+            bool: True if at least one bridge supports the model, False otherwise
+        
+        Example:
+            >>> # Check if a model is supported
+            >>> if AutoBridge.can_handle("meta-llama/Llama-3-8B"):
+            ...     print("Model is supported!")
+            ... else:
+            ...     print("Model requires a custom bridge implementation")
         """
         try:
             config = AutoConfig.from_pretrained(path, trust_remote_code=trust_remote_code)

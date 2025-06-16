@@ -10,11 +10,9 @@ bridges, please see `docs/bridge/model_bridge.md`.
 """
 import abc
 from typing import Generic, TypeVar, Type, Callable, List, Tuple, Iterable, Optional, NamedTuple, Mapping, Literal, Dict, Union
-from functools import partial
 from dataclasses import dataclass
 from collections import defaultdict
 from enum import Enum
-
 
 import torch
 from transformers.modeling_utils import PreTrainedModel
@@ -147,16 +145,6 @@ def get_model_bridge(hf_architecture) -> "MegatronModelBridge":
 
 
 @dispatch
-def to_megatron(hf_architecture, hf_pretrained, load_weights: bool = True) -> ModelProviderProtocol:
-    ...
-
-
-@dispatch
-def bridge_state_to_megatron(hf_architecture, hf_pretrained) -> Iterable[MegatronWeightTuple]:
-    ...
-
-
-@dispatch
 def bridge_state_to_hf(
     first_model: MegatronModel,
     model: list[MegatronModel], 
@@ -171,26 +159,61 @@ def bridge_state_to_hf(
 
 
 class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronModel]):
-    """High-level *orchestrator* that wires HuggingFace and Megatron together.
+    """
+    High-level orchestrator for HuggingFace ↔ Megatron model conversions.
 
-    The class itself **does not** understand any tensor-parallel or pipeline-parallel
-    details – all such knowledge lives in concrete
-    :pyclass:`~mhub.hub.bridge.weight_bridge.MegatronWeightBridge` subclasses.
+    This abstract base class provides the framework for converting models between
+    HuggingFace and Megatron formats. It acts as an orchestrator that coordinates
+    the conversion process without directly handling the complex details of
+    tensor parallelism or weight transformations.
 
-    What this class *does* is:
+    The bridge pattern separates concerns:
+    - MegatronModelBridge: Orchestrates the overall conversion process
+    - MegatronStateBridge: Manages parameter name mappings
+    - MegatronWeightBridge: Handles actual weight transformations and distribution
 
-    1. Build deterministic *plans* (lists of :class:`_HFLoadTask` / :class:`_HFSaveTask`)
-       that answer *"which parameter is handled by which bridge?"*  Nothing more.
-    2. Walk those plans, calling :py:meth:`MegatronWeightBridge.to_megatron` or
-       :py:meth:`MegatronWeightBridge.from_megatron` as appropriate.
-    3. Provide progress bars and a small set of utility helpers for subclasses.
+    Key responsibilities:
+    1. Build conversion plans that map each parameter to its appropriate bridge
+    2. Execute plans with proper error handling and progress tracking
+    3. Provide utilities for configuration translation
+    4. Handle virtual pipeline parallelism (VPP) complexities
 
-    To add a new model architecture you typically:
+    To implement a bridge for a new model architecture:
 
-    • Subclass :class:`MegatronModelBridge`.
-    • Implement :py:meth:`provider_bridge` – returns a Megatron *model provider*.
-    • Implement :py:meth:`state_bridge`   – returns a :class:`MegatronStateBridge`
-      that contains all weight mappings for the model.
+    1. Create a subclass decorated with @MegatronModelBridge.impl:
+        >>> @MegatronModelBridge.impl(source=LlamaForCausalLM, target=GPTModel)
+        >>> class MegatronCausalLlamaBridge(MegatronModelBridge):
+        ...     pass
+
+    2. Implement provider_bridge to create Megatron configurations:
+        >>> def provider_bridge(self, hf_pretrained) -> LlamaModelProvider:
+        ...     return LlamaModelProvider(
+        ...         num_layers=hf_pretrained.config.num_hidden_layers,
+        ...         hidden_size=hf_pretrained.config.hidden_size,
+        ...         ...
+        ...     )
+
+    3. Implement state_bridge to define weight mappings:
+        >>> def state_bridge(self) -> MegatronStateBridge:
+        ...     return MegatronStateBridge(
+        ...         TPAwareWeightBridge(
+        ...             megatron="embedding.word_embeddings.weight",
+        ...             to="model.embed_tokens.weight"
+        ...         ),
+        ...         ...
+        ...     )
+
+    Example usage:
+        >>> # The bridge is typically not instantiated directly
+        >>> # Instead, use CausalLMBridge or AutoBridge which handle this
+        >>> bridge = CausalLMBridge.from_pretrained("meta-llama/Llama-3-8B")
+        >>> provider = bridge.to_megatron()
+
+    Note:
+        This class uses generic type parameters to ensure type safety:
+        - HFPreTrained: The HuggingFace model type
+        - ModelProviderTarget: The Megatron model provider type
+        - MegatronModel: The Megatron model type
     """
     @classmethod
     def impl(
@@ -200,8 +223,34 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         target: Type[MegatronModel]
     ) -> Callable[[_BridgeImplClass], _BridgeImplClass]:
         """
-        A class decorator factory for registering bridge implementations with
-        to_megatron and from_megatron dispatchers.
+        Class decorator for registering bridge implementations.
+        
+        This decorator registers a MegatronModelBridge subclass with the dispatch
+        system, enabling automatic routing of conversions based on the source
+        HuggingFace model type and target Megatron model type.
+        
+        Args:
+            source: HuggingFace PreTrainedModel class (e.g., LlamaForCausalLM)
+            target: Megatron model class (e.g., GPTModel)
+            
+        Returns:
+            Decorator function that registers the bridge implementation
+            
+        Example:
+            >>> @MegatronModelBridge.impl(source=LlamaForCausalLM, target=GPTModel)
+            >>> class MegatronCausalLlamaBridge(MegatronModelBridge):
+            ...     def provider_bridge(self, hf_pretrained):
+            ...         # Implementation
+            ...         pass
+            ...     
+            ...     def state_bridge(self):
+            ...         # Implementation
+            ...         pass
+            
+        Note:
+            The decorated class is registered with multiple dispatchers to handle
+            different conversion scenarios. The registration is automatic when the
+            class is defined.
         """
         def decorator(decorated_class: _BridgeImplClass) -> _BridgeImplClass:
             decorated_class_name = decorated_class.__name__
@@ -233,19 +282,97 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
     
     @abc.abstractmethod
     def provider_bridge(self, hf_pretrained: HFPreTrained) -> ModelProviderTarget:
+        """
+        Create a Megatron model provider from HuggingFace configuration.
+        
+        This abstract method must be implemented by subclasses to translate
+        HuggingFace model configurations into Megatron model provider instances.
+        The provider contains all necessary configuration for creating Megatron models.
+        
+        Args:
+            hf_pretrained: HuggingFace model or configuration containing the
+                source model's architecture details
+                
+        Returns:
+            A configured model provider instance (e.g., GPTModelProvider,
+            LlamaModelProvider) ready to create Megatron models
+            
+        Example implementation:
+            >>> def provider_bridge(self, hf_pretrained):
+            ...     return LlamaModelProvider(
+            ...         num_layers=hf_pretrained.config.num_hidden_layers,
+            ...         hidden_size=hf_pretrained.config.hidden_size,
+            ...         num_attention_heads=hf_pretrained.config.num_attention_heads,
+            ...         ffn_hidden_size=hf_pretrained.config.intermediate_size,
+            ...         # ... other configuration mappings
+            ...     )
+        """
         raise NotImplementedError("Subclass must implement bridge method")
 
     @abc.abstractmethod
     def state_bridge(self) -> MegatronStateBridge:
+        """
+        Define weight mappings between HuggingFace and Megatron formats.
+        
+        This abstract method must be implemented by subclasses to specify how
+        parameters map between the two formats. The returned MegatronStateBridge
+        contains all weight bridges needed for the model architecture.
+        
+        Returns:
+            MegatronStateBridge containing all weight mapping definitions
+            
+        Example implementation:
+            >>> def state_bridge(self):
+            ...     return MegatronStateBridge(
+            ...         TPAwareWeightBridge(
+            ...             megatron="embedding.word_embeddings.weight",
+            ...             to="model.embed_tokens.weight"
+            ...         ),
+            ...         QKVWeightBridge(
+            ...             megatron="decoder.layers.*.self_attention.linear_qkv.weight",
+            ...             q="model.layers.*.self_attn.q_proj.weight",
+            ...             k="model.layers.*.self_attn.k_proj.weight",
+            ...             v="model.layers.*.self_attn.v_proj.weight"
+            ...         ),
+            ...         # ... more weight bridges
+            ...     )
+        """
         raise NotImplementedError("Subclass must implement state_bridge method")
     
     def load_state_from_hf(self, src: HFPreTrained, dst: list[MegatronModel]) -> list[MegatronModel]:
-        """Top-level orchestrator for HF ➜ Megatron conversion.
+        """
+        Load HuggingFace weights into Megatron models.
 
-        Every heavy-lifting step (format reshaping, TP/PP communication, etc.)
-        is completely delegated to the MegatronWeightBridge selected for each
-        parameter.  This method merely builds the plan and executes it with a
-        progress bar on rank 0.
+        This method orchestrates the complete weight loading process from HuggingFace
+        format to Megatron's distributed format. It builds a conversion plan and
+        executes it with proper progress tracking and error handling.
+
+        The actual weight transformations and distribution are delegated to the
+        appropriate MegatronWeightBridge instances based on the state mappings.
+
+        Args:
+            src: HuggingFace model or state source containing the weights to load
+            dst: List of Megatron model instances (one per virtual pipeline stage)
+
+        Returns:
+            The input dst list with loaded weights
+
+        Process:
+            1. Build a plan mapping each Megatron parameter to its source
+            2. For each parameter in the plan:
+                - Fetch source weights from HuggingFace state
+                - Apply format transformation via the weight bridge
+                - Distribute to appropriate TP/PP ranks
+                - Copy into the Megatron parameter
+
+        Example:
+            >>> hf_model = PreTrainedCausalLM.from_pretrained("gpt2")
+            >>> megatron_models = [create_megatron_model()]
+            >>> bridge.load_state_from_hf(hf_model, megatron_models)
+
+        Note:
+            Progress is shown only on rank 0 to avoid cluttered output in
+            distributed environments.
         """
 
         load_plan = list(self._build_plan_from_hf(src, dst))
@@ -301,7 +428,32 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         return dst
     
     def bridge_state_from_hf(self, src: HFPreTrained, dst: List[MegatronModel]) -> Iterable[MegatronWeightTuple]:
-        """Generator variant of `load_state_from_hf` – yields transformed shards."""
+        """
+        Generator variant of load_state_from_hf for streaming weight conversion.
+        
+        This method provides a memory-efficient way to convert weights by yielding
+        them one at a time instead of loading all at once. Useful for processing
+        very large models or when implementing custom weight handling logic.
+        
+        Args:
+            src: HuggingFace model or state source containing the weights
+            dst: List of Megatron model instances to extract configuration from
+            
+        Yields:
+            MegatronWeightTuple: Named tuples containing:
+                - model_idx: Index of the model in dst list
+                - param_name: Name of the parameter
+                - weight: Transformed weight tensor for this rank
+                
+        Example:
+            >>> # Process weights one by one
+            >>> for weight_tuple in bridge.bridge_state_from_hf(hf_model, megatron_models):
+            ...     print(f"Processing {weight_tuple.param_name}: {weight_tuple.weight.shape}")
+            ...     # Custom processing logic here
+        
+        Note:
+            Only yields weights that belong to the current rank after TP/PP distribution.
+        """
 
         for task in self._build_plan_from_hf(src, dst):
             accessor: Mapping[str, torch.Tensor] = src.state
@@ -323,7 +475,50 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         show_progress: bool = True,
         mode: Union[str, WeightDistributionMode] = WeightDistributionMode.CONSOLIDATE,
     ) -> Iterable[HFWeightTuple]:
-        """Export Megatron weights ➜ HF format.  Bridges handle everything."""
+        """
+        Export Megatron weights to HuggingFace format.
+        
+        This method orchestrates the conversion of weights from Megatron's distributed
+        format back to HuggingFace format. It handles gathering from tensor parallel
+        ranks, broadcasting across pipeline parallel ranks, and format conversions.
+        
+        Args:
+            src: List of Megatron model instances (one per virtual pipeline stage)
+            hf_pretrained: HuggingFace model/config for metadata and mapping info
+            cpu: Whether to move tensors to CPU before yielding (default: True)
+            order: Export order for weights:
+                - "megatron": Natural order of Megatron parameters
+                - "hf": Order from HuggingFace state dict
+                - "safetensors": Grouped by safetensors file (default)
+            show_progress: Display progress bar during export (default: True)
+            mode: Weight distribution mode:
+                - WeightDistributionMode.CONSOLIDATE: Gather to rank 0 only (default)
+                - WeightDistributionMode.REPLICATE: All ranks get full tensors
+                - WeightDistributionMode.DISTRIBUTE: Each rank keeps its shard
+                
+        Yields:
+            HFWeightTuple: Named tuples of (param_name, weight_tensor) in HF format
+            
+        Example:
+            >>> # Export weights with default settings
+            >>> for name, weight in bridge.bridge_state_to_hf(megatron_models, hf_config):
+            ...     print(f"Exported {name}: {weight.shape}")
+            
+            >>> # Export with all ranks getting weights
+            >>> weights = list(bridge.bridge_state_to_hf(
+            ...     megatron_models, hf_config,
+            ...     mode=WeightDistributionMode.REPLICATE
+            ... ))
+            
+        Raises:
+            ValueError: If mode string is invalid
+            
+        Note:
+            The yielded weights depend on the mode:
+            - CONSOLIDATE: Only rank 0 yields weights
+            - REPLICATE: All ranks yield full weights
+            - DISTRIBUTE: Each rank yields its shard (experimental)
+        """
 
         # Normalize mode parameter
         if isinstance(mode, str):
@@ -392,7 +587,25 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
 
     def dtype_from_hf(self, config):
         """
-        Extracts torch dtype from a HF config
+        Extract torch dtype from a HuggingFace config.
+        
+        This utility method handles the conversion of dtype specifications in
+        HuggingFace configs to PyTorch dtype objects. Supports both direct
+        torch.dtype objects and string representations.
+        
+        Args:
+            config: HuggingFace configuration object with a torch_dtype attribute
+            
+        Returns:
+            torch.dtype: The corresponding PyTorch dtype
+            
+        Raises:
+            AssertionError: If config doesn't have torch_dtype attribute
+            ValueError: If torch_dtype is neither a string nor torch.dtype
+            
+        Example:
+            >>> dtype = bridge.dtype_from_hf(hf_config)
+            >>> print(dtype)  # torch.float16
         """
         assert hasattr(config, 'torch_dtype'), "Expected config to have attr `torch_dtype`"
         torch_dtype = config.torch_dtype
@@ -403,9 +616,30 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         else:
             raise ValueError("torch_dtype is not of type str/torch.dtype")
         
-    def dtype_from_str(self, dtype):
+    def dtype_from_str(self, dtype: str) -> torch.dtype:
         """
-        Convert a str precision to equivalent torch dtype.
+        Convert a string precision identifier to equivalent torch dtype.
+        
+        This utility method handles various string representations of PyTorch
+        data types, including common abbreviations and mixed precision formats.
+        
+        Args:
+            dtype: String representation of dtype (e.g., "float16", "fp16", "bf16-mixed")
+            
+        Returns:
+            torch.dtype: Corresponding PyTorch dtype (defaults to float32 if unknown)
+            
+        Supported formats:
+            - float16/fp16/16/16-mixed → torch.float16
+            - bfloat16/bf16-mixed → torch.bfloat16
+            - Others → torch.float32 (default)
+            
+        Example:
+            >>> dtype = bridge.dtype_from_str("fp16")
+            >>> print(dtype)  # torch.float16
+            
+            >>> dtype = bridge.dtype_from_str("bf16-mixed")
+            >>> print(dtype)  # torch.bfloat16
         """
         assert isinstance(dtype, str)
         if dtype in ["float16", "fp16", "16", "16-mixed"]:
@@ -415,7 +649,33 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         else:
             return torch.float32
         
-    def make_vocab_size_divisible_by(self, vocab_size):
+    def make_vocab_size_divisible_by(self, vocab_size: int) -> int:
+        """
+        Calculate an appropriate divisor for vocabulary size padding.
+        
+        Megatron requires vocabulary sizes to be divisible by certain values for
+        efficient tensor parallelism. This method finds the largest power of 2
+        (up to 128) that evenly divides the vocabulary size.
+        
+        Args:
+            vocab_size: Original vocabulary size from the model
+            
+        Returns:
+            int: Largest power of 2 (≤ 128) that divides vocab_size
+            
+        Example:
+            >>> # For vocab_size=50257 (GPT-2)
+            >>> divisor = bridge.make_vocab_size_divisible_by(50257)
+            >>> print(divisor)  # 1 (50257 is prime)
+            
+            >>> # For vocab_size=32000 (Llama)
+            >>> divisor = bridge.make_vocab_size_divisible_by(32000)
+            >>> print(divisor)  # 128
+            
+        Note:
+            The returned value is used by Megatron to potentially pad the
+            vocabulary to ensure efficient parallelization.
+        """
         base = 128
         while vocab_size % base != 0:
             base //= 2

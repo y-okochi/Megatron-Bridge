@@ -8,32 +8,48 @@ class MegatronStateBridge:
     """
     Manages weight mappings between model formats with pattern matching support.
     
-    This class handles collections of MegatronWeightBridge mappings and provides
-    efficient pattern matching for parameter names using glob-like syntax.
+    This class serves as a registry of weight mappings between Megatron and external
+    (typically HuggingFace) model formats. It provides efficient pattern matching
+    for parameter names using glob-like wildcards (*) and supports both forward
+    (Megatron → HF) and reverse (HF → Megatron) lookups.
+    
+    The bridge pre-compiles regex patterns for efficient repeated lookups and
+    handles the resolution of wildcards in parameter names.
     
     Args:
-        *mappings: MegatronWeightBridge objects defining the mappings
+        *mappings: Variable number of MegatronWeightBridge objects defining
+            the individual weight mappings
     
     Example:
-        weight_map = MegatronStateBridge(
-            TPAwareWeightBridge(
-                megatron="embedding.word_embeddings.weight",
-                to="model.embed_tokens.weight",
-            ),
-            QKVWeightBridge(
-                megatron="decoder.layers.*.self_attention.linear_qkv.weight",
-                q="model.layers.*.self_attn.q_proj.weight",
-                k="model.layers.*.self_attn.k_proj.weight",
-                v="model.layers.*.self_attn.v_proj.weight",
-            ),
-        )
+        >>> # Create a state bridge with various mappings
+        >>> weight_map = MegatronStateBridge(
+        ...     TPAwareWeightBridge(
+        ...         megatron="embedding.word_embeddings.weight",
+        ...         to="model.embed_tokens.weight",
+        ...     ),
+        ...     QKVWeightBridge(
+        ...         megatron="decoder.layers.*.self_attention.linear_qkv.weight",
+        ...         q="model.layers.*.self_attn.q_proj.weight",
+        ...         k="model.layers.*.self_attn.k_proj.weight",
+        ...         v="model.layers.*.self_attn.v_proj.weight",
+        ...     ),
+        ... )
         
-        # Or with a list using unpacking
-        mappings_list = [bridge1, bridge2, bridge3]
-        weight_map = MegatronStateBridge(*mappings_list)
+        >>> # Query for a specific layer (wildcards are resolved)
+        >>> mapping = weight_map.query_megatron("decoder.layers.0.self_attention.linear_qkv.weight")
+        >>> print(mapping.to)  # Will show resolved HF names for layer 0
         
-        # Get mapping for a specific parameter
-        mapping = weight_map.query_megatron("decoder.layers.0.self_attention.linear_qkv.weight")
+        >>> # Reverse lookup from HF name
+        >>> mapping = weight_map.query_to("model.layers.5.self_attn.q_proj.weight")
+        >>> print(mapping.megatron)  # Shows corresponding Megatron name
+        
+        >>> # Build from a list
+        >>> mappings_list = [bridge1, bridge2, bridge3]
+        >>> weight_map = MegatronStateBridge(*mappings_list)
+    
+    Note:
+        Wildcard patterns use '*' which matches any sequence of digits (0-9).
+        This is specifically designed for layer indices in transformer models.
     """
     
     def __init__(self, *mappings: MegatronWeightBridge):
@@ -82,16 +98,26 @@ class MegatronStateBridge:
     
     def query_megatron(self, megatron_name: str) -> Optional[MegatronWeightBridge]:
         """
-        Get mapping for a megatron parameter name.
+        Get mapping for a Megatron parameter name.
         
-        This method checks both direct matches and pattern matches using
-        the pre-compiled regex patterns.
+        This method performs efficient lookups by first checking for exact matches,
+        then falling back to pattern matching using pre-compiled regex patterns.
+        When a pattern match is found, wildcards are automatically resolved.
         
         Args:
             megatron_name: Megatron parameter name to look up
+                Example: "decoder.layers.0.self_attention.linear_qkv.weight"
             
         Returns:
-            MegatronWeightBridge with resolved wildcards, or None if no match found
+            MegatronWeightBridge: Bridge instance with resolved wildcards, or None
+                if no matching mapping is found. The returned bridge will have
+                all wildcards replaced with actual values.
+        
+        Example:
+            >>> # Query with exact layer number
+            >>> bridge = state_map.query_megatron("decoder.layers.5.mlp.linear_fc1.weight")
+            >>> if bridge:
+            ...     print(f"Maps to: {bridge.to}")  # Shows HF name for layer 5
         """
         for pattern, mapping in self._compiled_patterns:
             if pattern is None:
