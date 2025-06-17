@@ -154,7 +154,7 @@ class TestGetLocalRankPreinit:
 class TestPrintRank0:
     """Test print_rank_0 function."""
 
-    @patch("megatron.hub.utils.common_utils.get_rank_safe")
+    @patch("megatron.hub.core.utils.common_utils.get_rank_safe")
     @patch("builtins.print")
     def test_print_on_rank_0(self, mock_print, mock_get_rank_safe):
         """Test print_rank_0 prints message when rank is 0."""
@@ -166,7 +166,7 @@ class TestPrintRank0:
         mock_get_rank_safe.assert_called_once()
         mock_print.assert_called_once_with(message, flush=True)
 
-    @patch("megatron.hub.utils.common_utils.get_rank_safe")
+    @patch("megatron.hub.core.utils.common_utils.get_rank_safe")
     @patch("builtins.print")
     def test_no_print_on_non_zero_rank(self, mock_print, mock_get_rank_safe):
         """Test print_rank_0 does not print message when rank is not 0."""

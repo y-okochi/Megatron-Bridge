@@ -102,7 +102,7 @@ class T5ModelProvider(TransformerConfig, ModelProviderMixin[MCoreT5Model]):
     vocab_size: Optional[int] = None
     tp_comm_overlap_cfg: Optional[Union[str, dict[str, Any]]] = None
 
-    def configure_model(self, tokenizer) -> "MCoreT5Model":
+    def provide(self, pre_process=None, post_process=None, tokenizer=None) -> MCoreT5Model:
         """Setup the T5 Model based on config definition."""
 
         vp_size = self.virtual_pipeline_model_parallel_size

@@ -108,8 +108,6 @@ eval = [
 recipes = [
     "nemo-run",
 ]
-
-[dependency-groups]
 docs = [
     "myst-parser>=4.0.1",
     "nvidia-sphinx-theme>=0.0.8",

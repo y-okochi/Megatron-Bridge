@@ -257,7 +257,7 @@ class TestConfigContainer_FromYaml:
 
         with patch("builtins.open", mock_open()):
             with patch("yaml.safe_load", return_value={}):
-                with patch("megatron.hub.utils.config_utils.OmegaConf") as mock_omegaconf:
+                with patch("megatron.hub.training.utils.config_utils.OmegaConf") as mock_omegaconf:
                     # Mock OmegaConf methods to return expected values
                     mock_conf = MagicMock()
                     mock_omegaconf.create.return_value = mock_conf
@@ -532,7 +532,7 @@ class TestConfigContainer_Integration:
         """Test YAML conversion produces expected structure."""
         config = TestConfigContainer(name="yaml_roundtrip", value=1234)
 
-        with patch("megatron.hub.utils.config_utils.safe_yaml_representers"):
+        with patch("megatron.hub.training.utils.config_utils.safe_yaml_representers"):
             with patch("yaml.safe_dump") as mock_dump:
                 config.to_yaml()
 
