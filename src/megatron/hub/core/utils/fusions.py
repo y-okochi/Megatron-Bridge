@@ -101,6 +101,28 @@ def can_enable_bias_dropout_fusion() -> bool:
         return False
 
 
+def can_enable_masked_softmax_fusion() -> bool:
+    """Check if masked softmax fusion can be enabled.
+
+    Returns:
+        bool: True if masked softmax fusion kernels are available.
+    """
+    try:
+        # Try to import the CUDA kernels that are required for masked softmax fusion
+        import scaled_masked_softmax_cuda  # noqa: F401
+        import scaled_upper_triang_masked_softmax_cuda  # noqa: F401
+
+        return True
+    except ImportError:
+        if LOG_FUSION_DISABLE:
+            logger.warning(
+                "masked_softmax_fusion requires CUDA kernels (scaled_masked_softmax_cuda) "
+                "but they are not available. This typically happens when Megatron-Core is not "
+                "built with CUDA extensions. Fusion disabled."
+            )
+        return False
+
+
 def validate_rope_fusion_compatibility(model_provider: "GPTModelProvider") -> bool:
     """Validate if RoPE fusion is compatible with the current model configuration.
 

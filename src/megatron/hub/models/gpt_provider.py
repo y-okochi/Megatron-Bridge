@@ -79,7 +79,7 @@ class GPTModelProvider(TransformerConfig, ModelProviderMixin[MCoreGPTModel]):
     account_for_loss_in_pipeline_split: bool = False
 
     # Fusions
-    masked_softmax_fusion: bool = True  # Generally beneficial, no specific dependencies
+    masked_softmax_fusion: bool = field(default_factory=fusions.can_enable_masked_softmax_fusion)
     cross_entropy_loss_fusion: bool = True  # Generally beneficial, no specific dependencies
     gradient_accumulation_fusion: bool = field(default_factory=fusions.can_enable_gradient_accumulation_fusion)
     bias_activation_fusion: bool = False  # Disabled by default as it can interfere with certain architectures
