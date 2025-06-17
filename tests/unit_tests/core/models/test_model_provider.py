@@ -11,7 +11,6 @@ from megatron.hub.core.models.model_provider import (
     ModelProviderProtocol,
     _create_model,
     _ddp_wrap,
-    _fix_float_8,
     _print_num_params,
     get_model,
 )
@@ -323,7 +322,9 @@ class TestGetModel:
 
         # Assertions
         assert len(result) == 1
-        mock_create_model.assert_called_once_with(model_provider, ModelType.encoder_or_decoder, init_model_with_meta_device=None)
+        mock_create_model.assert_called_once_with(
+            model_provider, ModelType.encoder_or_decoder, init_model_with_meta_device=None
+        )
         mock_print_params.assert_called_once()
         # mock_fix_float8.assert_called_once()  # Commented out since _fix_float_8 is not called in the implementation
         mock_ddp_wrap.assert_called_once()
