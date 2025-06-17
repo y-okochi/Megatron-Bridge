@@ -169,7 +169,7 @@ def create_test_profiling_config(**kwargs: Any) -> ProfilingConfig:
 
 def create_test_config_container(
     world_size_override: int,
-    model_config: Union[GPTConfig, T5Config],
+    model_config: Union[GPTModelProvider, T5ModelProvider],
     train_config: Optional[TrainingConfig] = None,
     optimizer_config: Optional[OptimizerConfig] = None,
     scheduler_config: Optional[SchedulerConfig] = None,
@@ -186,7 +186,7 @@ def create_test_config_container(
 
     Args:
         world_size_override: The world size for the mock `get_world_size_safe`.
-        model_config: The model configuration (GPTConfig or T5Config).
+        model_config: The model configuration (GPTModelProvider or T5ModelProvider).
         train_config: Optional override for training configuration.
         optimizer_config: Optional override for optimizer configuration.
         scheduler_config: Optional override for scheduler configuration.

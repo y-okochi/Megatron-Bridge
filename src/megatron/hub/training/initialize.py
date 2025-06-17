@@ -29,10 +29,10 @@ from megatron.core.num_microbatches_calculator import (
 )
 from megatron.core.utils import get_te_version, is_te_min_version, is_torch_min_version
 
+from megatron.hub.core.utils.common_utils import get_local_rank_preinit, get_rank_safe, get_world_size_safe
 from megatron.hub.models.gpt_provider import GPTModelProvider
 from megatron.hub.models.t5_provider import T5ModelProvider
 from megatron.hub.training.config import ConfigContainer, DistributedInitConfig, RerunStateMachineConfig, RNGConfig
-from megatron.hub.core.utils.common_utils import get_local_rank_preinit, get_rank_safe, get_world_size_safe
 
 
 def initialize_megatron(
@@ -211,7 +211,7 @@ def init_rerun_state(rerun_state_machine_config: RerunStateMachineConfig) -> Non
     )
 
 
-def set_jit_fusion_options(model_config: GPTConfig | T5Config, micro_batch_size: int) -> None:
+def set_jit_fusion_options(model_config: GPTModelProvider | T5ModelProvider, micro_batch_size: int) -> None:
     """Set PyTorch JIT layer fusion options and warmup JIT functions.
 
     Configures the JIT fuser (nvFuser or legacy) based on the PyTorch version

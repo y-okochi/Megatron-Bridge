@@ -11,7 +11,6 @@ from typing import Callable, Protocol, runtime_checkable
 
 import torch
 import torch.nn as nn
-
 from megatron.core import parallel_state, tensor_parallel
 from megatron.core.distributed import (
     DistributedDataParallel,
@@ -74,10 +73,7 @@ def get_model(
     # GPU allocation.
     # For FSDP2, we don't allocate GPU memory here. We allocate GPU memory
     # in the fully_shard function of FSDP2 instead.
-    if (
-        not (use_torch_fsdp2 and model_config.use_cpu_initialization)
-        and not model_config.init_model_with_meta_device
-    ):
+    if not (use_torch_fsdp2 and model_config.use_cpu_initialization) and not model_config.init_model_with_meta_device:
         for model_module in model:
             model_module.cuda(torch.cuda.current_device())
 
@@ -116,6 +112,7 @@ def _create_model(model_provider, model_type, init_model_with_meta_device=False)
     Returns:
         list: List of model instances. Multiple instances for VPP, otherwise single
     """
+
     def build_model():
         if (
             parallel_state.get_pipeline_model_parallel_world_size() > 1
@@ -154,7 +151,7 @@ def _create_model(model_provider, model_type, init_model_with_meta_device=False)
                 )
             model.model_type = model_type
         return model
-    
+
     if init_model_with_meta_device:
         with torch.device("meta"):
             model = build_model()
@@ -171,7 +168,7 @@ def _create_model(model_provider, model_type, init_model_with_meta_device=False)
     for model_module in model:
         for param in model_module.parameters():
             tensor_parallel.set_defaults_if_not_set_tensor_model_parallel_attributes(param)
-    
+
         if init_model_with_meta_device:
             model_module.config.init_model_with_meta_device = True
 
@@ -237,12 +234,7 @@ def _print_num_params(model: list[MegatronModule]):
             " > number of parameters on (tensor, pipeline) model parallel rank ({}, {}): {}".format(
                 parallel_state.get_tensor_model_parallel_rank(),
                 parallel_state.get_pipeline_model_parallel_rank(),
-                sum(
-                    [
-                        sum([p.nelement() for p in model_module.parameters()])
-                        for model_module in model
-                    ]
-                ),
+                sum([sum([p.nelement() for p in model_module.parameters()]) for model_module in model]),
             ),
             flush=True,
         )
@@ -273,9 +265,7 @@ def _fix_float_8(model: list[MegatronModule]):
                 fp8_meta = param._fp8_meta["scaling_fwd"]
                 fp8_meta_index = param._fp8_meta_index
                 if hasattr(param, "get_high_precision_init_val"):
-                    fp8_meta.amax_history[0][fp8_meta_index].copy_(
-                        param.get_high_precision_init_val().abs().max()
-                    )
+                    fp8_meta.amax_history[0][fp8_meta_index].copy_(param.get_high_precision_init_val().abs().max())
                 else:
                     fp8_meta.amax_history[0][fp8_meta_index] = 0
 

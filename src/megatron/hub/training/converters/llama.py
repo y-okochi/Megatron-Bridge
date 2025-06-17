@@ -18,9 +18,9 @@ from typing import TYPE_CHECKING
 
 import torch
 
+from megatron.hub.models.llama.llama_provider import Llama4ModelProvider, Llama31ModelProvider, LlamaModelProvider
 from megatron.hub.training.converters.common import BaseExporter, BaseImporter, dtype_from_hf
 from megatron.hub.training.converters.state_transform import TransformFns, apply_transforms, state_transform
-from megatron.hub.models.llama.llama_provider import Llama4ModelProvider, Llama31ModelProvider, LlamaModelProvider
 
 
 if TYPE_CHECKING:
@@ -307,7 +307,7 @@ class HFLlamaImporter(BaseImporter):
         return self._hf_config
 
     @property
-    def tron_config(self) -> LlamaConfig:
+    def tron_config(self) -> LlamaModelProvider:
         """Create a megatron.hub LlamaConfig from the HF model config.
 
         Translates the HF configuration parameters to the equivalent megatron.hub

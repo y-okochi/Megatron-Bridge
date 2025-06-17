@@ -1,23 +1,29 @@
 import abc
-from typing import Generic, TypeVar
 import os
-
+from typing import Generic, TypeVar
 
 import torch
-
+from megatron.core import parallel_state
 from megatron.core.distributed import DistributedDataParallelConfig
 from megatron.core.enums import ModelType
-from megatron.core.transformer.module import MegatronModule
-from megatron.core import parallel_state
 from megatron.core.tensor_parallel.random import model_parallel_cuda_manual_seed
+from megatron.core.transformer.module import MegatronModule
 
-from megatron.hub.core.models.model_provider import get_model
 from megatron.hub.common.mixins.config_mixin import ConfigMixin
+from megatron.hub.core.models.model_provider import get_model
+
 
 ModelT = TypeVar("ModelT", bound=MegatronModule)
 
 
 class ModelProviderMixin(abc.ABC, Generic[ModelT], ConfigMixin):
+    """Mixin class for providing Megatron model instances.
+
+    This abstract base class provides functionality to create and configure
+    Megatron models with proper initialization and distributed data parallel
+    support. Subclasses must implement the `provide` method to return the
+    specific model instance.
+    """
     CONFIG_NAME = "mhub_model.json"
 
     @abc.abstractmethod
@@ -62,7 +68,7 @@ class ModelProviderMixin(abc.ABC, Generic[ModelT], ConfigMixin):
             os.environ["MASTER_ADDR"] = "localhost"
             os.environ["MASTER_PORT"] = "12355"
             torch.distributed.init_process_group("nccl")
-        
+
         if not parallel_state.is_initialized():
             print("Model parallel not initialized, initializing...")
             self.initialize_model_parallel(seed=0)
@@ -74,18 +80,18 @@ class ModelProviderMixin(abc.ABC, Generic[ModelT], ConfigMixin):
             overlap_param_gather_with_optimizer_step=overlap_param_gather_with_optimizer_step,
             fp16=fp16,
             bf16=bf16,
-            use_torch_fsdp2=use_torch_fsdp2,   
+            use_torch_fsdp2=use_torch_fsdp2,
             wrap_with_ddp=wrap_with_ddp,
             data_parallel_random_init=data_parallel_random_init,
             use_cpu_initialization=use_cpu_initialization,
             init_model_with_meta_device=init_model_with_meta_device,
         )
-    
+
     def initialize_model_parallel(self, seed: int | None = None, **kwargs) -> None:
         if not torch.distributed.is_initialized():
             torch.distributed.init_process_group("nccl")
             torch.cuda.set_device(torch.distributed.get_rank())
-        
+
         parallel_state.initialize_model_parallel(
             tensor_model_parallel_size=getattr(self, "tensor_model_parallel_size", 1),
             pipeline_model_parallel_size=getattr(self, "pipeline_model_parallel_size", 1),

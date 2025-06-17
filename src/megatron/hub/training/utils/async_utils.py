@@ -19,8 +19,8 @@ the async checkpoint save calls.
 
 from megatron.core.dist_checkpointing.strategies.async_utils import AsyncCallsQueue, AsyncRequest
 
-from megatron.hub.training.config import CheckpointConfig
 from megatron.hub.core.utils.common_utils import print_rank_0
+from megatron.hub.training.config import CheckpointConfig
 
 
 # Singleton manager of async calls

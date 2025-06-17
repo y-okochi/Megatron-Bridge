@@ -21,10 +21,10 @@ from megatron.core.datasets.blended_megatron_dataset_config import BlendedMegatr
 from megatron.core.datasets.gpt_dataset import GPTDataset, MockGPTDataset
 
 from megatron.hub.core.utils.common_utils import print_rank_0
+from megatron.hub.training.config import DataloaderConfig, FinetuningDatasetConfig, GPTDatasetConfig
 from megatron.hub.training.data.builders.finetuning_dataset import FinetuningDatasetBuilder
 from megatron.hub.training.data.builders.hf_dataset import HFDatasetBuilder, HFDatasetConfig
 from megatron.hub.training.tokenizers.tokenizer import MegatronTokenizer
-from megatron.hub.training.config import DataloaderConfig, FinetuningDatasetConfig, GPTDatasetConfig
 
 
 def is_dataset_built_on_rank() -> bool:

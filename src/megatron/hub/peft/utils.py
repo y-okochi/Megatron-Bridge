@@ -28,7 +28,6 @@ from megatron.core.tensor_parallel.mappings import (
     scatter_to_sequence_parallel_region,
 )
 from megatron.core.transformer.mlp import apply_swiglu_sharded_factory
-
 from megatron.core.utils.import_utils import safe_import_from
 
 

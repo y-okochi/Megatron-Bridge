@@ -23,9 +23,9 @@ from megatron.core.datasets.gpt_dataset import GPTDatasetConfig as MCoreGPTDatas
 from megatron.core.distributed import DistributedDataParallelConfig
 from megatron.core.optimizer import OptimizerConfig
 
+from megatron.hub.core.utils.common_utils import get_world_size_safe
 from megatron.hub.models.gpt_provider import GPTModelProvider
 from megatron.hub.models.t5_provider import T5ModelProvider
-from megatron.hub.core.utils.common_utils import get_world_size_safe
 from megatron.hub.training.utils.config_utils import ConfigContainer as Container
 
 

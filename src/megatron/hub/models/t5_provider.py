@@ -22,8 +22,8 @@ from megatron.core.transformer.spec_utils import ModuleSpec
 from megatron.core.transformer.transformer_config import TransformerConfig
 
 from megatron.hub.common.mixins.model_mixin import ModelProviderMixin
-from megatron.hub.models.gpt_provider import get_vocab_size
 from megatron.hub.core.utils.import_utils import safe_import
+from megatron.hub.models.gpt_provider import get_vocab_size
 
 
 _, HAVE_TE = safe_import("transformer_engine")

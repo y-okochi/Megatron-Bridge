@@ -1,5 +1,4 @@
 import contextlib
-import os
 import inspect
 import logging
 from dataclasses import dataclass, field
@@ -7,19 +6,19 @@ from functools import partial
 from typing import Any, Callable, Literal, Optional, Union
 
 import torch
-
 from megatron.core import parallel_state
+from megatron.core.distributed import DistributedDataParallelConfig
+from megatron.core.enums import ModelType
 from megatron.core.models.gpt import GPTModel as MCoreGPTModel
 from megatron.core.models.gpt.gpt_layer_specs import (
     get_gpt_layer_local_spec as default_layer_spec,
 )
 from megatron.core.transformer import ModuleSpec
+from megatron.core.transformer.module import MegatronModule
 from megatron.core.transformer.transformer_config import TransformerConfig
 from megatron.core.utils import get_te_version, is_te_min_version
 from mhub.hub._lib.mixins.model_mixin import ModelProviderMixin
-from megatron.core.transformer.module import MegatronModule
-from megatron.core.distributed import DistributedDataParallelConfig
-from megatron.core.enums import ModelType
+
 
 logger = logging.getLogger(__name__)
 
@@ -71,9 +70,7 @@ class GPTModelProvider(TransformerConfig, ModelProviderMixin[MCoreGPTModel]):
     """Config file when tp_comm_overlap is enabled."""
 
     use_transformer_engine_full_layer_spec: bool = False
-    transformer_layer_spec: Union[ModuleSpec, Callable[["GPTModelProvider"], ModuleSpec]] = (
-        default_layer_spec
-    )
+    transformer_layer_spec: Union[ModuleSpec, Callable[["GPTModelProvider"], ModuleSpec]] = default_layer_spec
 
     generation_config: Optional[Any] = None
 
@@ -111,7 +108,7 @@ class GPTModelProvider(TransformerConfig, ModelProviderMixin[MCoreGPTModel]):
             MCoreGPTModel: Configured Megatron Core GPT model instance
         """
         # Validate fusion configurations
-        
+
         if self.enable_cuda_graph:
             assert HAVE_TE, "Transformer Engine is required for cudagraphs."
             assert getattr(self, "use_te_rng_tracker", False), (
@@ -120,9 +117,9 @@ class GPTModelProvider(TransformerConfig, ModelProviderMixin[MCoreGPTModel]):
             )
 
         vp_size = self.virtual_pipeline_model_parallel_size
-        is_pipeline_asymmetric = getattr(
-            self, "account_for_embedding_in_pipeline_split", False
-        ) or getattr(self, "account_for_loss_in_pipeline_split", False)
+        is_pipeline_asymmetric = getattr(self, "account_for_embedding_in_pipeline_split", False) or getattr(
+            self, "account_for_loss_in_pipeline_split", False
+        )
         if vp_size and not is_pipeline_asymmetric:
             p_size = self.pipeline_model_parallel_size
             assert (self.num_layers // p_size) % vp_size == 0, (
@@ -141,9 +138,7 @@ class GPTModelProvider(TransformerConfig, ModelProviderMixin[MCoreGPTModel]):
                     f" {vocab_size - tokenizer.vocab_size}."
                 )
         else:
-            vocab_size = get_vocab_size(
-                self, tokenizer.vocab_size, self.make_vocab_size_divisible_by
-            )
+            vocab_size = get_vocab_size(self, tokenizer.vocab_size, self.make_vocab_size_divisible_by)
 
         # Initialize model as meta data instead of allocating data on a device
         model_init_device_context = contextlib.nullcontext
@@ -235,7 +230,7 @@ class GPTModelProvider(TransformerConfig, ModelProviderMixin[MCoreGPTModel]):
                 model = _model
 
         return model
-    
+
     @property
     def meta_model(self) -> list[MCoreGPTModel]:
         _model_transform = self.model_transform
@@ -248,9 +243,7 @@ class GPTModelProvider(TransformerConfig, ModelProviderMixin[MCoreGPTModel]):
         return meta_model
 
 
-def get_vocab_size(
-    config: TransformerConfig, vocab_size: int, make_vocab_size_divisible_by: int
-) -> int:
+def get_vocab_size(config: TransformerConfig, vocab_size: int, make_vocab_size_divisible_by: int) -> int:
     """Calculate padded vocab size for tensor parallelism."""
     after = vocab_size
     multiple = make_vocab_size_divisible_by * config.tensor_model_parallel_size
@@ -271,24 +264,23 @@ def mtp_block_spec(config: "GPTModelProvider") -> Optional[ModuleSpec]:
 
     return get_mtp_layer_spec()
 
+
 def validate_apply_rope_fusion(self):
     """Validate if apply_rope_fusion is supported in the current environment."""
     if not self.apply_rope_fusion:
         return
-    
+
     # Check for RoPE fusion availability
     try:
         from megatron.core.models.common.embeddings.rope_utils import (
             fused_apply_rotary_pos_emb,
             fused_apply_rotary_pos_emb_thd,
         )
-        rope_fusion_available = (
-            fused_apply_rotary_pos_emb is not None or 
-            fused_apply_rotary_pos_emb_thd is not None
-        )
+
+        rope_fusion_available = fused_apply_rotary_pos_emb is not None or fused_apply_rotary_pos_emb_thd is not None
     except ImportError:
         rope_fusion_available = False
-    
+
     if not rope_fusion_available:
         logger.warning(
             "apply_rope_fusion is enabled but RoPE fusion kernels are not available. "
@@ -296,18 +288,17 @@ def validate_apply_rope_fusion(self):
         )
         self.apply_rope_fusion = False
         return
-    
+
     # Check for multi_latent_attention incompatibility
-    if getattr(self, 'multi_latent_attention', False):
+    if getattr(self, "multi_latent_attention", False):
         logger.warning(
-            "apply_rope_fusion is enabled but not compatible with multi_latent_attention. "
-            "Disabling apply_rope_fusion."
+            "apply_rope_fusion is enabled but not compatible with multi_latent_attention. Disabling apply_rope_fusion."
         )
         self.apply_rope_fusion = False
         return
-    
+
     # Check TE version for rotary_interleaved
-    if getattr(self, 'rotary_interleaved', False):
+    if getattr(self, "rotary_interleaved", False):
         if HAVE_TE and not is_te_min_version("2.2.0.dev0"):
             logger.warning(
                 "apply_rope_fusion with rotary_interleaved requires TE >= 2.2.0.dev0. "
