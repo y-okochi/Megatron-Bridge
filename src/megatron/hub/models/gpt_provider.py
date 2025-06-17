@@ -17,8 +17,8 @@ from megatron.core.transformer import ModuleSpec
 from megatron.core.transformer.module import MegatronModule
 from megatron.core.transformer.transformer_config import TransformerConfig
 from megatron.core.utils import get_te_version
-from mhub.hub._lib.mixins.model_mixin import ModelProviderMixin
 
+from megatron.hub.common.mixins.model_mixin import ModelProviderMixin
 from megatron.hub.core.utils import fusions
 
 
