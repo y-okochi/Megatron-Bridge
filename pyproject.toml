@@ -99,15 +99,7 @@ megatron-core = { git = "https://github.com/NVIDIA/Megatron-LM.git", rev = "c40f
 requires = ["setuptools>=64", "wheel"]
 build-backend = "setuptools.build_meta"
 
-[project.optional-dependencies]
-eval = [
-    "nvidia-lm-eval",
-    "uvicorn",
-    "pytest-httpserver"
-]
-recipes = [
-    "nemo-run",
-]
+[dependency-groups]
 docs = [
     "myst-parser>=4.0.1",
     "nvidia-sphinx-theme>=0.0.8",
@@ -128,6 +120,16 @@ dev = [
     "pre-commit>=3.6.0",
     "ruff>=0.9.9",
     "mypy>=1.8.0",
+]
+
+[project.optional-dependencies]
+eval = [
+    "nvidia-lm-eval",
+    "uvicorn",
+    "pytest-httpserver"
+]
+recipes = [
+    "nemo-run",
 ]
 nemo-legacy = [
     "nemo-toolkit[automodel,common-only,nlp-only,eval,multimodal-only]",
