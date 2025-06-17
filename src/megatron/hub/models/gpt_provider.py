@@ -18,6 +18,7 @@ from megatron.core.transformer.module import MegatronModule
 from megatron.core.transformer.transformer_config import TransformerConfig
 from megatron.core.utils import get_te_version, is_te_min_version
 from mhub.hub._lib.mixins.model_mixin import ModelProviderMixin
+from megatron.hub.core.utils import fusions
 
 
 logger = logging.getLogger(__name__)
@@ -32,13 +33,6 @@ except ImportError:
     HAVE_TE = False
     TE_VERSION = None
 
-# Check if gradient accumulation fusion is available
-try:
-    from megatron.core.fusions.fused_layer_norm import FusedLayerNorm  # noqa: F401
-
-    _grad_accum_fusion_available = True
-except ImportError:
-    _grad_accum_fusion_available = False
 
 
 @dataclass
@@ -59,10 +53,7 @@ class GPTModelProvider(TransformerConfig, ModelProviderMixin[MCoreGPTModel]):
     rotary_percent: float = 1.0
     seq_len_interpolation_factor: Optional[float] = None
     seq_length: int = 1024
-    attention_softmax_in_fp32: bool = False
-    masked_softmax_fusion: bool = True
-    cross_entropy_loss_fusion: bool = True
-    gradient_accumulation_fusion: bool = _grad_accum_fusion_available
+    attention_softmax_in_fp32: bool = False    
     deallocate_pipeline_outputs: bool = True
     scatter_embedding_sequence_parallel: bool = True
     tp_only_amax_red: bool = False
@@ -88,11 +79,13 @@ class GPTModelProvider(TransformerConfig, ModelProviderMixin[MCoreGPTModel]):
     account_for_loss_in_pipeline_split: bool = False
 
     # Fusions
-    bias_activation_fusion: bool = False
-    masked_softmax_fusion: bool = True
-    persist_layer_norm: bool = True
-    bias_dropout_fusion: bool = True
-    apply_rope_fusion: bool = field(default_factory=lambda: HAVE_TE and is_te_min_version("2.2.0.dev0"))
+    masked_softmax_fusion: bool = True  # Generally beneficial, no specific dependencies
+    cross_entropy_loss_fusion: bool = True  # Generally beneficial, no specific dependencies
+    gradient_accumulation_fusion: bool = field(default_factory=fusions.can_enable_gradient_accumulation_fusion)
+    bias_activation_fusion: bool = False  # Disabled by default as it can interfere with certain architectures
+    persist_layer_norm: bool = True  # Generally beneficial for performance
+    bias_dropout_fusion: bool = field(default_factory=fusions.can_enable_bias_dropout_fusion)
+    apply_rope_fusion: bool = field(default_factory=fusions.can_enable_apply_rope_fusion)
 
     model_transform: Callable[[list[MegatronModule]], list[MegatronModule]] | None = None
 
@@ -108,6 +101,8 @@ class GPTModelProvider(TransformerConfig, ModelProviderMixin[MCoreGPTModel]):
             MCoreGPTModel: Configured Megatron Core GPT model instance
         """
         # Validate fusion configurations
+        if not fusions.validate_rope_fusion_compatibility(self):
+            self.apply_rope_fusion = False
 
         if self.enable_cuda_graph:
             assert HAVE_TE, "Transformer Engine is required for cudagraphs."
@@ -265,46 +260,6 @@ def mtp_block_spec(config: "GPTModelProvider") -> Optional[ModuleSpec]:
     return get_mtp_layer_spec()
 
 
-def validate_apply_rope_fusion(self):
-    """Validate if apply_rope_fusion is supported in the current environment."""
-    if not self.apply_rope_fusion:
-        return
-
-    # Check for RoPE fusion availability
-    try:
-        from megatron.core.models.common.embeddings.rope_utils import (
-            fused_apply_rotary_pos_emb,
-            fused_apply_rotary_pos_emb_thd,
-        )
-
-        rope_fusion_available = fused_apply_rotary_pos_emb is not None or fused_apply_rotary_pos_emb_thd is not None
-    except ImportError:
-        rope_fusion_available = False
-
-    if not rope_fusion_available:
-        logger.warning(
-            "apply_rope_fusion is enabled but RoPE fusion kernels are not available. "
-            "Please install TE >= 1.4 or Apex. Disabling apply_rope_fusion."
-        )
-        self.apply_rope_fusion = False
-        return
-
-    # Check for multi_latent_attention incompatibility
-    if getattr(self, "multi_latent_attention", False):
-        logger.warning(
-            "apply_rope_fusion is enabled but not compatible with multi_latent_attention. Disabling apply_rope_fusion."
-        )
-        self.apply_rope_fusion = False
-        return
-
-    # Check TE version for rotary_interleaved
-    if getattr(self, "rotary_interleaved", False):
-        if HAVE_TE and not is_te_min_version("2.2.0.dev0"):
-            logger.warning(
-                "apply_rope_fusion with rotary_interleaved requires TE >= 2.2.0.dev0. "
-                f"Current TE version: {TE_VERSION}. Disabling apply_rope_fusion."
-            )
-            self.apply_rope_fusion = False
 
 
 @dataclass
