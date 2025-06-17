@@ -169,8 +169,8 @@ def setup(
         model_provider = cfg.model
     else:
         raise ValueError(f"Unsupported model config type: {type(cfg.model)}")
-    
-    model = model_provider.get_model(
+
+    model = model_provider(
         ddp_config=cfg.ddp,
         use_torch_fsdp2=cfg.dist.use_torch_fsdp2,
         overlap_param_gather_with_optimizer_step=cfg.optimizer.overlap_param_gather_with_optimizer_step,
