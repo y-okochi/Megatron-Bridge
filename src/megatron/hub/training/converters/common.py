@@ -46,9 +46,9 @@ def torch_dtype_from_mcore_config(config: Any) -> torch.dtype:
     Returns:
         The corresponding torch dtype.
     """
-    if hasattr(config, 'bf16') and config.bf16:
+    if hasattr(config, "bf16") and config.bf16:
         return torch.bfloat16
-    elif hasattr(config, 'fp16') and config.fp16:
+    elif hasattr(config, "fp16") and config.fp16:
         return torch.float16
     else:
         return torch.float32

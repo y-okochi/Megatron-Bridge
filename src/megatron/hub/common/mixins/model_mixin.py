@@ -24,6 +24,7 @@ class ModelProviderMixin(abc.ABC, Generic[ModelT], ConfigMixin):
     support. Subclasses must implement the `provide` method to return the
     specific model instance.
     """
+
     CONFIG_NAME = "mhub_model.json"
 
     @abc.abstractmethod
