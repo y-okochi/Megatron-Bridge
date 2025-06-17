@@ -1,22 +1,23 @@
-from typing import Optional, Union, TypeVar, Generic, Dict, Any, List
-from pathlib import Path
 import sys
+from pathlib import Path
+from typing import Any, Dict, Generic, List, Optional, TypeVar, Union
 
 import torch
 from transformers import (
     AutoConfig,
-    AutoProcessor,
-    AutoTokenizer,
     AutoImageProcessor,
     AutoModel,
+    AutoProcessor,
+    AutoTokenizer,
     GenerationConfig,
-    PreTrainedTokenizer,
     PreTrainedModel,
+    PreTrainedTokenizer,
     ProcessorMixin,
 )
 from transformers.generation.utils import GenerateOutput
 
-from mhub.hub._lib.hf.base import PreTrainedBase
+from megatron.hub.bridge.hf_pretrained.base import PreTrainedBase
+
 
 # Python 3.12+ supports PEP 692 (TypedDict Unpack)
 if sys.version_info >= (3, 12):
@@ -206,9 +207,7 @@ class PreTrainedVLM(PreTrainedBase, Generic[VLMType]):
         model = model.to(self.device)
 
         # Set generation config if available
-        if "generation_config" in self.__dict__ and hasattr(
-            model, "generation_config"
-        ):
+        if "generation_config" in self.__dict__ and hasattr(model, "generation_config"):
             model.generation_config = self.generation_config
         return model
 
@@ -272,9 +271,7 @@ class PreTrainedVLM(PreTrainedBase, Generic[VLMType]):
         Lazy load and return the image processor.
         For VLMs, the image processor might be included in the processor.
         """
-        if "processor" in self.__dict__ and hasattr(
-            self.processor, "image_processor"
-        ):
+        if "processor" in self.__dict__ and hasattr(self.processor, "image_processor"):
             return self.processor.image_processor
 
         # Try to load image processor separately
@@ -308,14 +305,14 @@ class PreTrainedVLM(PreTrainedBase, Generic[VLMType]):
     def model_name_or_path(self) -> Optional[Union[str, Path]]:
         """Return the model name or path."""
         return self._model_name_or_path
-    
+
     @property
     def processor(self) -> ProcessorMixin:
         """Lazy load and return the processor."""
         if self._processor is None:
             self._processor = self._load_processor()
         return self._processor
-    
+
     @processor.setter
     def processor(self, value: ProcessorMixin):
         """Set the processor manually."""
@@ -327,31 +324,31 @@ class PreTrainedVLM(PreTrainedBase, Generic[VLMType]):
         if self._tokenizer is None:
             self._tokenizer = self._load_tokenizer()
         return self._tokenizer
-    
+
     @tokenizer.setter
     def tokenizer(self, value: PreTrainedTokenizer):
         """Set the tokenizer manually."""
         self._tokenizer = value
-    
+
     @property
     def image_processor(self) -> Optional[Any]:
         """Lazy load and return the image processor."""
         if self._image_processor is None:
             self._image_processor = self._load_image_processor()
         return self._image_processor
-    
+
     @image_processor.setter
-    def image_processor(self, value: Any): 
+    def image_processor(self, value: Any):
         """Set the image processor manually."""
         self._image_processor = value
-    
+
     @property
     def generation_config(self) -> Optional[GenerationConfig]:
         """Lazy load and return the generation config."""
         if self._generation_config is None:
             self._generation_config = self._load_generation_config()
         return self._generation_config
-    
+
     @generation_config.setter
     def generation_config(self, value: GenerationConfig):
         """Set the generation config manually."""
@@ -422,10 +419,7 @@ class PreTrainedVLM(PreTrainedBase, Generic[VLMType]):
 
         # Move to device
         if isinstance(inputs, dict):
-            inputs = {
-                k: v.to(self.device) if torch.is_tensor(v) else v
-                for k, v in inputs.items()
-            }
+            inputs = {k: v.to(self.device) if torch.is_tensor(v) else v for k, v in inputs.items()}
 
         return inputs
 
@@ -515,9 +509,7 @@ class PreTrainedVLM(PreTrainedBase, Generic[VLMType]):
         """Forward call to model."""
         return self.model(*args, **kwargs)
 
-    def encode_text(
-        self, text: Union[str, List[str]], **kwargs: Unpack["VLMEncodeKwargs"]
-    ) -> Dict[str, torch.Tensor]:
+    def encode_text(self, text: Union[str, List[str]], **kwargs: Unpack["VLMEncodeKwargs"]) -> Dict[str, torch.Tensor]:
         """
         Encode text using the tokenizer or processor for text-only inputs.
 
@@ -662,10 +654,14 @@ class PreTrainedVLM(PreTrainedBase, Generic[VLMType]):
         if "processor" in artifacts_to_save:
             processor = artifacts_to_save["processor"]
             # If tokenizer is also loaded and is the same object as the one in processor, remove it from our list.
-            if "tokenizer" in artifacts_to_save and artifacts_to_save["tokenizer"] is getattr(processor, 'tokenizer', None):
+            if "tokenizer" in artifacts_to_save and artifacts_to_save["tokenizer"] is getattr(
+                processor, "tokenizer", None
+            ):
                 del artifacts_to_save["tokenizer"]
             # Same for image processor.
-            if "image_processor" in artifacts_to_save and artifacts_to_save["image_processor"] is getattr(processor, 'image_processor', None):
+            if "image_processor" in artifacts_to_save and artifacts_to_save["image_processor"] is getattr(
+                processor, "image_processor", None
+            ):
                 del artifacts_to_save["image_processor"]
 
         # Now save the de-duplicated artifacts
@@ -674,7 +670,7 @@ class PreTrainedVLM(PreTrainedBase, Generic[VLMType]):
         for name, artifact_instance in artifacts_to_save.items():
             if artifact_instance is not None and hasattr(artifact_instance, "save_pretrained"):
                 artifact_instance.save_pretrained(save_path)
-        
+
         # Manually save the model
         if self._model is not None:
             self.model.save_pretrained(save_path)
@@ -741,7 +737,7 @@ class PreTrainedVLM(PreTrainedBase, Generic[VLMType]):
                 elif name == "processor":
                     details = "loaded"
             lines.append(f"  ({name}): {type_name} [{details}]")
-        
+
         # Manually add model repr
         model_repr_content: str
         if self._model is not None:
@@ -753,9 +749,7 @@ class PreTrainedVLM(PreTrainedBase, Generic[VLMType]):
             if hasattr(config, "text_config"):
                 details_list.append(f"text_model={getattr(config.text_config, 'model_type', 'N/A')}")
             details_str = ", ".join(details_list)
-            model_repr_content = (
-                f"{model_class_name} ({details_str}) [loaded]"
-            )
+            model_repr_content = f"{model_class_name} ({details_str}) [loaded]"
         elif "config" in self.__dict__:
             config = self.config
             model_class_name_from_config = "VLM"
@@ -768,12 +762,8 @@ class PreTrainedVLM(PreTrainedBase, Generic[VLMType]):
 
         lines.sort()
 
-        params_str = (
-            f"{self.num_parameters:,}" if self.num_parameters is not None else "N/A"
-        )
-        dtype_str = (
-            str(self.dtype).replace("torch.", "") if self.dtype is not None else "N/A"
-        )
+        params_str = f"{self.num_parameters:,}" if self.num_parameters is not None else "N/A"
+        dtype_str = str(self.dtype).replace("torch.", "") if self.dtype is not None else "N/A"
         lines.extend(
             [
                 f"  (parameters): {params_str}",

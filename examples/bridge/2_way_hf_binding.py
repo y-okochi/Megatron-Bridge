@@ -13,6 +13,7 @@ The process is as follows:
     directory is created in the current working directory, but a different
     parent directory can be specified via the `--output-dir` argument.
 """
+
 import argparse
 import os
 
@@ -21,6 +22,7 @@ from rich.console import Console
 from rich.table import Table
 
 from megatron.hub import CausalLMBridge
+
 
 HF_MODEL_ID = "meta-llama/Llama-3.2-1B"
 
@@ -43,8 +45,7 @@ def main(hf_model_id: str = HF_MODEL_ID, output_dir: str = None) -> None:
     table.add_column("Device")
     table.add_column("Matches Original", justify="center")
 
-    model_provider = bridge.to_provider()
-    megatron_model = model_provider(wrap_with_ddp=False)
+    megatron_model = bridge.to_model(wrap_with_ddp=False)
 
     # Check each weight against the original HF-model
     for name, param in bridge(megatron_model, show_progress=True):
@@ -54,9 +55,7 @@ def main(hf_model_id: str = HF_MODEL_ID, output_dir: str = None) -> None:
             str(tuple(param.shape)),
             str(param.dtype).replace("torch.", ""),
             str(param.device),
-            "✅"
-            if torch.allclose(param, original_param.to(param.device), atol=1e-6)
-            else "❌",
+            "✅" if torch.allclose(param, original_param.to(param.device), atol=1e-6) else "❌",
         )
 
     console.print(table)
@@ -65,11 +64,14 @@ def main(hf_model_id: str = HF_MODEL_ID, output_dir: str = None) -> None:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Convert between HuggingFace and Megatron-LM model formats')
-    parser.add_argument('--hf-model-id', type=str, default=HF_MODEL_ID,
-                        help='HuggingFace model ID to convert')
-    parser.add_argument('--output-dir', type=str, default=None,
-                        help='The directory where the converted model directory will be created. Defaults to the current working directory.')
-    
+    parser = argparse.ArgumentParser(description="Convert between HuggingFace and Megatron-LM model formats")
+    parser.add_argument("--hf-model-id", type=str, default=HF_MODEL_ID, help="HuggingFace model ID to convert")
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        default=None,
+        help="The directory where the converted model directory will be created. Defaults to the current working directory.",
+    )
+
     args = parser.parse_args()
     main(args.hf_model_id, args.output_dir)

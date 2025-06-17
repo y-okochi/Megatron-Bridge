@@ -1,8 +1,9 @@
 import torch
-from transformers import AutoTokenizer
 from rich.progress import track
+from transformers import AutoTokenizer
 
 from megatron.hub import CausalLMBridge
+
 
 HF_MODEL_ID = "meta-llama/Llama-3.2-1B"
 bridge = CausalLMBridge.from_pretrained(HF_MODEL_ID)
@@ -14,9 +15,7 @@ def generate_sequence(prompt, model, hf_model_path, max_new_tokens=100):
 
     input_ids = tokenizer.encode(prompt, return_tensors="pt")
     input_ids = input_ids.cuda()
-    position_ids = torch.arange(input_ids.shape[1], device=input_ids.device).unsqueeze(
-        0
-    )
+    position_ids = torch.arange(input_ids.shape[1], device=input_ids.device).unsqueeze(0)
     attention_mask = torch.ones_like(input_ids, dtype=torch.bool).to(input_ids.device)
 
     generated_tokens = []
@@ -33,9 +32,7 @@ def generate_sequence(prompt, model, hf_model_path, max_new_tokens=100):
         # Forward inference with the model
         with torch.no_grad():
             model[0].cuda()
-            output = model[0].module(
-                cur_input_ids, cur_position_ids, cur_attention_mask
-            )
+            output = model[0].module(cur_input_ids, cur_position_ids, cur_attention_mask)
 
         # Get the next token
         next_token = output.argmax(dim=-1)[:, -1]
@@ -47,9 +44,7 @@ def generate_sequence(prompt, model, hf_model_path, max_new_tokens=100):
 
         # Update input sequence
         cur_input_ids = torch.cat([cur_input_ids, next_token.unsqueeze(0)], dim=1)
-        cur_position_ids = torch.arange(
-            cur_input_ids.shape[1], device=cur_input_ids.device
-        ).unsqueeze(0)
+        cur_position_ids = torch.arange(cur_input_ids.shape[1], device=cur_input_ids.device).unsqueeze(0)
         cur_attention_mask = torch.ones_like(cur_input_ids, dtype=torch.bool)
 
     # Decode the generated token sequence

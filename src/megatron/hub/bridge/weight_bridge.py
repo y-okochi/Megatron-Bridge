@@ -29,17 +29,15 @@ bridge is expected to scatter/gather/broadcast as required so that the caller
 can remain blissfully ignorant of the underlying parallel topology.
 """
 
-from abc import ABC, abstractmethod
-from typing import Dict, List, Union, Optional, TypeVar, Generic, Any, Tuple
 import json
-
+from abc import ABC, abstractmethod
+from typing import Any, Dict, Generic, List, Optional, Tuple, TypeVar, Union
 
 import torch
 import torch.distributed
 import torch.nn as nn
-
-from megatron.core.transformer.transformer_config import TransformerConfig
 from megatron.core import mpu
+from megatron.core.transformer.transformer_config import TransformerConfig
 
 
 WeightType = TypeVar("WeightType", torch.Tensor, Dict[str, torch.Tensor])
@@ -78,7 +76,7 @@ class MegatronWeightBridge(ABC, Generic[WeightType]):
         ...         transformed = weights.t()  # Example: transpose
         ...         # Use helpers for distribution
         ...         return self.scatter_to_tp_ranks(...)
-        ...     
+        ...
         ...     def from_megatron(self, megatron_weight, megatron_module):
         ...         # Broadcast from owning PP rank
         ...         weight = self.broadcast_from_pp_rank(megatron_weight)
@@ -99,9 +97,7 @@ class MegatronWeightBridge(ABC, Generic[WeightType]):
         self.to = to
         self._validate_patterns()
 
-    def _resolve_names(
-        self, captures: Tuple[str, ...]
-    ) -> Tuple[str, Union[str, Dict[str, str]]]:
+    def _resolve_names(self, captures: Tuple[str, ...]) -> Tuple[str, Union[str, Dict[str, str]]]:
         resolved_megatron = self.megatron
         for value in captures:
             resolved_megatron = resolved_megatron.replace("*", value, 1)
@@ -174,9 +170,7 @@ class MegatronWeightBridge(ABC, Generic[WeightType]):
         """
         ...
 
-    def broadcast_from_pp_rank(
-        self, tensor: Optional[torch.Tensor]
-    ) -> Optional[torch.Tensor]:
+    def broadcast_from_pp_rank(self, tensor: Optional[torch.Tensor]) -> Optional[torch.Tensor]:
         """
         Broadcast a tensor from the pipeline-parallel rank that owns it to **all** PP ranks.
 
@@ -210,9 +204,7 @@ class MegatronWeightBridge(ABC, Generic[WeightType]):
             tensor_spec = None
 
         tensor_spec_output: list[Optional[tuple]] = [None] * self.pp_size
-        torch.distributed.all_gather_object(
-            tensor_spec_output, tensor_spec, group=self.pp_group
-        )
+        torch.distributed.all_gather_object(tensor_spec_output, tensor_spec, group=self.pp_group)
 
         # ------------------------------------------------------------------
         # 2.  Identify the owning rank (the only rank with a non-None spec).
@@ -222,10 +214,7 @@ class MegatronWeightBridge(ABC, Generic[WeightType]):
         for rank, spec in enumerate(tensor_spec_output):
             if spec is not None:
                 if target_tensor_spec is not None:
-                    raise ValueError(
-                        "Tensor exists on more than one PP rank. "
-                        f"Found on ranks {src_rank} and {rank}."
-                    )
+                    raise ValueError(f"Tensor exists on more than one PP rank. Found on ranks {src_rank} and {rank}.")
                 target_tensor_spec = spec
                 src_rank = rank
 
@@ -274,9 +263,7 @@ class MegatronWeightBridge(ABC, Generic[WeightType]):
 
         # Gather objects from all PP ranks
         obj_output = [None] * self.pp_size
-        torch.distributed.all_gather_object(
-            object_list=obj_output, obj=obj, group=self.pp_group
-        )
+        torch.distributed.all_gather_object(object_list=obj_output, obj=obj, group=self.pp_group)
 
         # Find source rank and validate
         src_rank = None
@@ -292,21 +279,15 @@ class MegatronWeightBridge(ABC, Generic[WeightType]):
             raise ValueError("Object must exist on at least one PP rank")
 
         # Get global rank for broadcast
-        global_rank = torch.distributed.get_global_rank(
-            group=self.pp_group, group_rank=src_rank
-        )
+        global_rank = torch.distributed.get_global_rank(group=self.pp_group, group_rank=src_rank)
 
         # Broadcast to all ranks
         obj_output = [None]
-        torch.distributed.broadcast_object_list(
-            object_list=obj_output, src=global_rank, group=self.pp_group
-        )
+        torch.distributed.broadcast_object_list(object_list=obj_output, src=global_rank, group=self.pp_group)
 
         return obj_output[0]
 
-    def broadcast_tensor_to_tp_ranks(
-        self, tensor: torch.Tensor, src_rank: int = 0
-    ) -> torch.Tensor:
+    def broadcast_tensor_to_tp_ranks(self, tensor: torch.Tensor, src_rank: int = 0) -> torch.Tensor:
         """Broadcast a tensor to all TP ranks."""
         if self.tp_size == 1:
             return tensor
@@ -396,7 +377,7 @@ class MegatronWeightBridge(ABC, Generic[WeightType]):
             f"Could not find config in module hierarchy for {module.__class__.__name__}. "
             f"Ensure the module or its parent has a 'config' attribute."
         )
-    
+
     @property
     def tp_size(self) -> int:
         """Get tensor parallel world size from parallel_state."""
@@ -434,7 +415,7 @@ class MegatronWeightBridge(ABC, Generic[WeightType]):
 
 class DirectWeightBridge(MegatronWeightBridge[torch.Tensor]):
     """Direct 1:1 weight mapping with no transformation or tensor parallelism."""
-    
+
     def to_megatron(
         self,
         weights: torch.Tensor,
@@ -442,7 +423,7 @@ class DirectWeightBridge(MegatronWeightBridge[torch.Tensor]):
     ) -> torch.Tensor:
         """Direct copy - no transformation or distribution."""
         return weights
-    
+
     def from_megatron(
         self,
         megatron_weight: Optional[torch.Tensor],
@@ -451,10 +432,10 @@ class DirectWeightBridge(MegatronWeightBridge[torch.Tensor]):
         """Direct copy with PP broadcast."""
         # Handle cross-PP broadcast
         megatron_weight = self.broadcast_from_pp_rank(megatron_weight)
-        
+
         if megatron_weight is None:
             return {}
-        
+
         return {self.to: megatron_weight}
 
 
@@ -512,28 +493,28 @@ class ColumnParallelWeightBridge(MegatronWeightBridge[torch.Tensor]):
         # and the megatron parameter name pattern
         if self.tp_rank == 0 and weights is not None and weights.ndim == 1:
             # This is a bias tensor (1D)
-            if hasattr(megatron_module, 'bias') and megatron_module.bias is not None:
+            if hasattr(megatron_module, "bias") and megatron_module.bias is not None:
                 target_param = megatron_module.bias
                 output_shape = target_param.shape
             else:
                 raise ValueError(f"Input is 1D (bias) but module {megatron_module} has no bias")
         elif self.tp_rank != 0:
             # Non-rank-0 doesn't have weights, so we need to determine from the parameter name
-            if 'bias' in self.megatron.lower():
-                if hasattr(megatron_module, 'bias') and megatron_module.bias is not None:
+            if "bias" in self.megatron.lower():
+                if hasattr(megatron_module, "bias") and megatron_module.bias is not None:
                     target_param = megatron_module.bias
                     output_shape = target_param.shape
                 else:
-                    raise ValueError(f"Parameter name suggests bias but module has no bias")
+                    raise ValueError("Parameter name suggests bias but module has no bias")
             else:
-                if hasattr(megatron_module, 'weight'):
+                if hasattr(megatron_module, "weight"):
                     target_param = megatron_module.weight
                     output_shape = target_param.shape
                 else:
                     raise ValueError(f"Module {megatron_module} has no weight")
         else:
             # This is a weight tensor (2D or higher) on rank 0
-            if hasattr(megatron_module, 'weight'):
+            if hasattr(megatron_module, "weight"):
                 target_param = megatron_module.weight
                 output_shape = target_param.shape
             else:
@@ -543,17 +524,14 @@ class ColumnParallelWeightBridge(MegatronWeightBridge[torch.Tensor]):
         if self.tp_rank == 0:
             if weights is None:
                 raise ValueError("Weights should not be None on rank 0")
-            
+
             # For bias (1D), we still split along dim 0
             # For weight (2D), we split along dim 0 (output dimension)
             full_size = weights.shape[0]
             if full_size % self.tp_size != 0:
-                raise ValueError(
-                    f"Cannot evenly split dimension 0 size {full_size} "
-                    f"across {self.tp_size} TP ranks"
-                )
+                raise ValueError(f"Cannot evenly split dimension 0 size {full_size} across {self.tp_size} TP ranks")
             splits = torch.chunk(weights, self.tp_size, dim=0)
-            
+
         else:
             splits = None
 
@@ -626,10 +604,7 @@ class RowParallelWeightBridge(MegatronWeightBridge[torch.Tensor]):
         if self.tp_rank == 0:
             full_size = weights.shape[1]
             if full_size % self.tp_size != 0:
-                raise ValueError(
-                    f"Cannot evenly split dimension 1 size {full_size} "
-                    f"across {self.tp_size} TP ranks"
-                )
+                raise ValueError(f"Cannot evenly split dimension 1 size {full_size} across {self.tp_size} TP ranks")
             splits = torch.chunk(weights, self.tp_size, dim=1)
         else:
             splits = None
@@ -677,7 +652,7 @@ class ReplicatedWeightBridge(MegatronWeightBridge[torch.Tensor]):
     during *load* (HF → Megatron) and ensure we do **not** emit duplicates
     during *export* (Megatron → HF).
     """
-    
+
     def to_megatron(
         self,
         weights: torch.Tensor,
@@ -697,7 +672,7 @@ class ReplicatedWeightBridge(MegatronWeightBridge[torch.Tensor]):
 
         # Broadcast from rank 0 to all TP ranks
         return self.broadcast_tensor_to_tp_ranks(weights, src_rank=0)
-    
+
     def from_megatron(
         self,
         megatron_weight: Optional[torch.Tensor],
@@ -706,10 +681,10 @@ class ReplicatedWeightBridge(MegatronWeightBridge[torch.Tensor]):
         """Return weight only from rank 0 to avoid duplication."""
         # Handle cross-PP broadcast
         megatron_weight = self.broadcast_from_pp_rank(megatron_weight)
-        
+
         if megatron_weight is None:
             return {}
-        
+
         # For replicated weights, only rank 0 returns to avoid duplicates
         if self.tp_rank == 0:
             return {self.to: megatron_weight}
@@ -744,13 +719,13 @@ class TPAwareWeightBridge(MegatronWeightBridge[torch.Tensor]):
         ...     megatron="decoder.layers.*.mlp.linear_fc1.weight",
         ...     to="model.layers.*.mlp.gate_proj.weight"
         ... )
-        
+
         >>> # Works with column-parallel layers
         >>> megatron_weight = bridge.to_megatron(hf_weight, column_parallel_module)
-        
+
         >>> # Also works with normalization layers
         >>> norm_weight = bridge.to_megatron(hf_norm, layer_norm_module)
-        
+
         >>> # Register custom module types
         >>> TPAwareWeightBridge.register_module_type("MyCustomLinear", "column")
 
@@ -758,7 +733,7 @@ class TPAwareWeightBridge(MegatronWeightBridge[torch.Tensor]):
         If the parallelism type cannot be determined, the bridge will raise
         a descriptive error suggesting how to fix the issue.
     """
-    
+
     # Module type registry
     _MODULE_TYPE_REGISTRY: Dict[str, set] = {
         "column": {
@@ -773,11 +748,17 @@ class TPAwareWeightBridge(MegatronWeightBridge[torch.Tensor]):
         },
         "replicated": {
             # Normalization layers
-            "TENorm", "FusedLayerNorm", "WrappedTorchNorm",
-            "LayerNorm", "RMSNorm", "L2Norm",
+            "TENorm",
+            "FusedLayerNorm",
+            "WrappedTorchNorm",
+            "LayerNorm",
+            "RMSNorm",
+            "L2Norm",
             # Other non-parallel modules
-            "IdentityOp", "DotProductAttention", "TEDotProductAttention",
-        }
+            "IdentityOp",
+            "DotProductAttention",
+            "TEDotProductAttention",
+        },
     }
 
     @classmethod
@@ -795,11 +776,11 @@ class TPAwareWeightBridge(MegatronWeightBridge[torch.Tensor]):
                 f"Must be one of {list(cls._MODULE_TYPE_REGISTRY.keys())}"
             )
         cls._MODULE_TYPE_REGISTRY[parallelism_type].add(module_name)
-    
+
     def __init__(self, megatron: str, to: str):
         """Initialize TP-aware bridge."""
         super().__init__(megatron, to)
-        
+
         # Create delegate bridges
         self._column_bridge = ColumnParallelWeightBridge(megatron, to)
         self._row_bridge = RowParallelWeightBridge(megatron, to)
@@ -808,33 +789,31 @@ class TPAwareWeightBridge(MegatronWeightBridge[torch.Tensor]):
     def _detect_parallelism_type(self, module: nn.Module) -> str:
         """Detect parallelism type from module."""
         module_type = type(module).__name__
-        
+
         # Check registry first
         for parallelism, types in self._MODULE_TYPE_REGISTRY.items():
             if module_type in types:
                 return parallelism
-        
+
         # Fallback to inspecting module attributes
         if hasattr(module, "tensor_model_parallel"):
             if not module.tensor_model_parallel:
                 return "replicated"
-            
+
             # Check partition dimension
             partition_dim = getattr(module, "partition_dim", None)
             if partition_dim == 0:
                 return "column"
             elif partition_dim == 1:
                 return "row"
-        
+
         # Fallback for normalization layers
         if any(norm in module_type for norm in ["Norm", "Normalization"]):
             return "replicated"
-        
+
         # Cannot determine - raise informative error
-        known_types = {
-            p: sorted(list(t)) for p, t in self._MODULE_TYPE_REGISTRY.items()
-        }
-        
+        known_types = {p: sorted(list(t)) for p, t in self._MODULE_TYPE_REGISTRY.items()}
+
         raise ValueError(
             f"Cannot determine parallelism type for module '{module_type}' "
             f"at weight '{self.megatron}'.\n"
@@ -843,7 +822,7 @@ class TPAwareWeightBridge(MegatronWeightBridge[torch.Tensor]):
             f"  TPAwareWeightBridge.register_module_type('{module_type}', 'column|row|replicated')\n\n"
             f"Currently known module types:\n{json.dumps(known_types, indent=2)}"
         )
-    
+
     def to_megatron(
         self,
         weights: torch.Tensor,
@@ -851,16 +830,16 @@ class TPAwareWeightBridge(MegatronWeightBridge[torch.Tensor]):
     ) -> torch.Tensor:
         """Delegate to appropriate bridge based on module type."""
         parallelism_type = self._detect_parallelism_type(megatron_module)
-        
+
         if parallelism_type == "column":
             return self._column_bridge.to_megatron(weights, megatron_module)
         elif parallelism_type == "row":
             return self._row_bridge.to_megatron(weights, megatron_module)
         elif parallelism_type == "replicated":
             return self._replicated_bridge.to_megatron(weights, megatron_module)
-        
+
         raise ValueError(f"Unknown parallelism type: {parallelism_type}")
-    
+
     def from_megatron(
         self,
         megatron_weight: Optional[torch.Tensor],
@@ -875,19 +854,13 @@ class TPAwareWeightBridge(MegatronWeightBridge[torch.Tensor]):
         else:
             # Receive from owning rank
             parallelism_type = self.broadcast_obj_from_pp_rank(None)
-        
+
         if parallelism_type == "column":
-            return self._column_bridge.from_megatron(
-                megatron_weight, megatron_module
-            )
+            return self._column_bridge.from_megatron(megatron_weight, megatron_module)
         elif parallelism_type == "row":
-            return self._row_bridge.from_megatron(
-                megatron_weight, megatron_module
-            )
+            return self._row_bridge.from_megatron(megatron_weight, megatron_module)
         elif parallelism_type == "replicated":
-            return self._replicated_bridge.from_megatron(
-                megatron_weight, megatron_module
-            )
+            return self._replicated_bridge.from_megatron(megatron_weight, megatron_module)
 
 
 class QKVWeightBridge(MegatronWeightBridge[Dict[str, torch.Tensor]]):
@@ -921,11 +894,11 @@ class QKVWeightBridge(MegatronWeightBridge[Dict[str, torch.Tensor]]):
         ...     k="model.layers.*.self_attn.k_proj.weight",
         ...     v="model.layers.*.self_attn.v_proj.weight"
         ... )
-        
+
         >>> # Convert from HuggingFace to Megatron
         >>> qkv_weights = {"q": q_tensor, "k": k_tensor, "v": v_tensor}
         >>> megatron_qkv = bridge.to_megatron(qkv_weights, megatron_module)
-        
+
         >>> # Convert from Megatron to HuggingFace
         >>> hf_weights = bridge.from_megatron(megatron_qkv, megatron_module)
         >>> # Returns: {"q_proj.weight": ..., "k_proj.weight": ..., "v_proj.weight": ...}
@@ -961,7 +934,7 @@ class QKVWeightBridge(MegatronWeightBridge[Dict[str, torch.Tensor]]):
         """Merge Q, K, V into interleaved format and distribute."""
         if self.tp_rank == 0:
             config = self._get_config(megatron_module)
-            
+
             # Check if we're dealing with biases (1D tensors) or weights (2D tensors)
             if weights["q"].ndim == 1:
                 # For biases, use the bias-specific merge function
@@ -999,7 +972,7 @@ class QKVWeightBridge(MegatronWeightBridge[Dict[str, torch.Tensor]]):
             return {}
 
         packed_qkv = next(iter(packed_dict.values()))
-        
+
         # Check if we're dealing with biases (1D) or weights (2D)
         if packed_qkv.ndim == 1:
             # Split biases
@@ -1045,11 +1018,11 @@ class GatedMLPWeightBridge(MegatronWeightBridge[Dict[str, torch.Tensor]]):
     :class:`TPAwareWeightBridge`, allowing the correct sharding scheme to be
     selected dynamically.
     """
-    
+
     def __init__(self, megatron: str, gate: str, up: str):
         """
         Initialize gated MLP bridge.
-        
+
         Args:
             megatron: Megatron MLP parameter name pattern
             gate: Gate projection weight name pattern
@@ -1057,7 +1030,7 @@ class GatedMLPWeightBridge(MegatronWeightBridge[Dict[str, torch.Tensor]]):
         """
         super().__init__(megatron, {"gate": gate, "up": up})
         self._tp_bridge = TPAwareWeightBridge(megatron, megatron)
-    
+
     def to_megatron(
         self,
         weights: Dict[str, torch.Tensor],
@@ -1065,15 +1038,11 @@ class GatedMLPWeightBridge(MegatronWeightBridge[Dict[str, torch.Tensor]]):
     ) -> torch.Tensor:
         """Merge gate and up projections and distribute."""
         config = self._get_config(megatron_module)
-        
-        merged = (
-            merge_gated_mlp_weights(config, weights["gate"], weights["up"])
-            if self.tp_rank == 0
-            else None
-        )
+
+        merged = merge_gated_mlp_weights(config, weights["gate"], weights["up"]) if self.tp_rank == 0 else None
 
         return self._tp_bridge.to_megatron(merged, megatron_module)
-    
+
     def from_megatron(
         self,
         megatron_weight: Optional[torch.Tensor],
@@ -1126,20 +1095,20 @@ class MOEWeightBridge(MegatronWeightBridge[torch.Tensor]):
     ------------------------
     Megatron: "mlp.experts.linear_fc1.weight*"  (where * is the expert ID)
     External: "model.layers.*.mlp.experts.*.gate_proj.weight"
-    
+
     The expert ID wildcard is resolved based on EP rank and configuration.
     """
-    
+
     def __init__(self, megatron: str, to: str):
         """
         Initialize MoE weight bridge.
-        
+
         Args:
             megatron: Megatron expert weight pattern (expert ID as last wildcard)
             to: External weight pattern (expert ID as last wildcard)
         """
         super().__init__(megatron, to)
-        
+
         # Create a TP bridge for handling tensor parallelism
         # This will be used after EP distribution is resolved
         self._tp_bridge = TPAwareWeightBridge(megatron, to)
@@ -1151,24 +1120,24 @@ class MOEWeightBridge(MegatronWeightBridge[torch.Tensor]):
     ) -> torch.Tensor:
         """
         Handle EP distribution then delegate TP operations.
-        
+
         This method:
         1. Determines which EP rank should own this expert
         2. Ensures only the owning rank has the weight
         3. Delegates TP distribution to TPAwareWeightBridge
         """
         config = self._get_config(megatron_module)
-        
+
         if self.ep_size == 1:
             # No EP distribution, just delegate to TP bridge
             return self._tp_bridge.to_megatron(weights, megatron_module)
-        
+
         # Extract expert ID from the resolved parameter name
         expert_id = self._get_expert_id_from_name(self.megatron)
-        
+
         # Determine which EP rank owns this expert
         owning_ep_rank = self._get_expert_ownership(expert_id, config)
-        
+
         # Only process on the owning rank
         if self.ep_rank == owning_ep_rank:
             # Now delegate TP distribution to the TP bridge
@@ -1176,7 +1145,7 @@ class MOEWeightBridge(MegatronWeightBridge[torch.Tensor]):
         else:
             # This rank doesn't own this expert
             return None
-    
+
     def from_megatron(
         self,
         megatron_weight: Optional[torch.Tensor],
@@ -1184,7 +1153,7 @@ class MOEWeightBridge(MegatronWeightBridge[torch.Tensor]):
     ) -> Dict[str, torch.Tensor]:
         """
         Gather from EP ranks then delegate TP gathering.
-        
+
         This method:
         1. Handles cross-PP broadcast (inherited from base)
         2. Determines which EP rank owns this expert
@@ -1193,27 +1162,27 @@ class MOEWeightBridge(MegatronWeightBridge[torch.Tensor]):
         """
         # Handle cross-PP broadcast first
         megatron_weight = self.broadcast_from_pp_rank(megatron_weight)
-        
+
         if megatron_weight is None:
             return {}
-        
+
         # Get configuration
         if megatron_module is None:
             config = self.broadcast_obj_from_pp_rank(None)
         else:
             cfg_local = self._get_config(megatron_module)
             config = self.broadcast_obj_from_pp_rank(cfg_local)
-        
+
         if self.ep_size == 1:
             # No EP distribution, delegate directly to TP bridge
             return self._tp_bridge.from_megatron(megatron_weight, megatron_module)
-        
+
         # Extract expert ID from resolved name
         expert_id = self._get_expert_id_from_name(self.megatron)
-        
+
         # Determine owning EP rank
         owning_ep_rank = self._get_expert_ownership(expert_id, config)
-        
+
         # Broadcast weight from owning EP rank to all EP ranks
         # (TPAwareWeightBridge needs the weight on all ranks for TP gathering)
         if self.ep_rank == owning_ep_rank:
@@ -1226,109 +1195,103 @@ class MOEWeightBridge(MegatronWeightBridge[torch.Tensor]):
                 gathered_weight = None
         else:
             gathered_weight = None
-        
+
         # Broadcast the gathered weight from owning EP rank to all EP ranks
         gathered_weight = self._broadcast_from_ep_rank(gathered_weight, owning_ep_rank)
-        
+
         # Only return from EP rank 0 to avoid duplicates
         if self.ep_rank == 0 and gathered_weight is not None:
             return {self.to: gathered_weight}
-        
+
         return {}
-    
+
     def _get_expert_id_from_name(self, name: str) -> int:
         """
         Extract expert ID from resolved weight name.
-        
+
         For patterns like "mlp.experts.linear_fc1.weight0", extracts 0.
         The expert ID is expected to be the last numeric component.
         """
         import re
-        
+
         # Look for pattern like "weight" followed by a number
-        match = re.search(r'weight(\d+)', name)
+        match = re.search(r"weight(\d+)", name)
         if match:
             return int(match.group(1))
-        
+
         # Also check for patterns like "experts.0.gate_proj"
-        match = re.search(r'experts\.(\d+)\.', name)
+        match = re.search(r"experts\.(\d+)\.", name)
         if match:
             return int(match.group(1))
-        
+
         # Fallback: try to find any trailing number
-        match = re.search(r'(\d+)[^\d]*$', name)
+        match = re.search(r"(\d+)[^\d]*$", name)
         if match:
             return int(match.group(1))
-        
+
         raise ValueError(f"Could not extract expert ID from weight name: {name}")
-    
+
     def _get_expert_ownership(self, expert_id: int, config: Any) -> int:
         """
         Determine which EP rank owns a given expert.
-        
+
         Args:
             expert_id: Global expert index
             config: Model configuration with num_moe_experts
-            
+
         Returns:
             EP rank that owns this expert
         """
         num_experts = config.num_moe_experts
         num_experts_per_rank = num_experts // self.ep_size
         return expert_id // num_experts_per_rank
-    
-    def _broadcast_from_ep_rank(
-        self,
-        tensor: Optional[torch.Tensor],
-        owning_rank: int
-    ) -> Optional[torch.Tensor]:
+
+    def _broadcast_from_ep_rank(self, tensor: Optional[torch.Tensor], owning_rank: int) -> Optional[torch.Tensor]:
         """
         Broadcast a tensor from a specific EP rank to all EP ranks.
-        
+
         Args:
             tensor: Tensor to broadcast (None on non-owning ranks)
             owning_rank: EP rank that owns the tensor
-            
+
         Returns:
             Broadcasted tensor on all EP ranks
         """
         if self.ep_size == 1:
             return tensor
-        
+
         # Allocate tensor on non-owning ranks
         if self.ep_rank != owning_rank and tensor is None:
             # Get tensor spec from owning rank
             tensor_spec = None
             if self.ep_rank == owning_rank:
                 tensor_spec = (tensor.shape, tensor.dtype)
-            
+
             # Broadcast spec
-            tensor_spec = torch.distributed.broadcast_object_list(
-                [tensor_spec], src=owning_rank, group=self.ep_group
-            )[0]
-            
+            tensor_spec = torch.distributed.broadcast_object_list([tensor_spec], src=owning_rank, group=self.ep_group)[
+                0
+            ]
+
             # Allocate tensor
             shape, dtype = tensor_spec
             tensor = torch.empty(shape, dtype=dtype, device=torch.cuda.current_device())
-        
+
         # Broadcast tensor data
-        global_src = torch.distributed.get_global_rank(
-            group=self.ep_group, group_rank=owning_rank
-        )
+        global_src = torch.distributed.get_global_rank(group=self.ep_group, group_rank=owning_rank)
         torch.distributed.broadcast(tensor, src=global_src, group=self.ep_group)
-        
+
         return tensor
-    
+
     @property
     def ep_size(self) -> int:
         """Get expert parallel world size."""
         return mpu.get_expert_model_parallel_world_size()
-    
+
     @property
     def ep_rank(self) -> int:
         """Get current expert parallel rank."""
         return mpu.get_expert_model_parallel_rank()
-    
+
     @property
     def ep_group(self) -> Optional[torch.distributed.ProcessGroup]:
         """Get expert parallel process group."""
@@ -1337,9 +1300,7 @@ class MOEWeightBridge(MegatronWeightBridge[torch.Tensor]):
         return None
 
 
-def merge_qkv_biases(
-    config: TransformerConfig, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor
-) -> torch.Tensor:
+def merge_qkv_biases(config: TransformerConfig, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor) -> torch.Tensor:
     """
     Merge separate Q, K, V bias vectors into Megatron's interleaved QKV format.
 
@@ -1374,9 +1335,7 @@ def merge_qkv_biases(
     return qkv.flatten()
 
 
-def split_qkv_biases(
-    config: TransformerConfig, qkv: torch.Tensor
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+def split_qkv_biases(config: TransformerConfig, qkv: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """
     Split Megatron's interleaved QKV bias into separate Q, K, V biases.
 
@@ -1399,9 +1358,7 @@ def split_qkv_biases(
     # Extract Q, K, V from interleaved pattern
     q_slice = torch.cat(
         [
-            torch.arange(
-                (heads_per_group + 2) * i, (heads_per_group + 2) * i + heads_per_group
-            )
+            torch.arange((heads_per_group + 2) * i, (heads_per_group + 2) * i + heads_per_group)
             for i in range(num_query_groups)
         ]
     )
@@ -1415,9 +1372,7 @@ def split_qkv_biases(
     return q, k, v
 
 
-def merge_qkv_weights(
-    provider: TransformerConfig, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor
-) -> torch.Tensor:
+def merge_qkv_weights(provider: TransformerConfig, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor) -> torch.Tensor:
     """
     Merge separate Q, K, V weight matrices into Megatron's interleaved QKV format.
 
@@ -1494,9 +1449,7 @@ def split_qkv_weights(
     # Extract Q, K, V from interleaved pattern
     q_slice = torch.cat(
         [
-            torch.arange(
-                (heads_per_group + 2) * i, (heads_per_group + 2) * i + heads_per_group
-            )
+            torch.arange((heads_per_group + 2) * i, (heads_per_group + 2) * i + heads_per_group)
             for i in range(num_query_groups)
         ]
     )
@@ -1519,9 +1472,7 @@ def split_qkv_weights(
     return q, k, v
 
 
-def merge_gated_mlp_weights(
-    provider: TransformerConfig, gate: torch.Tensor, up: torch.Tensor
-) -> torch.Tensor:
+def merge_gated_mlp_weights(provider: TransformerConfig, gate: torch.Tensor, up: torch.Tensor) -> torch.Tensor:
     """
     Merge gate and up projections into Megatron's concatenated format.
 
@@ -1536,9 +1487,7 @@ def merge_gated_mlp_weights(
     return torch.cat([gate, up], dim=0)
 
 
-def split_gated_mlp_weights(
-    provider: TransformerConfig, merged: torch.Tensor
-) -> Tuple[torch.Tensor, torch.Tensor]:
+def split_gated_mlp_weights(provider: TransformerConfig, merged: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Split Megatron's concatenated MLP weights into gate and up projections.
 
@@ -1553,9 +1502,7 @@ def split_gated_mlp_weights(
     return gate, up
 
 
-def gather_tp_qkv(
-    provider: TransformerConfig, tensors: List[torch.Tensor]
-) -> torch.Tensor:
+def gather_tp_qkv(provider: TransformerConfig, tensors: List[torch.Tensor]) -> torch.Tensor:
     """
     Gather QKV weights from all tensor parallel ranks.
 
@@ -1571,9 +1518,7 @@ def gather_tp_qkv(
     return torch.cat(tensors, dim=0)
 
 
-def gather_tp_gated_mlp(
-    provider: TransformerConfig, tensors: List[torch.Tensor]
-) -> torch.Tensor:
+def gather_tp_gated_mlp(provider: TransformerConfig, tensors: List[torch.Tensor]) -> torch.Tensor:
     """
     Gather gated MLP weights from all tensor parallel ranks.
 
@@ -1601,9 +1546,7 @@ def gather_tp_gated_mlp(
     return torch.cat([full_gate, full_up], dim=0)
 
 
-def gather_tp_column_parallel(
-    provider: TransformerConfig, tensors: List[torch.Tensor]
-) -> torch.Tensor:
+def gather_tp_column_parallel(provider: TransformerConfig, tensors: List[torch.Tensor]) -> torch.Tensor:
     """
     Gather column-parallel weights from all tensor parallel ranks.
 
@@ -1619,9 +1562,7 @@ def gather_tp_column_parallel(
     return torch.cat(tensors, dim=0)
 
 
-def gather_tp_row_parallel(
-    provider: TransformerConfig, tensors: List[torch.Tensor]
-) -> torch.Tensor:
+def gather_tp_row_parallel(provider: TransformerConfig, tensors: List[torch.Tensor]) -> torch.Tensor:
     """
     Gather row-parallel weights from all tensor parallel ranks.
 
@@ -1637,9 +1578,7 @@ def gather_tp_row_parallel(
     return torch.cat(tensors, dim=1)
 
 
-def transpose_tp_row_parallel(
-    provider: TransformerConfig, tensor: torch.Tensor
-) -> torch.Tensor:
+def transpose_tp_row_parallel(provider: TransformerConfig, tensor: torch.Tensor) -> torch.Tensor:
     """
     Transpose the weights for row-parallel layers.
 
@@ -1655,12 +1594,10 @@ def transpose_tp_row_parallel(
     return torch.transpose(tensor, 0, 1).contiguous()
 
 
-def transpose_for_tp_row_parallel(
-    provider: TransformerConfig, tensor: torch.Tensor
-) -> torch.Tensor:
+def transpose_for_tp_row_parallel(provider: TransformerConfig, tensor: torch.Tensor) -> torch.Tensor:
     """
     Transpose weights from HF to Megatron format for row-parallel layers.
-    
+
     This is used as a to_target transformation when loading HF weights.
     HF stores these as (in_features, out_features) but Megatron expects
     (out_features, in_features) for row-parallel layers.
@@ -1675,9 +1612,7 @@ def transpose_for_tp_row_parallel(
     return torch.transpose(tensor, 0, 1).contiguous()
 
 
-def split_tp_qkv(
-    provider: TransformerConfig, tensor: torch.Tensor
-) -> List[torch.Tensor]:
+def split_tp_qkv(provider: TransformerConfig, tensor: torch.Tensor) -> List[torch.Tensor]:
     """
     Split QKV weights for distribution across tensor parallel ranks.
 
@@ -1693,9 +1628,7 @@ def split_tp_qkv(
     return list(torch.chunk(tensor, provider.tensor_model_parallel_size, dim=0))
 
 
-def split_tp_gated_mlp(
-    provider: TransformerConfig, tensor: torch.Tensor
-) -> List[torch.Tensor]:
+def split_tp_gated_mlp(provider: TransformerConfig, tensor: torch.Tensor) -> List[torch.Tensor]:
     """
     Split gated MLP weights for distribution across tensor parallel ranks.
 
@@ -1721,9 +1654,7 @@ def split_tp_gated_mlp(
     return [torch.cat([gate_shards[i], up_shards[i]], dim=0) for i in range(tp_size)]
 
 
-def split_tp_column_parallel(
-    provider: TransformerConfig, tensor: torch.Tensor
-) -> List[torch.Tensor]:
+def split_tp_column_parallel(provider: TransformerConfig, tensor: torch.Tensor) -> List[torch.Tensor]:
     """
     Split weights for column-parallel distribution across tensor parallel ranks.
 
@@ -1739,9 +1670,7 @@ def split_tp_column_parallel(
     return list(torch.chunk(tensor, provider.tensor_model_parallel_size, dim=0))
 
 
-def split_tp_row_parallel(
-    provider: TransformerConfig, tensor: torch.Tensor
-) -> List[torch.Tensor]:
+def split_tp_row_parallel(provider: TransformerConfig, tensor: torch.Tensor) -> List[torch.Tensor]:
     """
     Split weights for row-parallel distribution across tensor parallel ranks.
 
@@ -1757,12 +1686,10 @@ def split_tp_row_parallel(
     return list(torch.chunk(tensor, provider.tensor_model_parallel_size, dim=1))
 
 
-def split_tp_row_parallel_from_hf(
-    provider: TransformerConfig, tensor: torch.Tensor
-) -> List[torch.Tensor]:
+def split_tp_row_parallel_from_hf(provider: TransformerConfig, tensor: torch.Tensor) -> List[torch.Tensor]:
     """
     Split HF weights for row-parallel distribution across tensor parallel ranks.
-    
+
     This function is used when loading from HuggingFace format. For row-parallel
     layers, Megatron stores weights as (in_features, out_features_per_rank),
     which is the same orientation as HF but split along the output dimension.
@@ -1777,7 +1704,7 @@ def split_tp_row_parallel_from_hf(
     if provider.tensor_model_parallel_size == 1:
         # For single GPU, return as-is (no transpose needed)
         return [tensor]
-    
+
     # For row parallel in Megatron:
     # HF stores as (in_features, out_features)
     # Megatron expects (in_features, out_features_per_rank)

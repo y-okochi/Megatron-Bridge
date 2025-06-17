@@ -1,6 +1,6 @@
-from functools import wraps
-import traceback
 import os
+import traceback
+from functools import wraps
 
 import torch
 from torch.distributed.elastic.multiprocessing.errors import record

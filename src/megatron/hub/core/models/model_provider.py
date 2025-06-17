@@ -11,7 +11,6 @@ from typing import Callable, Protocol, runtime_checkable
 
 import torch
 import torch.nn as nn
-
 from megatron.core import parallel_state, tensor_parallel
 from megatron.core.distributed import (
     DistributedDataParallel,
@@ -74,10 +73,7 @@ def get_model(
     # GPU allocation.
     # For FSDP2, we don't allocate GPU memory here. We allocate GPU memory
     # in the fully_shard function of FSDP2 instead.
-    if (
-        not (use_torch_fsdp2 and model_config.use_cpu_initialization)
-        and not model_config.init_model_with_meta_device
-    ):
+    if not (use_torch_fsdp2 and model_config.use_cpu_initialization) and not model_config.init_model_with_meta_device:
         for model_module in model:
             model_module.cuda(torch.cuda.current_device())
 
@@ -238,12 +234,7 @@ def _print_num_params(model: list[MegatronModule]):
             " > number of parameters on (tensor, pipeline) model parallel rank ({}, {}): {}".format(
                 parallel_state.get_tensor_model_parallel_rank(),
                 parallel_state.get_pipeline_model_parallel_rank(),
-                sum(
-                    [
-                        sum([p.nelement() for p in model_module.parameters()])
-                        for model_module in model
-                    ]
-                ),
+                sum([sum([p.nelement() for p in model_module.parameters()]) for model_module in model]),
             ),
             flush=True,
         )
@@ -274,9 +265,7 @@ def _fix_float_8(model: list[MegatronModule]):
                 fp8_meta = param._fp8_meta["scaling_fwd"]
                 fp8_meta_index = param._fp8_meta_index
                 if hasattr(param, "get_high_precision_init_val"):
-                    fp8_meta.amax_history[0][fp8_meta_index].copy_(
-                        param.get_high_precision_init_val().abs().max()
-                    )
+                    fp8_meta.amax_history[0][fp8_meta_index].copy_(param.get_high_precision_init_val().abs().max())
                 else:
                     fp8_meta.amax_history[0][fp8_meta_index] = 0
 

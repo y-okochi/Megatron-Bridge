@@ -19,6 +19,7 @@ The process is as follows:
 Usage:
 torchrun --nproc_per_node 2 examples/multi_gpu_hf.py
 """
+
 import argparse
 import os
 import sys
@@ -29,6 +30,7 @@ from rich.table import Table
 
 from megatron.hub import CausalLMBridge
 from megatron.hub.common.decorators import torchrun_main
+
 
 HF_MODEL_ID = "meta-llama/Llama-3.1-8B"
 console = Console()
@@ -66,7 +68,7 @@ def main(hf_model_id: str = HF_MODEL_ID, output_dir: str = None) -> None:
         table.add_column("Matches Original", justify="center")
 
     megatron_model = model_provider(wrap_with_ddp=False)
-    
+
     # Debug: Print model info
     if is_rank_0:
         console.print(f"[yellow]Tensor parallel size: {model_provider.tensor_model_parallel_size}[/yellow]")
@@ -75,7 +77,9 @@ def main(hf_model_id: str = HF_MODEL_ID, output_dir: str = None) -> None:
     for name, param in bridge(megatron_model, show_progress=False, order="safetensors"):
         if is_rank_0:
             original_param = bridge.hf_pretrained.state[name]
-            match = torch.allclose(param, original_param.to(param.device), atol=1e-1)  # Increased tolerance for bfloat16
+            match = torch.allclose(
+                param, original_param.to(param.device), atol=1e-1
+            )  # Increased tolerance for bfloat16
             table.add_row(
                 name,
                 str(tuple(param.shape)),
@@ -89,14 +93,19 @@ def main(hf_model_id: str = HF_MODEL_ID, output_dir: str = None) -> None:
         console.print(f"Saving HF-ckpt in {save_path}...")
 
     bridge.save_pretrained(megatron_model, save_path)
-    
+
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Convert between HuggingFace and Megatron-LM model formats on multiple GPUs')
-    parser.add_argument('--hf-model-id', type=str, default=HF_MODEL_ID,
-                        help='HuggingFace model ID to convert')
-    parser.add_argument('--output-dir', type=str, default=None,
-                        help='The directory where the converted model directory will be created. Defaults to the current working directory.')
-    
+    parser = argparse.ArgumentParser(
+        description="Convert between HuggingFace and Megatron-LM model formats on multiple GPUs"
+    )
+    parser.add_argument("--hf-model-id", type=str, default=HF_MODEL_ID, help="HuggingFace model ID to convert")
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        default=None,
+        help="The directory where the converted model directory will be created. Defaults to the current working directory.",
+    )
+
     args = parser.parse_args()
     main(args.hf_model_id, args.output_dir)

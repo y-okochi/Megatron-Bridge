@@ -8,6 +8,7 @@ from functools import _find_impl  # type: ignore
 from typing import Any, Callable, Dict, Optional, TypeVar
 from weakref import WeakKeyDictionary
 
+
 _SignatureType = TypeVar("_SignatureType", bound=Callable)
 
 
@@ -28,7 +29,7 @@ class _Dispatch:
         self._name = signature.__name__
         self._exact_types: Dict[Any, Callable] = {}
         self._dispatch_cache: WeakKeyDictionary = WeakKeyDictionary()
-        
+
         # Extract docstring and module info for rich repr
         self._doc = signature.__doc__
         self._module = signature.__module__
@@ -81,7 +82,7 @@ class _Dispatch:
                 error_msg = self._format_no_implementation_error(instance)
                 raise NotImplementedError(error_msg)
             self._dispatch_cache[instance_type] = impl
-        
+
         return impl(instance, *args, **kwargs)
 
     def impl(self, *target_types: Any) -> Callable[[Callable], Callable]:
@@ -110,22 +111,22 @@ class _Dispatch:
                 # This handles `@impl(int, str)`
                 for typ in target_types:
                     self._exact_types[typ] = func
-            
+
             self._dispatch_cache.clear()
             return func
-        
+
         return decorator
 
     def __repr__(self) -> str:
         """Rich representation showing all implementations."""
         # Build signature string
         import inspect
-        
+
         sig = inspect.signature(self._signature)
         sig_str = f"{self._name}{sig}"
-        
+
         lines = [f"Dispatch({sig_str})("]
-        
+
         # Add regular implementations
         for typ, impl in self._exact_types.items():
             if isinstance(typ, tuple):
@@ -134,7 +135,7 @@ class _Dispatch:
                 type_name = typ.__name__ if hasattr(typ, "__name__") else str(typ)
             impl_loc = self._format_location(impl)
             lines.append(f"  ({type_name}): {impl.__name__} at {impl_loc}")
-        
+
         lines.append(")")
         return "\n".join(lines)
 
@@ -158,21 +159,19 @@ class _Dispatch:
                     pass
 
         # Use functools._find_impl for MRO-based dispatch, only for single types
-        single_type_impls = {
-            k: v for k, v in self._exact_types.items() if isinstance(k, type)
-        }
+        single_type_impls = {k: v for k, v in self._exact_types.items() if isinstance(k, type)}
         return _find_impl(instance_type, single_type_impls)
 
     def _format_location(self, func: Callable) -> str:
         """Format the location of a function for display."""
         try:
             import inspect
-            
+
             filename = inspect.getfile(func)
             _, lineno = inspect.getsourcelines(func)
             # Shorten the path to be more readable
             import os
-            
+
             filename = os.path.relpath(filename)
             return f"{filename}:{lineno}"
         except Exception:
@@ -188,32 +187,20 @@ class _Dispatch:
         if isinstance(instance, tuple):
             instance_types = tuple(v if isinstance(v, type) else type(v) for v in instance)
             type_names_str = ", ".join(
-                t.__qualname__ if hasattr(t, "__qualname__") else str(t)
-                for t in instance_types
+                t.__qualname__ if hasattr(t, "__qualname__") else str(t) for t in instance_types
             )
             type_name_for_header = f"tuple of types ({type_names_str})"
 
-            suggestion_names = ", ".join(
-                t.__name__ if hasattr(t, "__name__") else str(t)
-                for t in instance_types
-            )
+            suggestion_names = ", ".join(t.__name__ if hasattr(t, "__name__") else str(t) for t in instance_types)
             type_name_for_suggestion = f"({suggestion_names})"
             type_name_for_func = "tuple"
-            instance_type_hint = (
-                f"Tuple[{', '.join(t.__name__ for t in instance_types)}]"
-            )
+            instance_type_hint = f"Tuple[{', '.join(t.__name__ for t in instance_types)}]"
         else:
             instance_type = instance if isinstance(instance, type) else type(instance)
-            qualname = (
-                instance_type.__qualname__
-                if hasattr(instance_type, "__qualname__")
-                else str(instance_type)
-            )
+            qualname = instance_type.__qualname__ if hasattr(instance_type, "__qualname__") else str(instance_type)
             type_name_for_header = f"type '{qualname}'"
             type_name_for_suggestion = (
-                instance_type.__name__
-                if hasattr(instance_type, "__name__")
-                else str(instance_type)
+                instance_type.__name__ if hasattr(instance_type, "__name__") else str(instance_type)
             )
             type_name_for_func = type_name_for_suggestion.lower().replace(".", "_")
             instance_type_hint = type_name_for_suggestion
@@ -239,9 +226,7 @@ class _Dispatch:
                 if isinstance(typ, tuple):
                     type_display = f"({', '.join(t.__name__ if hasattr(t, '__name__') else str(t) for t in typ)})"
                 else:
-                    type_display = (
-                        typ.__name__ if hasattr(typ, "__name__") else str(typ)
-                    )
+                    type_display = typ.__name__ if hasattr(typ, "__name__") else str(typ)
                 lines.append(f"  • {type_display}")
         else:
             lines.append("No implementations registered yet.")

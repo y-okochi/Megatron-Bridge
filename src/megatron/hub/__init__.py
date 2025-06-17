@@ -13,8 +13,9 @@
 # limitations under the License.
 
 from megatron.hub import models as _models
-from megatron.hub.models import *   # noqa: F401
-from megatron.hub.bridge import CausalLMBridge, AutoBridge
+from megatron.hub.bridge import AutoBridge, CausalLMBridge
+from megatron.hub.models import *  # noqa: F401
+
 
 __all__ = [
     "AutoBridge",

@@ -1,18 +1,19 @@
-from typing import Optional, Union, Generic, TypeVar, Dict, List
-from pathlib import Path
 import sys
+from pathlib import Path
+from typing import Dict, Generic, List, Optional, TypeVar, Union
 
 import torch
 from transformers import (
     AutoConfig,
-    AutoTokenizer,
     AutoModelForCausalLM,
+    AutoTokenizer,
     GenerationConfig,
     PreTrainedTokenizer,
 )
 from transformers.generation.utils import GenerateOutput
 
-from mhub.hub._lib.hf.base import PreTrainedBase
+from megatron.hub.bridge.hf_pretrained.base import PreTrainedBase
+
 
 # Python 3.12+ supports PEP 692 (TypedDict Unpack)
 if sys.version_info >= (3, 12):
@@ -140,17 +141,13 @@ class PreTrainedCausalLM(PreTrainedBase, Generic[CausalLMType]):
         if "config" in self.__dict__:
             model_kwargs["config"] = self.config
 
-        model = AutoModelForCausalLM.from_pretrained(
-            self.model_name_or_path, **model_kwargs
-        )
+        model = AutoModelForCausalLM.from_pretrained(self.model_name_or_path, **model_kwargs)
         model = model.to(self.device)
 
-        if "generation_config" in self.__dict__ and hasattr(
-            model, "generation_config"
-        ):
+        if "generation_config" in self.__dict__ and hasattr(model, "generation_config"):
             model.generation_config = self.generation_config
         return model
-    
+
     def _load_config(self) -> AutoConfig:
         """Load the model config."""
         if self.model_name_or_path is None:
@@ -194,7 +191,7 @@ class PreTrainedCausalLM(PreTrainedBase, Generic[CausalLMType]):
         if not hasattr(self, "_generation_config"):
             self._generation_config = self._load_generation_config()
         return self._generation_config
-    
+
     @generation_config.setter
     def generation_config(self, value: GenerationConfig):
         """Set the generation config manually."""
@@ -209,7 +206,7 @@ class PreTrainedCausalLM(PreTrainedBase, Generic[CausalLMType]):
         if not hasattr(self, "_tokenizer"):
             self._tokenizer = self._load_tokenizer()
         return self._tokenizer
-    
+
     @tokenizer.setter
     def tokenizer(self, value: PreTrainedTokenizer):
         """Set the tokenizer manually."""
@@ -329,9 +326,7 @@ class PreTrainedCausalLM(PreTrainedBase, Generic[CausalLMType]):
         """Forward call to model."""
         return self.model(*args, **kwargs)
 
-    def encode(
-        self, text: Union[str, List[str]], **kwargs: Unpack["EncodeKwargs"]
-    ) -> Dict[str, torch.Tensor]:
+    def encode(self, text: Union[str, List[str]], **kwargs: Unpack["EncodeKwargs"]) -> Dict[str, torch.Tensor]:
         """
         Encode text into token IDs using the model's tokenizer.
 
@@ -515,7 +510,7 @@ class PreTrainedCausalLM(PreTrainedBase, Generic[CausalLMType]):
                 else:
                     details = "loaded"
             lines.append(f"  ({name}): {type_name} [{details}]")
-        
+
         # Manually add model repr
         model_repr_content: str
         if self._model is not None:
@@ -524,9 +519,7 @@ class PreTrainedCausalLM(PreTrainedBase, Generic[CausalLMType]):
             config = self.config
             layers = getattr(config, "num_hidden_layers", "N/A")
             hidden_size = getattr(config, "hidden_size", "N/A")
-            model_repr_content = (
-                f"{model_class_name} [layers={layers}, hidden_size={hidden_size}, loaded]"
-            )
+            model_repr_content = f"{model_class_name} [layers={layers}, hidden_size={hidden_size}, loaded]"
         elif "config" in self.__dict__:  # Model not loaded, but config is
             config = self.config
             model_class_name_from_config = "CausalLM"  # Default
@@ -534,9 +527,7 @@ class PreTrainedCausalLM(PreTrainedBase, Generic[CausalLMType]):
                 model_class_name_from_config = config.architectures[0]
             elif getattr(config, "model_type", None):
                 mt = config.model_type
-                model_class_name_from_config = (
-                    f"{mt.capitalize()}Model" if mt else "CausalLM"
-                )
+                model_class_name_from_config = f"{mt.capitalize()}Model" if mt else "CausalLM"
 
             details_parts = []
             if getattr(config, "num_hidden_layers", None) is not None:
@@ -547,24 +538,18 @@ class PreTrainedCausalLM(PreTrainedBase, Generic[CausalLMType]):
             details_str = ", ".join(details_parts)
             status_suffix = "not loaded"
             if details_str:
-                model_repr_content = (
-                    f"{model_class_name_from_config}({details_str}) [{status_suffix}]"
-                )
+                model_repr_content = f"{model_class_name_from_config}({details_str}) [{status_suffix}]"
             else:
                 model_repr_content = f"{model_class_name_from_config} [{status_suffix}]"
         else:  # Model and Config also not loaded
             model_repr_content = "AutoModelForCausalLM [not loaded]"
-        
+
         lines.append(f"  (model): {model_repr_content}")
-        
+
         lines.sort()
 
-        params_str = (
-            f"{self.num_parameters:,}" if self.num_parameters is not None else "N/A"
-        )
-        dtype_str = (
-            str(self.dtype).replace("torch.", "") if self.dtype is not None else "N/A"
-        )
+        params_str = f"{self.num_parameters:,}" if self.num_parameters is not None else "N/A"
+        dtype_str = str(self.dtype).replace("torch.", "") if self.dtype is not None else "N/A"
         lines.extend(
             [
                 f"  (parameters): {params_str}",

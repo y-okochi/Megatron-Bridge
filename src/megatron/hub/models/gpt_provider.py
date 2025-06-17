@@ -6,7 +6,6 @@ from functools import partial
 from typing import Any, Callable, Literal, Optional, Union
 
 import torch
-
 from megatron.core import parallel_state
 from megatron.core.distributed import DistributedDataParallelConfig
 from megatron.core.enums import ModelType
@@ -17,10 +16,11 @@ from megatron.core.models.gpt.gpt_layer_specs import (
 from megatron.core.transformer import ModuleSpec
 from megatron.core.transformer.module import MegatronModule
 from megatron.core.transformer.transformer_config import TransformerConfig
-from megatron.core.utils import get_te_version, is_te_min_version
+from megatron.core.utils import get_te_version
 
 from megatron.hub.common.model_provider_mixin import ModelProviderMixin
 from megatron.hub.core.utils import fusions
+
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +33,7 @@ try:
 except ImportError:
     HAVE_TE = False
     TE_VERSION = None
+
 
 @dataclass
 class GPTModelProvider(TransformerConfig, ModelProviderMixin[MCoreGPTModel]):
@@ -60,9 +61,7 @@ class GPTModelProvider(TransformerConfig, ModelProviderMixin[MCoreGPTModel]):
     """Config file when tp_comm_overlap is enabled."""
 
     use_transformer_engine_full_layer_spec: bool = False
-    transformer_layer_spec: Union[ModuleSpec, Callable[["GPTModelProvider"], ModuleSpec]] = (
-        default_layer_spec
-    )
+    transformer_layer_spec: Union[ModuleSpec, Callable[["GPTModelProvider"], ModuleSpec]] = default_layer_spec
 
     generation_config: Optional[Any] = None
 
@@ -113,9 +112,9 @@ class GPTModelProvider(TransformerConfig, ModelProviderMixin[MCoreGPTModel]):
             )
 
         vp_size = self.virtual_pipeline_model_parallel_size
-        is_pipeline_asymmetric = getattr(
-            self, "account_for_embedding_in_pipeline_split", False
-        ) or getattr(self, "account_for_loss_in_pipeline_split", False)
+        is_pipeline_asymmetric = getattr(self, "account_for_embedding_in_pipeline_split", False) or getattr(
+            self, "account_for_loss_in_pipeline_split", False
+        )
         if vp_size and not is_pipeline_asymmetric:
             p_size = self.pipeline_model_parallel_size
             assert (self.num_layers // p_size) % vp_size == 0, (
@@ -134,9 +133,7 @@ class GPTModelProvider(TransformerConfig, ModelProviderMixin[MCoreGPTModel]):
                     f" {vocab_size - tokenizer.vocab_size}."
                 )
         else:
-            vocab_size = get_vocab_size(
-                self, tokenizer.vocab_size, self.make_vocab_size_divisible_by
-            )
+            vocab_size = get_vocab_size(self, tokenizer.vocab_size, self.make_vocab_size_divisible_by)
 
         # Initialize model as meta data instead of allocating data on a device
         model_init_device_context = contextlib.nullcontext
@@ -241,9 +238,7 @@ class GPTModelProvider(TransformerConfig, ModelProviderMixin[MCoreGPTModel]):
         return meta_model
 
 
-def get_vocab_size(
-    config: TransformerConfig, vocab_size: int, make_vocab_size_divisible_by: int
-) -> int:
+def get_vocab_size(config: TransformerConfig, vocab_size: int, make_vocab_size_divisible_by: int) -> int:
     """Calculate padded vocab size for tensor parallelism."""
     after = vocab_size
     multiple = make_vocab_size_divisible_by * config.tensor_model_parallel_size
@@ -263,6 +258,7 @@ def mtp_block_spec(config: "GPTModelProvider") -> Optional[ModuleSpec]:
     from megatron.core.models.gpt.gpt_layer_specs import get_mtp_layer_spec
 
     return get_mtp_layer_spec()
+
 
 @dataclass
 class GPTProvider126M(GPTModelProvider):

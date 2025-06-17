@@ -1,3 +1,6 @@
+import fnmatch
+import json
+import re
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Mapping
@@ -9,13 +12,10 @@ from typing import (
     List,
     Optional,
     Pattern,
+    Tuple,
     Union,
     overload,
-    Tuple,
 )
-import fnmatch
-import json
-import re
 
 import torch
 
@@ -72,7 +72,7 @@ class StateDict(Mapping[str, torch.Tensor]):
     .. code-block:: python
 
         # Assume SafetensorsStateSource is available
-        # from mhub.hub._lib.state import SafetensorsStateSource
+        # from megatron.hub.common.state import SafetensorsStateSource
 
         # Imagine a directory 'my_model_checkpoint/' with sharded weights.
         state_from_disk = StateDict(SafetensorsStateSource('my_model_checkpoint/'))
@@ -99,9 +99,7 @@ class StateDict(Mapping[str, torch.Tensor]):
             source = DictStateSource(source)
 
         if not isinstance(source, StateSource):
-            raise TypeError(
-                f"StateDict source must be a dict or a StateSource, got {type(source)}"
-            )
+            raise TypeError(f"StateDict source must be a dict or a StateSource, got {type(source)}")
 
         self.source = source
 
@@ -140,9 +138,7 @@ class StateDict(Mapping[str, torch.Tensor]):
     @overload
     def __getitem__(self, key: Pattern) -> Dict[str, torch.Tensor]: ...
 
-    def __getitem__(
-        self, key: Union[str, List[str], Pattern]
-    ) -> Union[torch.Tensor, Dict[str, torch.Tensor]]:
+    def __getitem__(self, key: Union[str, List[str], Pattern]) -> Union[torch.Tensor, Dict[str, torch.Tensor]]:
         """
         Accesses state dict entries using various key types.
 
@@ -219,9 +215,7 @@ class StateDict(Mapping[str, torch.Tensor]):
                 raise KeyError(f"Keys not found: {missing_keys}")
             return self._load_tensors(key)
         else:
-            raise TypeError(
-                f"Key must be str, list of str, or compiled regex, got {type(key)}"
-            )
+            raise TypeError(f"Key must be str, list of str, or compiled regex, got {type(key)}")
 
     def regex(self, pattern: str) -> Dict[str, torch.Tensor]:
         """
@@ -391,6 +385,7 @@ class StateSource(ABC, Mapping[str, torch.Tensor]):
         performant implementation is available.
         """
         import fnmatch
+
         for key in self.get_all_keys():
             if fnmatch.fnmatch(key, pattern):
                 return True
@@ -481,9 +476,10 @@ class SafeTensorsStateSource(StateSource):
             return key_map
 
         # If no index, scan the directory.
-        from safetensors import safe_open
-        from glob import glob as file_glob
         import os
+        from glob import glob as file_glob
+
+        from safetensors import safe_open
 
         key_map = {}
         safetensor_files = file_glob(str(self.path / "*.safetensors"))
@@ -495,12 +491,14 @@ class SafeTensorsStateSource(StateSource):
                         if key in key_map:
                             # This is an issue. Same key in multiple files, and no index.
                             # How to resolve ambiguity? Let's just warn and overwrite. Last one wins.
-                            print(f"Warning: duplicate key '{key}' found in '{filename}' and '{key_map[key]}'. Using '{filename}'.")
+                            print(
+                                f"Warning: duplicate key '{key}' found in '{filename}' and '{key_map[key]}'. Using '{filename}'."
+                            )
                         key_map[key] = filename
             except Exception as e:
                 # Can be not a safetensor file, etc.
                 print(f"Warning: could not open {filename} as a safetensors file: {e}")
-        
+
         self._key_to_filename_map_cache = key_map
         return key_map
 
@@ -542,8 +540,9 @@ class SafeTensorsStateSource(StateSource):
         if self._keys_cache is not None:
             return self._keys_cache
 
-        from safetensors import safe_open
         from glob import glob as file_glob
+
+        from safetensors import safe_open
 
         all_keys = set()
         key_to_filename_map = self.key_to_filename_map
@@ -553,9 +552,7 @@ class SafeTensorsStateSource(StateSource):
         if not all_keys:
             safetensor_files = file_glob(str(self.path / "*.safetensors"))
             if not safetensor_files and not key_to_filename_map:
-                raise FileNotFoundError(
-                    f"No .safetensors files or index found in {self.model_name_or_path}"
-                )
+                raise FileNotFoundError(f"No .safetensors files or index found in {self.model_name_or_path}")
             for safetensor_file in safetensor_files:
                 with safe_open(safetensor_file, framework="pt", device="cpu") as f:
                     all_keys.update(f.keys())
@@ -567,8 +564,9 @@ class SafeTensorsStateSource(StateSource):
         if not keys_to_load:
             return {}
 
-        from safetensors import safe_open
         from glob import glob as file_glob
+
+        from safetensors import safe_open
 
         loaded_tensors = {}
         remaining_keys = set(keys_to_load)
@@ -607,9 +605,7 @@ class SafeTensorsStateSource(StateSource):
                             remaining_keys.remove(key)
 
         if remaining_keys:
-            raise KeyError(
-                f"Keys not found in safetensors from {self.model_name_or_path}: {remaining_keys}"
-            )
+            raise KeyError(f"Keys not found in safetensors from {self.model_name_or_path}: {remaining_keys}")
 
         return loaded_tensors
 
@@ -628,8 +624,9 @@ class SafeTensorsStateSource(StateSource):
             True if a matching key is found, False otherwise.
         """
         import fnmatch
-        from safetensors import safe_open
         from glob import glob as file_glob
+
+        from safetensors import safe_open
 
         key_to_filename_map = self.key_to_filename_map
         if key_to_filename_map:
@@ -652,10 +649,12 @@ class SafeTensorsStateSource(StateSource):
             except Exception:
                 # Ignore files that are not valid safetensors
                 continue
-        
+
         return False
 
-    def save_generator(self, generator: Iterable[Tuple[str, torch.Tensor]], output_path: Union[str, Path], strict: bool = True):
+    def save_generator(
+        self, generator: Iterable[Tuple[str, torch.Tensor]], output_path: Union[str, Path], strict: bool = True
+    ):
         """
         Saves tensors from a generator to `.safetensors` files, preserving the
         original sharding structure in a memory-efficient, streaming fashion.
@@ -691,7 +690,7 @@ class SafeTensorsStateSource(StateSource):
 
         # Rank 0 proceeds with saving.
         from safetensors.torch import save_file
-        
+
         output_path = Path(output_path)
         output_path.mkdir(parents=True, exist_ok=True)
 
@@ -703,11 +702,11 @@ class SafeTensorsStateSource(StateSource):
             if buffered_tensors:
                 save_file(buffered_tensors, output_path / "model.safetensors")
             return
-        
+
         filename_to_keys_map = defaultdict(set)
         for key, filename in key_to_filename_map.items():
             filename_to_keys_map[filename].add(key)
-        
+
         files_to_save = dict(filename_to_keys_map)
         buffered_tensors = {}
         all_yielded_keys = set()
@@ -724,7 +723,7 @@ class SafeTensorsStateSource(StateSource):
                 else:
                     print(f"Warning: tensor '{name}' from generator not found in original model structure. Skipping.")
                     continue
-            
+
             buffered_tensors[name] = tensor
 
             # Check if any file is complete and can be saved.
@@ -734,20 +733,22 @@ class SafeTensorsStateSource(StateSource):
                 if keys_for_file.issubset(buffered_tensors.keys()):
                     # This shard is complete, save it.
                     tensors_to_save = {key: buffered_tensors[key] for key in keys_for_file}
-                    
+
                     output_file_path = output_path / filename
                     save_file(tensors_to_save, output_file_path)
-                    
+
                     # Free memory by removing saved tensors from the buffer.
                     for key in keys_for_file:
                         del buffered_tensors[key]
-                    
+
                     all_saved_keys.update(keys_for_file)
                     del files_to_save[filename]
 
         # --- Final Reporting ---
         if files_to_save:
-            print("Warning: The following files could not be saved because the generator did not yield all of their tensors:")
+            print(
+                "Warning: The following files could not be saved because the generator did not yield all of their tensors:"
+            )
             for filename, keys_for_file in files_to_save.items():
                 missing_for_file = keys_for_file - all_yielded_keys
                 if missing_for_file:
@@ -756,30 +757,33 @@ class SafeTensorsStateSource(StateSource):
                         print(f"    - {key}")
 
         if buffered_tensors:
-            print(f"Warning: {len(buffered_tensors)} tensors were yielded but not saved because their corresponding file shards were incomplete.")
+            print(
+                f"Warning: {len(buffered_tensors)} tensors were yielded but not saved because their corresponding file shards were incomplete."
+            )
 
         # Final check on whether all original tensors were written.
         unsaved_keys = all_expected_keys - all_saved_keys
         if not unsaved_keys:
             extra_keys = all_yielded_keys - all_expected_keys
             if extra_keys:
-                print(f"\nSuccess: All tensors from the original checkpoint were written. "
-                      f"({len(extra_keys)} extra tensors from generator were ignored as per strict=False).")
+                print(
+                    f"\nSuccess: All tensors from the original checkpoint were written. "
+                    f"({len(extra_keys)} extra tensors from generator were ignored as per strict=False)."
+                )
             else:
                 print("\nSuccess: All tensors from the original checkpoint were written.")
         else:
-            print(f"\nError: {len(unsaved_keys)} tensors from the original checkpoint were not written. See warnings above for details.")
+            print(
+                f"\nError: {len(unsaved_keys)} tensors from the original checkpoint were not written. See warnings above for details."
+            )
 
         # Create index file for the saved shards.
         original_index_file = self.path / "model.safetensors.index.json"
         if original_index_file.exists():
             with open(original_index_file, "r") as f:
                 original_index_data = json.load(f)
-            
-            new_weight_map = {
-                key: key_to_filename_map[key]
-                for key in all_saved_keys
-            }
+
+            new_weight_map = {key: key_to_filename_map[key] for key in all_saved_keys}
 
             new_index_data = {
                 "metadata": original_index_data.get("metadata", {}),
@@ -796,18 +800,14 @@ class SafeTensorsStateSource(StateSource):
 
     @staticmethod
     @lru_cache(maxsize=None)
-    def _cached_get_key_to_filename_map(
-        model_name_or_path: Union[str, Path]
-    ) -> Optional[Dict[str, str]]:
+    def _cached_get_key_to_filename_map(model_name_or_path: Union[str, Path]) -> Optional[Dict[str, str]]:
         """Static, cached method to get the key-to-filename map."""
         index_file = Path(model_name_or_path) / "model.safetensors.index.json"
         if index_file.exists():
             with open(index_file, "r") as f:
                 try:
                     index_data = json.load(f)
-                    if "weight_map" in index_data and isinstance(
-                        index_data["weight_map"], dict
-                    ):
+                    if "weight_map" in index_data and isinstance(index_data["weight_map"], dict):
                         return index_data["weight_map"]
                 except json.JSONDecodeError:
                     return None

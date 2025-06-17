@@ -1,22 +1,22 @@
 import torch
-from transformers import LlamaForCausalLM
 from megatron.core.models.gpt.gpt_model import GPTModel
+from transformers import LlamaForCausalLM
 
 from megatron.hub.bridge import MegatronModelBridge
+from megatron.hub.bridge.hf_pretrained.causal_lm import PreTrainedCausalLM
 from megatron.hub.bridge.state_bridge import MegatronStateBridge
 from megatron.hub.bridge.weight_bridge import (
-    TPAwareWeightBridge,
-    QKVWeightBridge,
     GatedMLPWeightBridge,
+    QKVWeightBridge,
+    TPAwareWeightBridge,
 )
 from megatron.hub.models.llama.llama_provider import LlamaModelProvider
-from megatron.hub.bridge.hf_pretrained.causal_lm import PreTrainedCausalLM
 
 
 @MegatronModelBridge.impl(source=LlamaForCausalLM, target=GPTModel)
 class MegatronCausalLlamaBridge(MegatronModelBridge):
     """
-    mhub Bridge for Llama Causal LM.
+    Megatron-Hub Bridge for Llama Causal LM.
     """
 
     def provider_bridge(self, hf_pretrained: PreTrainedCausalLM) -> LlamaModelProvider:
@@ -39,12 +39,8 @@ class MegatronCausalLlamaBridge(MegatronModelBridge):
             seq_length=hf_config.max_position_embeddings,
             rotary_base=hf_config.rope_theta,
             gated_linear_unit=True,
-            make_vocab_size_divisible_by=self.make_vocab_size_divisible_by(
-                hf_config.vocab_size
-            ),
-            share_embeddings_and_output_weights=getattr(
-                hf_config, "tie_word_embeddings", False
-            ),
+            make_vocab_size_divisible_by=self.make_vocab_size_divisible_by(hf_config.vocab_size),
+            share_embeddings_and_output_weights=getattr(hf_config, "tie_word_embeddings", False),
             fp16=(self.dtype_from_hf(hf_config) == torch.float16),
             bf16=(self.dtype_from_hf(hf_config) == torch.bfloat16),
             params_dtype=self.dtype_from_hf(hf_config),
@@ -70,7 +66,6 @@ class MegatronCausalLlamaBridge(MegatronModelBridge):
                 megatron="output_layer.weight",
                 to="lm_head.weight",
             ),
-
             # ------------------------------------------------------------------
             # LayerNorm (replicated across TP ranks)
             # ------------------------------------------------------------------
@@ -86,7 +81,6 @@ class MegatronCausalLlamaBridge(MegatronModelBridge):
                 megatron="decoder.layers.*.pre_mlp_layernorm.weight",
                 to="model.layers.*.post_attention_layernorm.weight",
             ),
-
             # ------------------------------------------------------------------
             # Attention – fused QKV & output projection
             # ------------------------------------------------------------------
@@ -100,7 +94,6 @@ class MegatronCausalLlamaBridge(MegatronModelBridge):
                 megatron="decoder.layers.*.self_attention.linear_proj.weight",
                 to="model.layers.*.self_attn.o_proj.weight",
             ),
-
             # ------------------------------------------------------------------
             # MLP – gated projection & output projection
             # ------------------------------------------------------------------
