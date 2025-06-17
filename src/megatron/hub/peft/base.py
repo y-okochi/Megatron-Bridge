@@ -43,7 +43,7 @@ class PEFT(ABC):
                 # Implement the transform logic
                 pass
 
-        from megatron.hub.models import get_base_model
+        from megatron.hub.models.megatron import get_base_model
 
         peft = MyPEFT()
         base_model = get_base_model(model_config)  # Returns list[MegatronModule]

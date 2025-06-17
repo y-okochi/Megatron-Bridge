@@ -23,7 +23,6 @@ import pytest
 import torch.nn.init as init
 from megatron.core.optimizer import OptimizerConfig
 
-from megatron.hub.recipes.utils.nemo_run_utils import prepare_config_for_nemo_run
 from megatron.hub.training.config import (
     CheckpointConfig,
     ConfigContainer,
@@ -33,6 +32,7 @@ from megatron.hub.training.config import (
     TokenizerConfig,
     TrainingConfig,
 )
+from megatron.hub.training.utils.nemo_run_utils import prepare_config_for_nemo_run
 
 
 # Test enums for enum handling tests

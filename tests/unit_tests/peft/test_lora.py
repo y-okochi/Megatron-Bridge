@@ -23,8 +23,7 @@ import torch.distributed as dist
 import torch.nn as nn
 from megatron.core.transformer.module import MegatronModule
 
-from megatron.hub.models import get_base_model
-from megatron.hub.models.gpt import GPTConfig
+from megatron.hub.models.gpt_provider import GPTModelProvider
 from megatron.hub.peft.lora import LoRA, LoRAMerge
 from megatron.hub.peft.lora_layers import LinearAdapter, LoRALinear
 
@@ -611,10 +610,10 @@ class TestLoRAMegatronIntegration:
             pass
 
     def test_lora_with_gpt_model(self):
-        """Test LoRA application to a real GPT model from get_base_model."""
+        """Test LoRA application to a real GPT model from GPTModelProvider."""
 
-        # Create a minimal GPT configuration
-        config = GPTConfig(
+        # Create a minimal GPT model provider
+        model_provider = GPTModelProvider(
             num_layers=2,
             hidden_size=128,
             num_attention_heads=2,
@@ -622,7 +621,7 @@ class TestLoRAMegatronIntegration:
             ffn_hidden_size=256,
         )
 
-        base_model = get_base_model(config)
+        base_model = model_provider.get_model(wrap_with_ddp=False)
 
         # Verify we got a list of Megatron modules
         assert isinstance(base_model, list)
@@ -672,8 +671,8 @@ class TestLoRAMegatronIntegration:
     def test_lora_forward_pass_with_megatron_model(self):
         """Test forward pass through LoRA-adapted Megatron model."""
 
-        # Create minimal config for fast testing
-        config = GPTConfig(
+        # Create minimal model provider for fast testing
+        model_provider = GPTModelProvider(
             num_layers=1,
             hidden_size=64,
             num_attention_heads=2,
@@ -682,7 +681,7 @@ class TestLoRAMegatronIntegration:
         )
 
         # Get and adapt model
-        base_model = get_base_model(config)
+        base_model = model_provider.get_model(wrap_with_ddp=False)
 
         # Ensure model is on CUDA if available
         if torch.cuda.is_available():
@@ -698,7 +697,7 @@ class TestLoRAMegatronIntegration:
         model_device = next(adapted_model[0].parameters()).device
 
         # Create input tensors in the format expected by Megatron models
-        input_ids = torch.randint(0, config.vocab_size, (batch_size, seq_len), device=model_device)
+        input_ids = torch.randint(0, model_provider.vocab_size, (batch_size, seq_len), device=model_device)
         position_ids = torch.arange(seq_len, dtype=torch.long, device=model_device).unsqueeze(0).expand(batch_size, -1)
 
         # Create 4D causal attention mask [batch_size, 1, seq_len, seq_len]
@@ -723,7 +722,7 @@ class TestLoRAMegatronIntegration:
                 else:
                     logits = output
 
-                expected_shape = (batch_size, seq_len, config.vocab_size)
+                expected_shape = (batch_size, seq_len, model_provider.vocab_size)
                 assert logits.shape == expected_shape, f"Expected {expected_shape}, got {logits.shape}"
 
                 # Count LoRA adaptations
@@ -733,8 +732,8 @@ class TestLoRAMegatronIntegration:
     def test_lora_merge_with_megatron_model(self):
         """Test LoRA merge functionality with Megatron models."""
 
-        # Create minimal config
-        config = GPTConfig(
+        # Create minimal model provider
+        model_provider = GPTModelProvider(
             num_layers=1,
             hidden_size=64,
             num_attention_heads=2,
@@ -743,7 +742,7 @@ class TestLoRAMegatronIntegration:
         )
 
         # Get base model and apply LoRA
-        base_model = get_base_model(config)
+        base_model = model_provider.get_model(wrap_with_ddp=False)
 
         # Move model to CUDA if available
         if torch.cuda.is_available():
@@ -796,7 +795,7 @@ class TestLoRAMegatronIntegration:
 
     def test_lora_different_targets(self):
         """Test LoRA with different target module configurations."""
-        config = GPTConfig(
+        model_provider = GPTModelProvider(
             num_layers=2,
             hidden_size=64,
             num_attention_heads=2,
@@ -814,7 +813,7 @@ class TestLoRAMegatronIntegration:
 
         for targets in target_configs:
             # Create fresh model for each configuration
-            base_model = get_base_model(config)
+            base_model = model_provider.get_model(wrap_with_ddp=False)
             if torch.cuda.is_available():
                 base_model = [chunk.cuda() for chunk in base_model]
 
@@ -832,7 +831,7 @@ class TestLoRAMegatronIntegration:
     def test_lora_transform_idempotent_megatron_model(self):
         """Test that LoRA transform is idempotent when applied to real Megatron models."""
         # Create a minimal GPT configuration
-        config = GPTConfig(
+        model_provider = GPTModelProvider(
             num_layers=1,
             hidden_size=64,
             num_attention_heads=2,
@@ -840,7 +839,7 @@ class TestLoRAMegatronIntegration:
             ffn_hidden_size=128,
         )
 
-        base_model = get_base_model(config)
+        base_model = model_provider.get_model(wrap_with_ddp=False)
 
         # Ensure model is on CUDA if available
         if torch.cuda.is_available():
