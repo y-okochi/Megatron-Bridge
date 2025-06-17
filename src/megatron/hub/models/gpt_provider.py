@@ -16,8 +16,9 @@ from megatron.core.models.gpt.gpt_layer_specs import (
 from megatron.core.transformer import ModuleSpec
 from megatron.core.transformer.module import MegatronModule
 from megatron.core.transformer.transformer_config import TransformerConfig
-from megatron.core.utils import get_te_version, is_te_min_version
+from megatron.core.utils import get_te_version
 from mhub.hub._lib.mixins.model_mixin import ModelProviderMixin
+
 from megatron.hub.core.utils import fusions
 
 
@@ -32,7 +33,6 @@ try:
 except ImportError:
     HAVE_TE = False
     TE_VERSION = None
-
 
 
 @dataclass
@@ -53,7 +53,7 @@ class GPTModelProvider(TransformerConfig, ModelProviderMixin[MCoreGPTModel]):
     rotary_percent: float = 1.0
     seq_len_interpolation_factor: Optional[float] = None
     seq_length: int = 1024
-    attention_softmax_in_fp32: bool = False    
+    attention_softmax_in_fp32: bool = False
     deallocate_pipeline_outputs: bool = True
     scatter_embedding_sequence_parallel: bool = True
     tp_only_amax_red: bool = False
@@ -258,8 +258,6 @@ def mtp_block_spec(config: "GPTModelProvider") -> Optional[ModuleSpec]:
     from megatron.core.models.gpt.gpt_layer_specs import get_mtp_layer_spec
 
     return get_mtp_layer_spec()
-
-
 
 
 @dataclass

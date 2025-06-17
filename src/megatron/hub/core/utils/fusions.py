@@ -8,6 +8,7 @@ import logging
 import os
 from typing import TYPE_CHECKING
 
+
 if TYPE_CHECKING:
     from megatron.hub.models.gpt_provider import GPTModelProvider
 
@@ -20,7 +21,7 @@ LOG_FUSION_DISABLE = os.environ.get("MEGATRON_SUPPRESS_FUSION_WARNINGS", "0") !=
 
 def can_enable_apply_rope_fusion() -> bool:
     """Check if RoPE (Rotary Position Embedding) fusion can be enabled.
-    
+
     Returns:
         bool: True if RoPE fusion is available and compatible.
     """
@@ -28,7 +29,7 @@ def can_enable_apply_rope_fusion() -> bool:
     try:
         import transformer_engine  # noqa: F401
         from megatron.core.utils import get_te_version, is_te_min_version
-        
+
         if not is_te_min_version("2.2.0.dev0"):
             if LOG_FUSION_DISABLE:
                 logger.warning(
@@ -38,25 +39,19 @@ def can_enable_apply_rope_fusion() -> bool:
             return False
     except ImportError:
         if LOG_FUSION_DISABLE:
-            logger.warning(
-                "apply_rope_fusion requires Transformer Engine but it is not installed. "
-                "Fusion disabled."
-            )
+            logger.warning("apply_rope_fusion requires Transformer Engine but it is not installed. Fusion disabled.")
         return False
-    
+
     # Check for RoPE fusion kernel availability
     try:
         from megatron.core.models.common.embeddings.rope_utils import (
             fused_apply_rotary_pos_emb,
             fused_apply_rotary_pos_emb_thd,
         )
-        
+
         if fused_apply_rotary_pos_emb is None and fused_apply_rotary_pos_emb_thd is None:
             if LOG_FUSION_DISABLE:
-                logger.warning(
-                    "apply_rope_fusion kernels are not available in megatron.core. "
-                    "Fusion disabled."
-                )
+                logger.warning("apply_rope_fusion kernels are not available in megatron.core. Fusion disabled.")
             return False
         return True
     except ImportError:
@@ -70,12 +65,13 @@ def can_enable_apply_rope_fusion() -> bool:
 
 def can_enable_gradient_accumulation_fusion() -> bool:
     """Check if gradient accumulation fusion can be enabled.
-    
+
     Returns:
         bool: True if gradient accumulation fusion is available.
     """
     try:
         from megatron.core.fusions.fused_layer_norm import FusedLayerNorm  # noqa: F401
+
         return True
     except ImportError:
         if LOG_FUSION_DISABLE:
@@ -86,16 +82,15 @@ def can_enable_gradient_accumulation_fusion() -> bool:
         return False
 
 
-
-
 def can_enable_bias_dropout_fusion() -> bool:
     """Check if bias dropout fusion can be enabled.
-    
+
     Returns:
         bool: True if bias dropout fusion is available.
     """
     try:
         from megatron.core.fusions.fused_bias_dropout import bias_dropout_add_fused_train  # noqa: F401
+
         return True
     except ImportError:
         if LOG_FUSION_DISABLE:
@@ -108,16 +103,16 @@ def can_enable_bias_dropout_fusion() -> bool:
 
 def validate_rope_fusion_compatibility(model_provider: "GPTModelProvider") -> bool:
     """Validate if RoPE fusion is compatible with the current model configuration.
-    
+
     Args:
         model_provider: The GPTModelProvider instance to validate.
-        
+
     Returns:
         bool: True if RoPE fusion is compatible, False otherwise.
     """
     if not model_provider.apply_rope_fusion:
         return True
-    
+
     # Check for multi_latent_attention incompatibility
     if getattr(model_provider, "multi_latent_attention", False):
         if LOG_FUSION_DISABLE:
@@ -126,12 +121,12 @@ def validate_rope_fusion_compatibility(model_provider: "GPTModelProvider") -> bo
                 "Consider disabling apply_rope_fusion."
             )
         return False
-    
+
     # Check TE version for rotary_interleaved
     if getattr(model_provider, "rotary_interleaved", False):
         try:
             from megatron.core.utils import get_te_version, is_te_min_version
-            
+
             if not is_te_min_version("2.2.0.dev0"):
                 if LOG_FUSION_DISABLE:
                     logger.warning(
@@ -146,5 +141,5 @@ def validate_rope_fusion_compatibility(model_provider: "GPTModelProvider") -> bo
                     "Consider disabling apply_rope_fusion."
                 )
             return False
-    
+
     return True
