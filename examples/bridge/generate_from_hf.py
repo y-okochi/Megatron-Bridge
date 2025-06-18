@@ -33,9 +33,20 @@ def generate_sequence(prompt, model, hf_model_path, max_new_tokens=100):
         with torch.no_grad():
             model[0].cuda()
             output = model[0].module(cur_input_ids, cur_position_ids, cur_attention_mask)
-
+            
         # Get the next token
         next_token = output.argmax(dim=-1)[:, -1]
+        
+        # Debug: print output statistics
+        if _ < 10:  # Only for first few iterations
+            print(f"\nStep {_}: input shape={cur_input_ids.shape}, pos_ids={cur_position_ids[0].tolist()}")
+            print(f"Output shape: {output.shape}, var={output.var():.4f}")
+            # Get top 5 predictions
+            logits = output[0, -1, :]
+            top5_vals, top5_ids = torch.topk(logits, 5)
+            top5_tokens = [tokenizer.decode([idx]) for idx in top5_ids]
+            print(f"Top 5: {list(zip(top5_tokens, top5_vals.tolist()))}")
+            print(f"Selected: '{tokenizer.decode([next_token.item()])}' (id={next_token.item()})")
         generated_tokens.append(next_token.item())
 
         # Stop if EOS token is generated
@@ -43,7 +54,7 @@ def generate_sequence(prompt, model, hf_model_path, max_new_tokens=100):
             break
 
         # Update input sequence
-        cur_input_ids = torch.cat([cur_input_ids, next_token.unsqueeze(0)], dim=1)
+        cur_input_ids = torch.cat([input_ids, torch.tensor([generated_tokens], device=input_ids.device)], dim=1)
         cur_position_ids = torch.arange(cur_input_ids.shape[1], device=cur_input_ids.device).unsqueeze(0)
         cur_attention_mask = torch.ones_like(cur_input_ids, dtype=torch.bool)
 

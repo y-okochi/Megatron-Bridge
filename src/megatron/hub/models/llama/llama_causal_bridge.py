@@ -1,3 +1,5 @@
+from functools import partial
+
 import torch
 from megatron.core.models.gpt.gpt_model import GPTModel
 from transformers import LlamaForCausalLM
@@ -10,7 +12,7 @@ from megatron.hub.bridge.weight_bridge import (
     QKVWeightBridge,
     TPAwareWeightBridge,
 )
-from megatron.hub.models.llama.llama_provider import LlamaModelProvider
+from megatron.hub.models.llama.llama_provider import LlamaModelProvider, Llama31ModelProvider
 
 
 @MegatronModelBridge.impl(source=LlamaForCausalLM, target=GPTModel)
@@ -22,13 +24,13 @@ class MegatronCausalLlamaBridge(MegatronModelBridge):
     def provider_bridge(self, hf_pretrained: PreTrainedCausalLM) -> LlamaModelProvider:
         hf_config = hf_pretrained.config
 
-        # if getattr(hf_config, 'rope_scaling', None) is not None and hf_config.rope_scaling.get('rope_type') == 'llama3':
-        #     # Apply Llama3.1 customize rope scaling
-        #     cls = partial(Llama31Config, scale_factor=source.rope_scaling.get("factor", 8.0))
-        # else:
-        #     cls = LlamaConfig
+        if getattr(hf_config, 'rope_scaling', None) is not None and hf_config.rope_scaling.get('rope_type') == 'llama3':
+            # Apply Llama3.1 customize rope scaling
+            cls = partial(Llama31ModelProvider, scale_factor=hf_config.rope_scaling.get("factor", 8.0))
+        else:
+            cls = LlamaModelProvider
 
-        provider = LlamaModelProvider(
+        provider = cls(
             num_layers=hf_config.num_hidden_layers,
             hidden_size=hf_config.hidden_size,
             ffn_hidden_size=hf_config.intermediate_size,

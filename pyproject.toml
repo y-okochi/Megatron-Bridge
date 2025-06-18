@@ -131,9 +131,9 @@ eval = [
 recipes = [
     "nemo-run",
 ]
-nemo-legacy = [
-    "nemo-toolkit[automodel,common-only,nlp-only,eval,multimodal-only]",
-]
+# nemo-legacy = [
+#     "nemo-toolkit[automodel,common-only,nlp-only,eval,multimodal-only]",
+# ]
 
 [project.entry-points."nemo_run.cli"]
 lm = "megatron.hub"

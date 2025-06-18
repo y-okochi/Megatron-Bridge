@@ -138,7 +138,7 @@ class Llama31ModelProvider(LlamaModelProvider):
         Returns:
             MCoreGPTModel: Configured Megatron Core GPT model instance
         """
-        model = super().provide(tokenizer, pre_process, post_process)
+        model = super().provide(pre_process=pre_process, post_process=post_process, tokenizer=tokenizer)
         # Apply rope scaling for Llama3.1 model
         model.rotary_pos_emb.inv_freq = apply_rope_scaling(
             model.rotary_pos_emb.inv_freq,
