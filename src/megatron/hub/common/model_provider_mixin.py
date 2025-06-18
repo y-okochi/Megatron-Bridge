@@ -9,14 +9,14 @@ from megatron.core.enums import ModelType
 from megatron.core.tensor_parallel.random import model_parallel_cuda_manual_seed
 from megatron.core.transformer.module import MegatronModule
 
-from megatron.hub.common.mixins.config_mixin import ConfigMixin
+from megatron.hub.common.config import ConfigProtocol, from_pretrained, save_pretrained
 from megatron.hub.core.models.model_provider import get_model
 
 
 ModelT = TypeVar("ModelT", bound=MegatronModule)
 
 
-class ModelProviderMixin(abc.ABC, Generic[ModelT], ConfigMixin):
+class ModelProviderMixin(abc.ABC, Generic[ModelT]):
     """Mixin class for providing Megatron model instances.
 
     This abstract base class provides functionality to create and configure
@@ -26,6 +26,7 @@ class ModelProviderMixin(abc.ABC, Generic[ModelT], ConfigMixin):
     """
 
     CONFIG_NAME = "mhub_model.json"
+    DEFAULT_CONFIG_FORMAT = "json"
 
     @abc.abstractmethod
     def provide(self, pre_process=None, post_process=None) -> ModelT:
@@ -133,3 +134,47 @@ class ModelProviderMixin(abc.ABC, Generic[ModelT], ConfigMixin):
     @property
     def meta_model(self) -> list[ModelT]:
         return self(wrap_with_ddp=False, init_model_with_meta_device=True)
+
+    @classmethod
+    def from_pretrained(
+        cls,
+        pretrained_model_name_or_path,
+        trust_remote_code: bool = False,
+        mode=None,
+        config_name: str | None = None,
+        **kwargs,
+    ):
+        """Load a pretrained model configuration from a directory or file."""
+        if config_name is None:
+            config_name = cls.CONFIG_NAME.rsplit(".", 1)[0]
+        if mode is None:
+            from megatron.hub.core.utils.instantiate_utils import InstantiationMode
+            mode = InstantiationMode.LENIENT
+        return from_pretrained(
+            cls,
+            pretrained_model_name_or_path,
+            trust_remote_code=trust_remote_code,
+            mode=mode,
+            config_name=config_name,
+            **kwargs
+        )
+
+    def save_pretrained(
+        self,
+        save_directory,
+        config_format: str | None = None,
+        config_name: str | None = None,
+        **kwargs,
+    ):
+        """Save the model configuration to a directory."""
+        if config_name is None:
+            config_name = self.CONFIG_NAME.rsplit(".", 1)[0]
+        if config_format is None:
+            config_format = self.DEFAULT_CONFIG_FORMAT
+        return save_pretrained(
+            self,
+            save_directory,
+            config_format=config_format,
+            config_name=config_name,
+            **kwargs
+        )
