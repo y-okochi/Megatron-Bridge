@@ -24,7 +24,7 @@ from megatron.hub.data.builders.finetuning_dataset import FinetuningDatasetBuild
 from megatron.hub.data.builders.hf_dataset import HFDatasetBuilder, HFDatasetConfig
 from megatron.hub.training.config import DataloaderConfig, FinetuningDatasetConfig, GPTDatasetConfig
 from megatron.hub.training.tokenizers.tokenizer import MegatronTokenizer
-from megatron.hub.utils.common_utils import print_rank_0
+from megatron.hub.core.utils.common_utils import print_rank_0
 
 
 def is_dataset_built_on_rank() -> bool:
