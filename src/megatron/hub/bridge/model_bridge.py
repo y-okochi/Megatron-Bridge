@@ -100,7 +100,7 @@ class _HFLoadTask(Generic[MappingT]):
         megatron_param (torch.Tensor): The actual :pyclass:`torch.nn.Parameter`
             object which will receive the shard on *this* process after the
             bridge finishes any TP/PP communication.
-        bridge (MappingT): Concrete :pyclass:`MegatronParamMapping`
+        mapping (MappingT): Concrete :pyclass:`MegatronParamMapping`
             instance responsible for all heavy-lifting (format conversion,
             TP scatter, PP broadcast).
     """
@@ -109,7 +109,7 @@ class _HFLoadTask(Generic[MappingT]):
     param_name: str
     megatron_module: torch.nn.Module
     megatron_param: torch.Tensor
-    bridge: MappingT
+    mapping: MappingT
 
     def to_megatron(
         self,
@@ -117,7 +117,7 @@ class _HFLoadTask(Generic[MappingT]):
         megatron_module: torch.nn.Module,
     ) -> torch.Tensor:
         """Forward to the underlying bridge's `to_megatron`."""
-        return self.bridge.to_megatron(weights, megatron_module)
+        return self.mapping.to_megatron(weights, megatron_module)
 
 
 @dataclass(frozen=True)
@@ -130,7 +130,7 @@ class _HFSaveTask(Generic[MappingT]):
             is built with VP, otherwise ``None``.
         param_name (str): Fully-qualified, *unwrapped* Megatron parameter name
             to export.
-        bridge (MappingT): :pyclass:`MegatronParamMapping` instance which
+        mapping (MappingT): :pyclass:`MegatronParamMapping` instance which
             will gather TP shards, broadcast from the owning PP rank, perform
             any reshaping, and finally return a ``dict[str, Tensor]`` mapping
             HF keys → tensors.
@@ -139,7 +139,7 @@ class _HFSaveTask(Generic[MappingT]):
     pp_rank: int
     vp_stage: Optional[int]
     param_name: str
-    bridge: MappingT
+    mapping: MappingT
 
     def from_megatron(
         self,
@@ -147,7 +147,7 @@ class _HFSaveTask(Generic[MappingT]):
         megatron_module: Optional[torch.nn.Module],
     ) -> Dict[str, torch.Tensor]:
         """Forward to the underlying bridge's `from_megatron`."""
-        return self.bridge.from_megatron(megatron_weight, megatron_module)
+        return self.mapping.from_megatron(megatron_weight, megatron_module)
 
 
 HFPreTrained = TypeVar("HFPreTrained")
@@ -437,10 +437,10 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
 
             for task in load_plan:
                 # 1) Fetch source tensor(s) from HF state dict
-                if isinstance(task.bridge.hf_param, str):
-                    megatron_weights = state_accessor[task.bridge.hf_param]
+                if isinstance(task.mapping.hf_param, str):
+                    megatron_weights = state_accessor[task.mapping.hf_param]
                 else:
-                    megatron_weights = {k: state_accessor[v] for k, v in task.bridge.hf_param.items()}
+                    megatron_weights = {k: state_accessor[v] for k, v in task.mapping.hf_param.items()}
 
                 # 2) Delegate conversion & distribution to the bridge
                 weight_local = task.to_megatron(megatron_weights, task.megatron_module)
@@ -450,11 +450,11 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
                     # Check shape compatibility before copying
                     if weight_local.shape != task.megatron_param.shape:
                         raise ValueError(
-                            f"Shape mismatch for {task.bridge.megatron_param}:\n"
+                            f"Shape mismatch for {task.mapping.megatron_param}:\n"
                             f"  Expected shape: {task.megatron_param.shape}\n"
                             f"  Got shape: {weight_local.shape}\n"
-                            f"  Bridge type: {type(task.bridge).__name__}\n"
-                            f"  HF mapping: {task.bridge.hf_param}"
+                            f"  Bridge type: {type(task.mapping).__name__}\n"
+                            f"  HF mapping: {task.mapping.hf_param}"
                         )
                     task.megatron_param.data.copy_(weight_local)
 
@@ -495,10 +495,10 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
 
         for task in self._build_plan_from_hf(src, dst):
             accessor: Mapping[str, torch.Tensor] = src.state
-            if isinstance(task.bridge.hf_param, str):
-                src_weights = accessor[task.bridge.hf_param]
+            if isinstance(task.mapping.hf_param, str):
+                src_weights = accessor[task.mapping.hf_param]
             else:
-                src_weights = {k: accessor[v] for k, v in task.bridge.hf_param.items()}
+                src_weights = {k: accessor[v] for k, v in task.mapping.hf_param.items()}
 
             shard = task.to_megatron(src_weights, task.megatron_module)
             if shard is not None:
@@ -904,16 +904,16 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
 
                 global_name = self._adjust_name_for_vp(name, layer_offset)
                 unwrapped = self._unwrap_name(global_name)
-                bridge = mapping_registry.megatron_to_hf_lookup(unwrapped)
-                if not bridge:
+                mapping = mapping_registry.megatron_to_hf_lookup(unwrapped)
+                if not mapping:
                     continue
 
                 # ensure src weights exist
-                if isinstance(bridge.hf_param, str):
-                    if bridge.hf_param not in state_accessor:
+                if isinstance(mapping.hf_param, str):
+                    if mapping.hf_param not in state_accessor:
                         continue
                 else:
-                    if any(v not in state_accessor for v in bridge.hf_param.values()):
+                    if any(v not in state_accessor for v in mapping.hf_param.values()):
                         continue
 
                 owner_module = self._unwrap_model(model)
@@ -925,7 +925,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
                     param_name=self._unwrap_name(name),
                     megatron_module=owner_module,
                     megatron_param=param,
-                    bridge=bridge,
+                    mapping=mapping,
                 )
 
     def _build_plan_to_hf(
@@ -957,9 +957,9 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
             registry = self.mapping_registry()
             for pp_rank, vp_stage, name in self._collect_all_params(megatron_models):
                 unwrapped = self._unwrap_name(name)
-                bridge = registry.megatron_to_hf_lookup(unwrapped)
-                if bridge:
-                    yield _HFSaveTask(pp_rank, vp_stage, unwrapped, bridge)
+                mapping = registry.megatron_to_hf_lookup(unwrapped)
+                if mapping:
+                    yield _HFSaveTask(pp_rank, vp_stage, unwrapped, mapping)
             return
 
         # --- Otherwise: follow HF / safetensors order --------------------------------
@@ -990,13 +990,11 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
             param_locations[unwrapped_name].append((pp_rank, vp_stage, param_name))
 
         for hf_key in hf_keys:
-            bridge = registry.hf_to_megatron_lookup(hf_key)
-            if not bridge:
-                if hf_key == "model.layers.0.mlp.gate_proj.weight":
-                    bridge = registry.hf_to_megatron_lookup(hf_key)
+            mapping = registry.hf_to_megatron_lookup(hf_key)
+            if not mapping:
                 continue
 
-            src_name = bridge.megatron_param if hasattr(bridge, "megatron_param") else None
+            src_name = mapping.megatron_param if hasattr(mapping, "megatron_param") else None
             if not src_name or src_name in emitted:
                 continue
 
@@ -1005,7 +1003,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
 
             emitted.add(src_name)
             pp, vp, _ = sorted(param_locations[src_name])[0]
-            yield _HFSaveTask(pp, vp, src_name, bridge)
+            yield _HFSaveTask(pp, vp, src_name, mapping)
 
 
 def is_tensor_parallel(param) -> bool:
