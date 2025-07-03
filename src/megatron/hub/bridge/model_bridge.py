@@ -954,10 +954,10 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         """
 
         if order == "megatron":
-            sb = self.mapping_registry()
+            registry = self.mapping_registry()
             for pp_rank, vp_stage, name in self._collect_all_params(megatron_models):
                 unwrapped = self._unwrap_name(name)
-                bridge = sb.megatron_to_hf_lookup(unwrapped)
+                bridge = registry.megatron_to_hf_lookup(unwrapped)
                 if bridge:
                     yield _HFSaveTask(pp_rank, vp_stage, unwrapped, bridge)
             return
@@ -981,7 +981,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         else:
             raise ValueError(f"Invalid order: {order}, supported orders are 'megatron', 'hf' and 'safetensors'")
 
-        sb = self.mapping_registry()
+        registry = self.mapping_registry()
         emitted = set()
 
         param_locations = defaultdict(list)
@@ -990,10 +990,10 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
             param_locations[unwrapped_name].append((pp_rank, vp_stage, param_name))
 
         for hf_key in hf_keys:
-            bridge = sb.hf_to_megatron_lookup(hf_key)
+            bridge = registry.hf_to_megatron_lookup(hf_key)
             if not bridge:
                 if hf_key == "model.layers.0.mlp.gate_proj.weight":
-                    bridge = sb.hf_to_megatron_lookup(hf_key)
+                    bridge = registry.hf_to_megatron_lookup(hf_key)
                 continue
 
             src_name = bridge.megatron_param if hasattr(bridge, "megatron_param") else None

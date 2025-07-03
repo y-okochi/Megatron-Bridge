@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import re
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
 from megatron.hub.bridge.param_mapping import MegatronParamMapping
 
