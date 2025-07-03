@@ -90,7 +90,7 @@ class _HFLoadTask(Generic[MappingT]):
 
     Attributes:
         model_idx (int): Index into the `dst` list passed to
-            :py:meth:`MegatronModelBridge.load_state_from_hf`.
+            :py:meth:`MegatronModelBridge.load_weights_hf_to_megatron`.
         param_name (str): Fully-qualified, *unwrapped* Megatron parameter name
             (no ``module.`` prefixes).
         megatron_module (torch.nn.Module): Reference to the Megatron model (or
@@ -163,7 +163,7 @@ def get_model_bridge(hf_architecture) -> "MegatronModelBridge":
 
 
 @dispatch
-def bridge_state_to_hf(
+def stream_weights_megatron_to_hf(
     first_model: MegatronModel,
     model: list[MegatronModel],
     hf_pretrained: HFPreTrained,
@@ -291,7 +291,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
                 bridge = decorated_class()
                 return bridge
 
-            @bridge_state_to_hf.impl((source, target))
+            @stream_weights_megatron_to_hf.impl((source, target))
             def _from_megatron_registered_impl(
                 _,
                 megatron_models: List[MegatronModel],
@@ -302,7 +302,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
                 mode: Union[str, WeightDistributionMode] = WeightDistributionMode.CONSOLIDATE,
             ) -> Iterable[HFWeightTuple]:
                 bridge = decorated_class()
-                return bridge.bridge_state_to_hf(
+                return bridge.stream_weights_megatron_to_hf(
                     megatron_models, hf_pretrained, cpu=cpu, order=order, show_progress=show_progress, mode=mode
                 )
 
@@ -376,7 +376,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         """
         raise NotImplementedError("Subclass must implement mapping_registry method")
 
-    def load_state_from_hf(self, src: HFPreTrained, dst: list[MegatronModel]) -> list[MegatronModel]:
+    def load_weights_hf_to_megatron(self, src: HFPreTrained, dst: list[MegatronModel]) -> list[MegatronModel]:
         """Load HuggingFace weights into Megatron models.
 
         This method orchestrates the complete weight loading process from HuggingFace
@@ -408,16 +408,16 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
 
                 hf_model = PreTrainedCausalLM.from_pretrained("gpt2")
                 megatron_models = [create_megatron_model()]
-                bridge.load_state_from_hf(hf_model, megatron_models)
+                bridge.load_weights_hf_to_megatron(hf_model, megatron_models)
 
         Note:
             Progress is shown only on rank 0 to avoid cluttered output in
             distributed environments.
         """
 
-        load_plan = list(self._build_plan_from_hf(src, dst))
+        load_plan = list(self._build_plan_hf_to_megatron(src, dst))
 
-        state_accessor: Mapping[str, torch.Tensor] = src.state if hasattr(src, "state") else {}
+        hf_state_dict: Mapping[str, torch.Tensor] = src.state if hasattr(src, "state") else {}
 
         is_main_rank = not torch.distributed.is_initialized() or torch.distributed.get_rank() == 0
         bridge_name = self.__class__.__name__
@@ -438,9 +438,9 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
             for task in load_plan:
                 # 1) Fetch source tensor(s) from HF state dict
                 if isinstance(task.mapping.hf_param, str):
-                    megatron_weights = state_accessor[task.mapping.hf_param]
+                    megatron_weights = hf_state_dict[task.mapping.hf_param]
                 else:
-                    megatron_weights = {k: state_accessor[v] for k, v in task.mapping.hf_param.items()}
+                    megatron_weights = {k: hf_state_dict[v] for k, v in task.mapping.hf_param.items()}
 
                 # 2) Delegate conversion & distribution to the bridge
                 weight_local = task.to_megatron(megatron_weights, task.megatron_module)
@@ -462,8 +462,8 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
 
         return dst
 
-    def bridge_state_from_hf(self, src: HFPreTrained, dst: List[MegatronModel]) -> Iterable[MegatronWeightTuple]:
-        """Generator variant of load_state_from_hf for streaming weight conversion.
+    def stream_weights_hf_to_megatron(self, src: HFPreTrained, dst: List[MegatronModel]) -> Iterable[MegatronWeightTuple]:
+        """Generator variant of load_weights_hf_to_megatron for streaming weight conversion.
 
         This method provides a memory-efficient way to convert weights by yielding
         them one at a time instead of loading all at once. Useful for processing
@@ -485,7 +485,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
             .. code-block:: python
 
                 # Process weights one by one
-                for weight_tuple in bridge.bridge_state_from_hf(hf_model, megatron_models):
+                for weight_tuple in bridge.stream_weights_hf_to_megatron(hf_model, megatron_models):
                     print(f"Processing {weight_tuple.param_name}: {weight_tuple.weight.shape}")
                     # Custom processing logic here
 
@@ -493,7 +493,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
             Only yields weights that belong to the current rank after TP/PP distribution.
         """
 
-        for task in self._build_plan_from_hf(src, dst):
+        for task in self._build_plan_hf_to_megatron(src, dst):
             accessor: Mapping[str, torch.Tensor] = src.state
             if isinstance(task.mapping.hf_param, str):
                 src_weights = accessor[task.mapping.hf_param]
@@ -504,7 +504,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
             if shard is not None:
                 yield MegatronWeightTuple(task.model_idx, task.param_name, shard)
 
-    def bridge_state_to_hf(
+    def stream_weights_megatron_to_hf(
         self,
         src: List[MegatronModel],
         hf_pretrained: HFPreTrained,
@@ -546,11 +546,11 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
             .. code-block:: python
 
                 # Export weights with default settings
-                for name, weight in bridge.bridge_state_to_hf(megatron_models, hf_config):
+                for name, weight in bridge.stream_weights_megatron_to_hf(megatron_models, hf_config):
                     print(f"Exported {name}: {weight.shape}")
 
                 # Export with all ranks getting weights
-                weights = list(bridge.bridge_state_to_hf(
+                weights = list(bridge.stream_weights_megatron_to_hf(
                     megatron_models, hf_config,
                     mode=WeightDistributionMode.REPLICATE
                 ))
@@ -578,7 +578,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
             else:
                 raise ValueError(f"Invalid mode: {mode}. Must be one of: replicate, consolidate, distribute")
 
-        save_plan = list(self._build_plan_to_hf(src, hf_pretrained, order))
+        save_plan = list(self._build_plan_megatron_to_hf(src, hf_pretrained, order))
 
         is_main_rank = not torch.distributed.is_initialized() or torch.distributed.get_rank() == 0
         bridge_name = self.__class__.__name__
@@ -883,7 +883,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         # TODO: Implement global layer number adjustment for VP
         return param_name
 
-    def _build_plan_from_hf(self, hf_src: HFPreTrained, megatron_models: list[MegatronModel]) -> Iterable[_HFLoadTask]:
+    def _build_plan_hf_to_megatron(self, hf_src: HFPreTrained, megatron_models: list[MegatronModel]) -> Iterable[_HFLoadTask]:
         """Construct the *HF ➜ Megatron* load plan.
 
         The algorithm walks over every parameter of every destination model,
@@ -894,7 +894,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         """
 
         mapping_registry = self.mapping_registry()
-        state_accessor = hf_src.state if hasattr(hf_src, "state") else {}
+        hf_state_dict = hf_src.state if hasattr(hf_src, "state") else {}
 
         for model_idx, model in enumerate(megatron_models):
             layer_offset = self._get_layer_offset(model, model_idx)
@@ -903,21 +903,21 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
                     continue
 
                 global_name = self._adjust_name_for_vp(name, layer_offset)
-                unwrapped = self._unwrap_name(global_name)
-                mapping = mapping_registry.megatron_to_hf_lookup(unwrapped)
+                unwrapped_name = self._unwrap_name(global_name)
+                mapping = mapping_registry.megatron_to_hf_lookup(unwrapped_name)
                 if not mapping:
                     continue
 
                 # ensure src weights exist
                 if isinstance(mapping.hf_param, str):
-                    if mapping.hf_param not in state_accessor:
+                    if mapping.hf_param not in hf_state_dict:
                         continue
                 else:
-                    if any(v not in state_accessor for v in mapping.hf_param.values()):
+                    if any(v not in hf_state_dict for v in mapping.hf_param.values()):
                         continue
 
                 owner_module = self._unwrap_model(model)
-                for part in unwrapped.split(".")[:-1]:
+                for part in unwrapped_name.split(".")[:-1]:
                     owner_module = getattr(owner_module, part)
 
                 yield _HFLoadTask(
@@ -928,7 +928,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
                     mapping=mapping,
                 )
 
-    def _build_plan_to_hf(
+    def _build_plan_megatron_to_hf(
         self,
         megatron_models: list[MegatronModel],
         hf_pretrained: HFPreTrained,
@@ -954,12 +954,12 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         """
 
         if order == "megatron":
-            registry = self.mapping_registry()
+            mapping_registry = self.mapping_registry()
             for pp_rank, vp_stage, name in self._collect_all_params(megatron_models):
-                unwrapped = self._unwrap_name(name)
-                mapping = registry.megatron_to_hf_lookup(unwrapped)
+                unwrapped_name = self._unwrap_name(name)
+                mapping = mapping_registry.megatron_to_hf_lookup(unwrapped_name)
                 if mapping:
-                    yield _HFSaveTask(pp_rank, vp_stage, unwrapped, mapping)
+                    yield _HFSaveTask(pp_rank, vp_stage, unwrapped_name, mapping)
             return
 
         # --- Otherwise: follow HF / safetensors order --------------------------------
@@ -981,7 +981,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         else:
             raise ValueError(f"Invalid order: {order}, supported orders are 'megatron', 'hf' and 'safetensors'")
 
-        registry = self.mapping_registry()
+        mapping_registry = self.mapping_registry()
         emitted = set()
 
         param_locations = defaultdict(list)
@@ -990,7 +990,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
             param_locations[unwrapped_name].append((pp_rank, vp_stage, param_name))
 
         for hf_key in hf_keys:
-            mapping = registry.hf_to_megatron_lookup(hf_key)
+            mapping = mapping_registry.hf_to_megatron_lookup(hf_key)
             if not mapping:
                 continue
 

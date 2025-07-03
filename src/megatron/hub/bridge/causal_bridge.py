@@ -321,7 +321,7 @@ class CausalLMBridge(Generic[MegatronModelT]):
             ... ))
         """
         query = (self._get_causal_lm_architecture(), self._get_model_instance(model))
-        return model_bridge.bridge_state_to_hf(
+        return model_bridge.stream_weights_megatron_to_hf(
             query, model, self.hf_pretrained, order=order, cpu=cpu, show_progress=show_progress, mode=mode
         )
 
@@ -403,7 +403,7 @@ class CausalLMBridge(Generic[MegatronModelT]):
         if torch.distributed.is_available() and torch.distributed.is_initialized():
             torch.distributed.barrier()
         query = (self._get_causal_lm_architecture(), self._get_model_instance(model))
-        generator = model_bridge.bridge_state_to_hf(
+        generator = model_bridge.stream_weights_megatron_to_hf(
             query, model, self.hf_pretrained, order="safetensors", cpu=True, show_progress=show_progress
         )
 
@@ -421,9 +421,6 @@ class CausalLMBridge(Generic[MegatronModelT]):
             torch.distributed.barrier()
 
     def push_to_hub(self, path: str | Path) -> None: ...
-
-    def bridge_state_to_megatron(self) -> Iterable[model_bridge.MegatronWeightTuple]:
-        return self._model_bridge.bridge_state_to_megatron(self.hf_pretrained)
 
     def to_model(
         self,
@@ -478,11 +475,11 @@ class CausalLMBridge(Generic[MegatronModelT]):
 
         if load_weights:
             if hf_path is None:
-                provider.register_pre_wrap_hook(partial(self._model_bridge.load_state_from_hf, self.hf_pretrained))
+                provider.register_pre_wrap_hook(partial(self._model_bridge.load_weights_hf_to_megatron, self.hf_pretrained))
             else:
                 # Load from specified path
                 pre_trained = PreTrainedCausalLM.from_pretrained(hf_path)
-                provider.register_pre_wrap_hook(partial(self._model_bridge.load_state_from_hf, pre_trained))
+                provider.register_pre_wrap_hook(partial(self._model_bridge.load_weights_hf_to_megatron, pre_trained))
 
         return provider
 
