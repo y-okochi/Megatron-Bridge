@@ -50,11 +50,11 @@ class MegatronStateBridge:
         ... )
 
         >>> # Query for a specific layer (wildcards are resolved)
-        >>> mapping = weight_map.query_megatron("decoder.layers.0.self_attention.linear_qkv.weight")
+        >>> mapping = weight_map.megatron_to_hf_lookup("decoder.layers.0.self_attention.linear_qkv.weight")
         >>> print(mapping.hf_param)  # Will show resolved HF names for layer 0
 
         >>> # Reverse lookup from HF name
-        >>> mapping = weight_map.query_to("model.layers.5.self_attn.q_proj.weight")
+        >>> mapping = weight_map.hf_to_megatron_lookup("model.layers.5.self_attn.q_proj.weight")
         >>> print(mapping.megatron_param)  # Shows corresponding Megatron name
 
         >>> # Build from a list
@@ -110,7 +110,7 @@ class MegatronStateBridge:
                         reverse_dict_patterns[key] = None
                 self._reverse_patterns.append((reverse_dict_patterns, mapping))
 
-    def query_megatron(self, megatron_name: str) -> Optional[MegatronParamMapping]:
+    def megatron_to_hf_lookup(self, megatron_name: str) -> Optional[MegatronParamMapping]:
         """
         Get mapping for a Megatron parameter name.
 
@@ -129,7 +129,7 @@ class MegatronStateBridge:
 
         Example:
             >>> # Query with exact layer number
-            >>> bridge = state_map.query_megatron("decoder.layers.5.mlp.linear_fc1.weight")
+            >>> bridge = state_map.megatron_to_hf_lookup("decoder.layers.5.mlp.linear_fc1.weight")
             >>> if bridge:
             ...     print(f"Maps to: {bridge.hf_param}")  # Shows HF name for layer 5
         """
@@ -146,7 +146,7 @@ class MegatronStateBridge:
                     return self._resolve_mapping(mapping, match.groups())
         return None
 
-    def query_to(self, hf_param_name: str) -> Optional[MegatronParamMapping]:
+    def hf_to_megatron_lookup(self, hf_param_name: str) -> Optional[MegatronParamMapping]:
         """
         Get mapping for a destination parameter name (reverse lookup).
 

@@ -904,7 +904,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
 
                 global_name = self._adjust_name_for_vp(name, layer_offset)
                 unwrapped = self._unwrap_name(global_name)
-                bridge = state_bridge.query_megatron(unwrapped)
+                bridge = state_bridge.megatron_to_hf_lookup(unwrapped)
                 if not bridge:
                     continue
 
@@ -957,7 +957,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
             sb = self.state_bridge()
             for pp_rank, vp_stage, name in self._collect_all_params(megatron_models):
                 unwrapped = self._unwrap_name(name)
-                bridge = sb.query_megatron(unwrapped)
+                bridge = sb.megatron_to_hf_lookup(unwrapped)
                 if bridge:
                     yield _HFSaveTask(pp_rank, vp_stage, unwrapped, bridge)
             return
@@ -990,10 +990,10 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
             param_locations[unwrapped_name].append((pp_rank, vp_stage, param_name))
 
         for hf_key in hf_keys:
-            bridge = sb.query_to(hf_key)
+            bridge = sb.hf_to_megatron_lookup(hf_key)
             if not bridge:
                 if hf_key == "model.layers.0.mlp.gate_proj.weight":
-                    bridge = sb.query_to(hf_key)
+                    bridge = sb.hf_to_megatron_lookup(hf_key)
                 continue
 
             src_name = bridge.megatron_param if hasattr(bridge, "megatron_param") else None
