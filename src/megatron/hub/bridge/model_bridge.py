@@ -244,73 +244,6 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         - MegatronModel: The Megatron model type
     """
 
-    @classmethod
-    def register_bridge(
-        cls, *, source: Type[PreTrainedModel], target: Type[MegatronModel]
-    ) -> Callable[[_BridgeImplClass], _BridgeImplClass]:
-        """Class decorator for registering bridge implementations.
-
-        This decorator registers a MegatronModelBridge subclass with the dispatch
-        system, enabling automatic routing of conversions based on the source
-        HuggingFace model type and target Megatron model type.
-
-        Args:
-            source (Type[PreTrainedModel]): HuggingFace PreTrainedModel class
-                (e.g., LlamaForCausalLM).
-            target (Type[MegatronModel]): Megatron model class (e.g., GPTModel).
-
-        Returns:
-            Callable[[_BridgeImplClass], _BridgeImplClass]: Decorator function
-                that registers the bridge implementation.
-
-        Example:
-            .. code-block:: python
-
-                @MegatronModelBridge.register_bridge(source=LlamaForCausalLM, target=GPTModel)
-                class MegatronCausalLlamaBridge(MegatronModelBridge):
-                    def provider_bridge(self, hf_pretrained):
-                        # Implementation
-                        pass
-
-                    def mapping_registry(self):
-                        # Implementation
-                        pass
-
-        Note:
-            The decorated class is registered with multiple dispatchers to handle
-            different conversion scenarios. The registration is automatic when the
-            class is defined.
-        """
-
-        def decorator(decorated_class: _BridgeImplClass) -> _BridgeImplClass:
-            decorated_class_name = decorated_class.__name__
-
-            @get_model_bridge.impl(source)
-            def _get_model_bridge_impl(_) -> "MegatronModelBridge":
-                bridge = decorated_class()
-                return bridge
-
-            @stream_weights_megatron_to_hf.impl((source, target))
-            def _from_megatron_registered_impl(
-                megatron_models: List[MegatronModel],
-                hf_pretrained: HFPreTrained,
-                cpu: bool = True,
-                order: Literal["megatron", "hf", "safetensors"] = "safetensors",
-                show_progress: bool = True,
-                mode: Union[str, WeightDistributionMode] = WeightDistributionMode.CONSOLIDATE,
-            ) -> Iterable[HFWeightTuple]:
-                bridge = decorated_class()
-                return bridge.stream_weights_megatron_to_hf(
-                    megatron_models, hf_pretrained, cpu=cpu, order=order, show_progress=show_progress, mode=mode
-                )
-
-            _get_model_bridge_impl.__name__ = f"_bridge_with_{decorated_class_name}"
-            _from_megatron_registered_impl.__name__ = f"_from_megatron_with_{decorated_class_name}"
-
-            return decorated_class
-
-        return decorator
-
     @abc.abstractmethod
     def provider_bridge(self, hf_pretrained: HFPreTrained) -> ModelProviderTarget:
         """Create a Megatron model provider from HuggingFace configuration.
@@ -1002,6 +935,74 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
             emitted.add(src_name)
             pp, vp, _ = sorted(param_locations[src_name])[0]
             yield _HFSaveTask(pp, vp, src_name, mapping)
+
+
+    @classmethod
+    def register_bridge(
+        cls, *, source: Type[PreTrainedModel], target: Type[MegatronModel]
+    ) -> Callable[[_BridgeImplClass], _BridgeImplClass]:
+        """Class decorator for registering bridge implementations.
+
+        This decorator registers a MegatronModelBridge subclass with the dispatch
+        system, enabling automatic routing of conversions based on the source
+        HuggingFace model type and target Megatron model type.
+
+        Args:
+            source (Type[PreTrainedModel]): HuggingFace PreTrainedModel class
+                (e.g., LlamaForCausalLM).
+            target (Type[MegatronModel]): Megatron model class (e.g., GPTModel).
+
+        Returns:
+            Callable[[_BridgeImplClass], _BridgeImplClass]: Decorator function
+                that registers the bridge implementation.
+
+        Example:
+            .. code-block:: python
+
+                @MegatronModelBridge.register_bridge(source=LlamaForCausalLM, target=GPTModel)
+                class MegatronCausalLlamaBridge(MegatronModelBridge):
+                    def provider_bridge(self, hf_pretrained):
+                        # Implementation
+                        pass
+
+                    def mapping_registry(self):
+                        # Implementation
+                        pass
+
+        Note:
+            The decorated class is registered with multiple dispatchers to handle
+            different conversion scenarios. The registration is automatic when the
+            class is defined.
+        """
+
+        def decorator(decorated_class: _BridgeImplClass) -> _BridgeImplClass:
+            decorated_class_name = decorated_class.__name__
+
+            @get_model_bridge.impl(source)
+            def _get_model_bridge_impl(_) -> "MegatronModelBridge":
+                bridge = decorated_class()
+                return bridge
+
+            @stream_weights_megatron_to_hf.impl((source, target))
+            def _from_megatron_registered_impl(
+                megatron_models: List[MegatronModel],
+                hf_pretrained: HFPreTrained,
+                cpu: bool = True,
+                order: Literal["megatron", "hf", "safetensors"] = "safetensors",
+                show_progress: bool = True,
+                mode: Union[str, WeightDistributionMode] = WeightDistributionMode.CONSOLIDATE,
+            ) -> Iterable[HFWeightTuple]:
+                bridge = decorated_class()
+                return bridge.stream_weights_megatron_to_hf(
+                    megatron_models, hf_pretrained, cpu=cpu, order=order, show_progress=show_progress, mode=mode
+                )
+
+            _get_model_bridge_impl.__name__ = f"_bridge_with_{decorated_class_name}"
+            _from_megatron_registered_impl.__name__ = f"_from_megatron_with_{decorated_class_name}"
+
+            return decorated_class
+
+        return decorator
 
 
 def is_tensor_parallel(param) -> bool:
