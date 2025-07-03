@@ -240,7 +240,7 @@ class TestMegatronCausalLlamaBridge:
 
         # Check it's not None
         assert state_bridge is not None
-        # Check it has weight bridges (they are passed as args to __init__)
+        # Check it has param mappings (they are passed as args to __init__)
         # The state bridge should have embedding, layer norm, attention, and MLP mappings
         # We can't directly access _param_mappings, but we know it was created with them
 

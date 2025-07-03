@@ -92,7 +92,7 @@ class MegatronCausalLlamaBridge(MegatronModelBridge):
         )
 ```
 
-### Weight Bridge Strategies
+### Param Mapping Strategies
 
 Different weight transformation strategies handle various parallelism patterns:
 
@@ -170,7 +170,7 @@ layer_norm: [hidden] → [hidden] (same on all ranks)
 
 ### Custom Weight Transformations
 
-Create custom weight bridges for special formats:
+Create custom param mappings for special formats:
 
 ```python
 class MyCustomMapping(MegatronParamMapping):

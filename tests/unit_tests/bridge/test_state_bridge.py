@@ -21,7 +21,7 @@ from megatron.hub.bridge.param_mapping import DirectMapping, QKVMapping
 class TestMegatronStateBridge:
     @pytest.fixture
     def sample_mappings(self):
-        """Provides a sample list of weight bridge mappings."""
+        """Provides a sample list of param mapping mappings."""
         return [
             DirectMapping(
                 megatron_param="embedding.word_embeddings.weight",
