@@ -350,7 +350,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
 
         This abstract method must be implemented by subclasses to specify how
         parameters map between the two formats. The returned MegatronMappingRegistry
-        contains all weight bridges needed for the model architecture.
+        contains all param mappings needed for the model architecture.
 
         Returns:
             MegatronMappingRegistry: MegatronMappingRegistry containing all weight
@@ -371,7 +371,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
                             k="model.layers.*.self_attn.k_proj.weight",
                             v="model.layers.*.self_attn.v_proj.weight"
                         ),
-                        # ... more weight bridges
+                        # ... more param mappings
                     )
         """
         raise NotImplementedError("Subclass must implement mapping_registry method")
@@ -399,7 +399,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         1. Build a plan mapping each Megatron parameter to its source
         2. For each parameter in the plan:
             - Fetch source weights from HuggingFace state
-            - Apply format transformation via the weight bridge
+            - Apply format transformation via the param mapping
             - Distribute to appropriate TP/PP ranks
             - Copy into the Megatron parameter
 
@@ -616,7 +616,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
                 elif mode == WeightDistributionMode.DISTRIBUTE:
                     # Each rank gets its shard (no gathering)
                     # In this mode, we need to modify the behavior to skip gathering
-                    # This would require changes to the weight bridges themselves
+                    # This would require changes to the param mappings themselves
                     # For now, we'll yield whatever shard this rank has
                     if task.pp_rank == mpu.get_pipeline_model_parallel_rank() and weight is not None:
                         # Return the local shard without gathering
