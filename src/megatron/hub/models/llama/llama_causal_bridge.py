@@ -29,7 +29,7 @@ from megatron.hub.bridge.param_mapping import (
 from megatron.hub.models.llama.llama_provider import Llama31ModelProvider, LlamaModelProvider
 
 
-@MegatronModelBridge.impl(source=LlamaForCausalLM, target=GPTModel)
+@MegatronModelBridge.register_bridge(source=LlamaForCausalLM, target=GPTModel)
 class LlamaCausalBridge(MegatronModelBridge):
     """
     Megatron Hub Bridge for Llama Causal LM.

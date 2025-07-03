@@ -71,7 +71,7 @@ The bridge framework uses a layered architecture with clear separation of concer
 The framework uses decorators to register bridge implementations, enabling automatic routing:
 
 ```python
-@MegatronModelBridge.impl(source=LlamaForCausalLM, target=GPTModel)
+@MegatronModelBridge.register_bridge(source=LlamaForCausalLM, target=GPTModel)
 class MegatronCausalLlamaBridge(MegatronModelBridge):
     def provider_bridge(self, hf_pretrained):
         # Convert HF config to Megatron provider
@@ -219,7 +219,7 @@ To add support for a new model architecture:
 
 1. **Create a Bridge Class**
    ```python
-   @MegatronModelBridge.impl(source=YourHFModel, target=YourMegatronModel)
+   @MegatronModelBridge.register_bridge(source=YourHFModel, target=YourMegatronModel)
    class YourModelBridge(MegatronModelBridge):
        pass
    ```

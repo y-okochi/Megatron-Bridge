@@ -92,7 +92,7 @@ class TestMegatronCausalLlamaBridge:
 
     def test_bridge_registration(self):
         """Test that MegatronCausalLlamaBridge is properly registered."""
-        # The @MegatronModelBridge.impl decorator should register the bridge
+        # The @MegatronModelBridge.register_bridge decorator should register the bridge
         # Check that the class exists and has the expected base class
         assert issubclass(LlamaCausalBridge, MegatronModelBridge)
 

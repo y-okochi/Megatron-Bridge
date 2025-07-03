@@ -197,11 +197,11 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
 
     To implement a bridge for a new model architecture:
 
-    1. Create a subclass decorated with @MegatronModelBridge.impl:
+    1. Create a subclass decorated with @MegatronModelBridge.register_bridge:
 
         .. code-block:: python
 
-            @MegatronModelBridge.impl(source=LlamaForCausalLM, target=GPTModel)
+            @MegatronModelBridge.register_bridge(source=LlamaForCausalLM, target=GPTModel)
             class MegatronCausalLlamaBridge(MegatronModelBridge):
                 pass
 
@@ -245,7 +245,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
     """
 
     @classmethod
-    def impl(
+    def register_bridge(
         cls, *, source: Type[PreTrainedModel], target: Type[MegatronModel]
     ) -> Callable[[_BridgeImplClass], _BridgeImplClass]:
         """Class decorator for registering bridge implementations.
@@ -266,7 +266,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         Example:
             .. code-block:: python
 
-                @MegatronModelBridge.impl(source=LlamaForCausalLM, target=GPTModel)
+                @MegatronModelBridge.register_bridge(source=LlamaForCausalLM, target=GPTModel)
                 class MegatronCausalLlamaBridge(MegatronModelBridge):
                     def provider_bridge(self, hf_pretrained):
                         # Implementation
