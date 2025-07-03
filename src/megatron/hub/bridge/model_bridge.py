@@ -38,7 +38,7 @@ from megatron.core.transformer.module import MegatronModule
 from rich.progress import BarColumn, Progress, TextColumn, TimeRemainingColumn
 from transformers.modeling_utils import PreTrainedModel
 
-from megatron.hub.bridge.state_bridge import MegatronStateBridge
+from megatron.hub.bridge.mapping_registry import MegatronMappingRegistry
 from megatron.hub.bridge.param_mapping import MegatronParamMapping
 from megatron.hub.common.decorators import dispatch
 from megatron.hub.core.models.model_provider import ModelProviderProtocol
@@ -187,7 +187,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
 
     The bridge pattern separates concerns:
     - MegatronModelBridge: Orchestrates the overall conversion process
-    - MegatronStateBridge: Manages parameter name mappings
+    - MegatronMappingRegistry: Manages parameter name mappings
     - MegatronParamMapping: Handles actual weight transformations and distribution
 
     Key responsibilities:
@@ -217,11 +217,11 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
                     ...
                 )
 
-    3. Implement state_bridge to define weight mappings:
+    3. Implement mapping_registry to define weight mappings:
 
         .. code-block:: python
 
-            def state_bridge(self) -> MegatronStateBridge:
+            def mapping_registry(self) -> MegatronStateBridge:
                 return MegatronStateBridge(
                     TPAwareMapping(
                         megatron_param="embedding.word_embeddings.weight",
@@ -273,7 +273,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
                         # Implementation
                         pass
 
-                    def state_bridge(self):
+                    def mapping_registry(self):
                         # Implementation
                         pass
 
@@ -345,22 +345,22 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         raise NotImplementedError("Subclass must implement bridge method")
 
     @abc.abstractmethod
-    def state_bridge(self) -> MegatronStateBridge:
+    def mapping_registry(self) -> MegatronMappingRegistry:
         """Define weight mappings between HuggingFace and Megatron formats.
 
         This abstract method must be implemented by subclasses to specify how
-        parameters map between the two formats. The returned MegatronStateBridge
+        parameters map between the two formats. The returned MegatronMappingRegistry
         contains all weight bridges needed for the model architecture.
 
         Returns:
-            MegatronStateBridge: MegatronStateBridge containing all weight
+            MegatronMappingRegistry: MegatronMappingRegistry containing all weight
                 mapping definitions.
 
         Example:
             .. code-block:: python
 
-                def state_bridge(self):
-                    return MegatronStateBridge(
+                def mapping_registry(self):
+                    return MegatronMappingRegistry(
                         TPAwareMapping(
                             megatron_param="embedding.word_embeddings.weight",
                             hf_param="model.embed_tokens.weight"
@@ -374,7 +374,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
                         # ... more weight bridges
                     )
         """
-        raise NotImplementedError("Subclass must implement state_bridge method")
+        raise NotImplementedError("Subclass must implement mapping_registry method")
 
     def load_state_from_hf(self, src: HFPreTrained, dst: list[MegatronModel]) -> list[MegatronModel]:
         """Load HuggingFace weights into Megatron models.
@@ -887,13 +887,13 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         """Construct the *HF ➜ Megatron* load plan.
 
         The algorithm walks over every parameter of every destination model,
-        asks the :class:`MegatronStateBridge` whether it has a mapping for that
+        asks the :class:`MegatronMappingRegistry` whether it has a mapping for that
         parameter, and – if the corresponding HF weights actually exist – yields
         an :class:`_HFLoadTask` describing exactly how that parameter will be
         populated.
         """
 
-        state_bridge = self.state_bridge()
+        mapping_registry = self.mapping_registry()
         state_accessor = hf_src.state if hasattr(hf_src, "state") else {}
 
         for model_idx, model in enumerate(megatron_models):
@@ -904,7 +904,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
 
                 global_name = self._adjust_name_for_vp(name, layer_offset)
                 unwrapped = self._unwrap_name(global_name)
-                bridge = state_bridge.megatron_to_hf_lookup(unwrapped)
+                bridge = mapping_registry.megatron_to_hf_lookup(unwrapped)
                 if not bridge:
                     continue
 
@@ -954,7 +954,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         """
 
         if order == "megatron":
-            sb = self.state_bridge()
+            sb = self.mapping_registry()
             for pp_rank, vp_stage, name in self._collect_all_params(megatron_models):
                 unwrapped = self._unwrap_name(name)
                 bridge = sb.megatron_to_hf_lookup(unwrapped)
@@ -981,7 +981,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         else:
             raise ValueError(f"Invalid order: {order}, supported orders are 'megatron', 'hf' and 'safetensors'")
 
-        sb = self.state_bridge()
+        sb = self.mapping_registry()
         emitted = set()
 
         param_locations = defaultdict(list)

@@ -81,7 +81,7 @@ class MegatronCausalLlamaBridge(MegatronModelBridge):
             # ... more config mapping
         )
     
-    def state_bridge(self):
+    def mapping_registry(self):
         # Define weight mappings
         return MegatronStateBridge(
             TPAwareMapping(
@@ -234,7 +234,7 @@ To add support for a new model architecture:
 
 3. **Define Weight Mappings**
    ```python
-   def state_bridge(self):
+   def mapping_registry(self):
        return MegatronStateBridge(
            # Define all weight mappings
        )
@@ -300,8 +300,8 @@ logging.getLogger("megatron.hub.bridge").setLevel(logging.DEBUG)
 
 # Inspect mappings
 bridge = CausalLMBridge.from_pretrained("model")
-state_bridge = bridge.state_bridge()
-print(state_bridge.get_all_mappings())
+mapping_registry = bridge.mapping_registry()
+print(mapping_registry.get_all_mappings())
 
 # Verify weight shapes
 for task in bridge._build_plan_from_hf(hf_model, meg_models):

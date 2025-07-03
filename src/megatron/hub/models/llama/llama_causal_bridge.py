@@ -20,7 +20,7 @@ from transformers import LlamaForCausalLM
 
 from megatron.hub.bridge import MegatronModelBridge
 from megatron.hub.bridge.hf_pretrained.causal_lm import PreTrainedCausalLM
-from megatron.hub.bridge.state_bridge import MegatronStateBridge
+from megatron.hub.bridge.mapping_registry import MegatronMappingRegistry
 from megatron.hub.bridge.param_mapping import (
     GatedMLPMapping,
     QKVMapping,
@@ -79,8 +79,8 @@ class LlamaCausalBridge(MegatronModelBridge):
 
         return provider
 
-    def state_bridge(self) -> MegatronStateBridge:
-        return MegatronStateBridge(
+    def mapping_registry(self) -> MegatronMappingRegistry:
+        return MegatronMappingRegistry(
             # ------------------------------------------------------------------
             # Embedding & output projection – column-parallel
             # ------------------------------------------------------------------

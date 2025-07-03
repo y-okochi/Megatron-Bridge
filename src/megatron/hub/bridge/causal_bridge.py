@@ -594,7 +594,7 @@ class CausalLMBridge(Generic[MegatronModelT]):
                         + "\n".join(f"  • {model}" for model in supported_models)
                         + f"\n\nTo add support for {architecture}, you need to:\n"
                         f"1. Create a new bridge class that inherits from MegatronModelBridge\n"
-                        f"2. Implement the required methods (provider_bridge, state_bridge)\n"
+                        f"2. Implement the required methods (provider_bridge, mapping_registry)\n"
                         f"3. Register it with @MegatronModelBridge.impl decorator\n\n"
                         f"Example implementation:\n"
                         f"  from megatron.hub.bridge.model_bridge import MegatronModelBridge\n"
@@ -605,7 +605,7 @@ class CausalLMBridge(Generic[MegatronModelT]):
                         f"      def provider_bridge(self, hf_pretrained):\n"
                         f"          # Return a ModelProvider instance\n"
                         f"          ...\n\n"
-                        f"      def state_bridge(self):\n"
+                        f"      def mapping_registry(self):\n"
                         f"          # Return a MegatronStateBridge with weight mappings\n"
                         f"          ...\n\n"
                         f"For reference implementations, see:\n"
