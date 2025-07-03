@@ -85,8 +85,8 @@ class MegatronCausalLlamaBridge(MegatronModelBridge):
         # Define weight mappings
         return MegatronStateBridge(
             TPAwareMapping(
-                megatron="embedding.word_embeddings.weight",
-                to="model.embed_tokens.weight"
+                megatron_param="embedding.word_embeddings.weight",
+                hf_param="model.embed_tokens.weight"
             ),
             # ... more mappings
         )
@@ -261,7 +261,7 @@ if is_llama_3_1_config(config):
     
 # QKV fusion with proper head ordering
 QKVMapping(
-    megatron="decoder.layers.*.self_attention.linear_qkv.weight",
+    megatron_param="decoder.layers.*.self_attention.linear_qkv.weight",
     q="model.layers.*.self_attn.q_proj.weight",
     k="model.layers.*.self_attn.k_proj.weight", 
     v="model.layers.*.self_attn.v_proj.weight"
@@ -269,7 +269,7 @@ QKVMapping(
 
 # Gated MLP handling
 GatedMLPMapping(
-    megatron="decoder.layers.*.mlp.linear_fc1.weight",
+    megatron_param="decoder.layers.*.mlp.linear_fc1.weight",
     gate="model.layers.*.mlp.gate_proj.weight",
     up="model.layers.*.mlp.up_proj.weight"
 )

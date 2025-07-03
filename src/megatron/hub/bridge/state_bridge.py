@@ -38,11 +38,11 @@ class MegatronStateBridge:
         >>> # Create a state bridge with various mappings
         >>> weight_map = MegatronStateBridge(
         ...     TPAwareMapping(
-        ...         megatron="embedding.word_embeddings.weight",
-        ...         to="model.embed_tokens.weight",
+        ...         megatron_param="embedding.word_embeddings.weight",
+        ...         hf_param="model.embed_tokens.weight",
         ...     ),
         ...     QKVMapping(
-        ...         megatron="decoder.layers.*.self_attention.linear_qkv.weight",
+        ...         megatron_param="decoder.layers.*.self_attention.linear_qkv.weight",
         ...         q="model.layers.*.self_attn.q_proj.weight",
         ...         k="model.layers.*.self_attn.k_proj.weight",
         ...         v="model.layers.*.self_attn.v_proj.weight",
