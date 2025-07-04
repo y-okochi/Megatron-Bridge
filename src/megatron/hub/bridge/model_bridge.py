@@ -40,12 +40,14 @@ from transformers.modeling_utils import PreTrainedModel
 
 from megatron.hub.bridge.mapping_registry import MegatronMappingRegistry
 from megatron.hub.bridge.param_mapping import MegatronParamMapping
-from megatron.hub.common.decorators import dispatch
 from megatron.hub.core.models.model_provider import ModelProviderProtocol
 
 
 MappingT = TypeVar("MappingT", bound=MegatronParamMapping)
-
+HFPreTrained = TypeVar("HFPreTrained")
+ModelProviderTarget = TypeVar("ModelProviderTarget", bound=ModelProviderProtocol)
+MegatronModel = TypeVar("MegatronModel", bound=MegatronModule)
+_BridgeImplClass = TypeVar("_BridgeImplClass", bound="MegatronModelBridge")
 
 class WeightDistributionMode(Enum):
     """Weight distribution modes following PyTorch conventions."""
@@ -148,31 +150,6 @@ class _HFSaveTask(Generic[MappingT]):
     ) -> Dict[str, torch.Tensor]:
         """Forward to the underlying bridge's `from_megatron`."""
         return self.mapping.from_megatron(megatron_weight, megatron_module)
-
-
-HFPreTrained = TypeVar("HFPreTrained")
-ModelProviderTarget = TypeVar("ModelProviderTarget", bound=ModelProviderProtocol)
-MegatronModel = TypeVar("MegatronModel", bound=MegatronModule)
-_BridgeImplClass = TypeVar("_BridgeImplClass", bound="MegatronModelBridge")
-
-
-@dispatch
-def get_model_bridge(hf_architecture) -> "MegatronModelBridge":
-    """Get the appropriate model bridge for a given HuggingFace architecture."""
-    ...
-
-
-@dispatch
-def stream_weights_megatron_to_hf(
-    megatron_models: list[MegatronModel],
-    hf_pretrained: HFPreTrained,
-    cpu: bool = True,
-    order: Literal["megatron", "hf", "safetensors"] = "safetensors",
-    show_progress: bool = True,
-    mode: Union[str, WeightDistributionMode] = WeightDistributionMode.CONSOLIDATE,
-) -> Iterable[HFWeightTuple]:
-    """Bridge Megatron model state to HuggingFace format."""
-    ...
 
 
 class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronModel]):
@@ -974,35 +951,10 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
             different conversion scenarios. The registration is automatic when the
             class is defined.
         """
-
-        def decorator(decorated_class: _BridgeImplClass) -> _BridgeImplClass:
-            decorated_class_name = decorated_class.__name__
-
-            @get_model_bridge.impl(source)
-            def _get_model_bridge_impl(_) -> "MegatronModelBridge":
-                bridge = decorated_class()
-                return bridge
-
-            @stream_weights_megatron_to_hf.impl((source, target))
-            def _from_megatron_registered_impl(
-                megatron_models: List[MegatronModel],
-                hf_pretrained: HFPreTrained,
-                cpu: bool = True,
-                order: Literal["megatron", "hf", "safetensors"] = "safetensors",
-                show_progress: bool = True,
-                mode: Union[str, WeightDistributionMode] = WeightDistributionMode.CONSOLIDATE,
-            ) -> Iterable[HFWeightTuple]:
-                bridge = decorated_class()
-                return bridge.stream_weights_megatron_to_hf(
-                    megatron_models, hf_pretrained, cpu=cpu, order=order, show_progress=show_progress, mode=mode
-                )
-
-            _get_model_bridge_impl.__name__ = f"_bridge_with_{decorated_class_name}"
-            _from_megatron_registered_impl.__name__ = f"_from_megatron_with_{decorated_class_name}"
-
-            return decorated_class
-
-        return decorator
+        # Import here to avoid circular imports
+        from megatron.hub.bridge.bridge_dispatch import create_bridge_decorator
+        
+        return create_bridge_decorator(source=source, target=target)
 
 
 def is_tensor_parallel(param) -> bool:
