@@ -18,7 +18,7 @@ from typing import List, Optional
 import torch
 from megatron.core.distributed import DistributedDataParallelConfig
 
-from megatron.hub.models.llama import Llama3ModelProvider8B
+from megatron.hub.models.llama import Llama2ModelProvider7B
 from megatron.hub.recipes.utils.dataset_utils import get_blend_fields_from_data_paths
 from megatron.hub.recipes.utils.optimizer_utils import distributed_fused_adam_with_cosine_annealing
 from megatron.hub.training.config import (
@@ -34,15 +34,15 @@ from megatron.hub.training.mixed_precision import MixedPrecisionConfig, get_mixe
 
 
 def model_config(
-    tensor_parallelism: int = 1,
+    tensor_parallelism: int = 2,
     pipeline_parallelism: int = 1,
     pipeline_parallelism_dtype: Optional[torch.dtype] = None,
     virtual_pipeline_parallelism: Optional[int] = None,
-    context_parallelism: int = 2,
+    context_parallelism: int = 1,
     sequence_parallelism: bool = False,
-) -> Llama3ModelProvider8B:
+) -> Llama2ModelProvider7B:
     """
-    Configure the Llama3 8B model.
+    Configure the Llama2 7B model.
 
     Args:
         tensor_parallelism (int): Degree of tensor model parallelism.
@@ -53,9 +53,9 @@ def model_config(
         sequence_parallelism (bool): Whether to use sequence parallelism.
 
     Returns:
-        Llama3ModelProvider8B: Configuration for the Llama3 8B model.
+        Llama2ModelProvider7B: Configuration for the Llama2 7B model.
     """
-    return Llama3ModelProvider8B(
+    return Llama2ModelProvider7B(
         tensor_model_parallel_size=tensor_parallelism,
         pipeline_model_parallel_size=pipeline_parallelism,
         pipeline_dtype=pipeline_parallelism_dtype,
@@ -77,17 +77,17 @@ def pretrain_config(
     per_split_data_args_path: Optional[str] = None,
     mock: bool = False,
     # Model configuration
-    tensor_parallelism: int = 1,
+    tensor_parallelism: int = 2,
     pipeline_parallelism: int = 1,
     pipeline_parallelism_dtype: Optional[torch.dtype] = None,
     virtual_pipeline_parallelism: Optional[int] = None,
-    context_parallelism: int = 2,
+    context_parallelism: int = 1,
     sequence_parallelism: bool = False,
     # Training hyperparameters
     train_iters: int = 1_168_251,
     global_batch_size: int = 512,
     micro_batch_size: int = 1,
-    seq_length: int = 8192,
+    seq_length: int = 4096,
     lr: float = 3e-4,
     min_lr: float = 3e-5,
     lr_warmup_iters: int = 2000,
@@ -95,7 +95,7 @@ def pretrain_config(
     precision_config: str | MixedPrecisionConfig = "bf16_mixed",
 ) -> ConfigContainer:
     """
-    Create a pre-training configuration for Llama3 8B model.
+    Create a pre-training configuration for Llama2 7B model.
 
     Args:
         dir (Optional[str]): Base directory for saving logs and checkpoints.
@@ -119,7 +119,7 @@ def pretrain_config(
         seq_length (int): Sequence length for training data.
         lr (float): Learning rate.
         min_lr (float): Minimum learning rate for cosine decay.
-        lr_warmup_iters (int) Number of warmup iterations for the learning rate.
+        lr_warmup_iters (int): Number of warmup iterations for the learning rate.
         precision_config (str | MixedPrecisionConfig): Precision configuration for the model.
 
     Returns:
@@ -204,6 +204,7 @@ def pretrain_config(
         rng=RNGConfig(seed=1234),
     )
 
+    # Apply precision configuration
     if isinstance(precision_config, str):
         precision_config = get_mixed_precision_config(precision_config)
     precision_config.setup(cfg.model, cfg.optimizer, cfg.ddp)
