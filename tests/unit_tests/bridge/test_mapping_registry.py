@@ -14,11 +14,11 @@
 
 import pytest
 
-from megatron.hub.bridge.mapping_registry import MegatronStateBridge
+from megatron.hub.bridge.mapping_registry import MegatronMappingRegistry
 from megatron.hub.bridge.param_mapping import DirectMapping, QKVMapping
 
 
-class TestMegatronStateBridge:
+class TestMegatronMappingRegistry:
     @pytest.fixture
     def sample_mappings(self):
         """Provides a sample list of param mapping mappings."""
@@ -45,8 +45,8 @@ class TestMegatronStateBridge:
 
     @pytest.fixture
     def mapping_registry(self, sample_mappings):
-        """Initializes MegatronStateBridge with sample mappings."""
-        return MegatronStateBridge(*sample_mappings)
+        """Initializes MegatronMappingRegistry with sample mappings."""
+        return MegatronMappingRegistry(*sample_mappings)
 
     def test_init_and_len(self, mapping_registry, sample_mappings):
         """Test initialization and length of the mapping registry."""
@@ -143,7 +143,7 @@ class TestMegatronStateBridge:
         """Test the human-readable description of the bridge."""
         description = mapping_registry.describe()
         assert isinstance(description, str)
-        assert "MegatronStateBridge with 4 mappings" in description
+        assert "MegatronMappingRegistry with 4 mappings" in description
         assert "embedding.word_embeddings.weight" in description
         assert "→ model.embed_tokens.weight" in description
         assert "decoder.layers.*.self_attention.linear_qkv.weight" in description
@@ -153,7 +153,7 @@ class TestMegatronStateBridge:
 
     def test_iterator_and_repr(self, mapping_registry, sample_mappings):
         """Test the iterator and string representation of the bridge."""
-        assert repr(mapping_registry) == "MegatronStateBridge(4 mappings)"
+        assert repr(mapping_registry) == "MegatronMappingRegistry(4 mappings)"
 
         count = 0
         for mapping in mapping_registry:
@@ -162,18 +162,18 @@ class TestMegatronStateBridge:
         assert count == len(sample_mappings)
 
 
-class TestMegatronStateBridgeEdgeCases:
+class TestMegatronMappingRegistryEdgeCases:
     """Test edge cases and additional functionality."""
 
     def test_empty_mapping_registry(self):
         """Test creating an empty mapping registry."""
-        bridge = MegatronStateBridge()
+        bridge = MegatronMappingRegistry()
         assert len(bridge) == 0
         assert bridge.megatron_to_hf_lookup("any.weight") is None
         assert bridge.hf_to_megatron_lookup("any.weight") is None
         assert bridge.get_all_mappings() == []
         assert bridge.get_mappings_by_pattern("*") == []
-        assert repr(bridge) == "MegatronStateBridge(0 mappings)"
+        assert repr(bridge) == "MegatronMappingRegistry(0 mappings)"
 
         # Test iterator on empty bridge
         count = 0
@@ -186,7 +186,7 @@ class TestMegatronStateBridgeEdgeCases:
         mapping = DirectMapping(
             megatron_param="decoder.layers.*.blocks.*.weight", hf_param="model.layers.*.sublayers.*.weight"
         )
-        bridge = MegatronStateBridge(mapping)
+        bridge = MegatronMappingRegistry(mapping)
 
         # Query with multiple indices
         result = bridge.megatron_to_hf_lookup("decoder.layers.3.blocks.2.weight")
@@ -203,7 +203,7 @@ class TestMegatronStateBridgeEdgeCases:
     def test_non_numeric_wildcard_no_match(self):
         """Test that wildcards only match digits."""
         mapping = DirectMapping(megatron_param="decoder.layers.*.weight", hf_param="model.layers.*.weight")
-        bridge = MegatronStateBridge(mapping)
+        bridge = MegatronMappingRegistry(mapping)
 
         # Should not match non-numeric values
         assert bridge.megatron_to_hf_lookup("decoder.layers.abc.weight") is None
@@ -217,7 +217,7 @@ class TestMegatronStateBridgeEdgeCases:
         """Test behavior with duplicate patterns (first match wins)."""
         mapping1 = DirectMapping(megatron_param="decoder.layers.*.weight", hf_param="model.layers.*.weight_v1")
         mapping2 = DirectMapping(megatron_param="decoder.layers.*.weight", hf_param="model.layers.*.weight_v2")
-        bridge = MegatronStateBridge(mapping1, mapping2)
+        bridge = MegatronMappingRegistry(mapping1, mapping2)
 
         # First mapping should win
         result = bridge.megatron_to_hf_lookup("decoder.layers.0.weight")
@@ -236,7 +236,7 @@ class TestMegatronStateBridgeEdgeCases:
             k="transformer.blocks.*.layers.*.k",
             v="transformer.blocks.*.layers.*.v",
         )
-        bridge = MegatronStateBridge(mapping)
+        bridge = MegatronMappingRegistry(mapping)
 
         # Test forward query
         result = bridge.megatron_to_hf_lookup("model.0.transformer.5.attention.qkv")
@@ -255,7 +255,7 @@ class TestMegatronStateBridgeEdgeCases:
         """Test handling of special regex characters in parameter names."""
         # Names with special regex characters
         mapping = DirectMapping(megatron_param="decoder.layers.*.weight[0]", hf_param="model.layers.*.weight(0)")
-        bridge = MegatronStateBridge(mapping)
+        bridge = MegatronMappingRegistry(mapping)
 
         # Should properly escape special characters
         result = bridge.megatron_to_hf_lookup("decoder.layers.5.weight[0]")
@@ -272,7 +272,7 @@ class TestMegatronStateBridgeEdgeCases:
             DirectMapping(megatron_param="prefix.*.suffix", hf_param="p.*.s"),
             DirectMapping(megatron_param="*", hf_param="transformed.*"),
         ]
-        bridge = MegatronStateBridge(*mappings)
+        bridge = MegatronMappingRegistry(*mappings)
 
         # Test single component wildcard
         result = bridge.megatron_to_hf_lookup("5.weight")
@@ -298,7 +298,7 @@ class TestMegatronStateBridgeEdgeCases:
             DirectMapping("encoder.layers.*.weight", "enc.*.w"),
             QKVMapping("decoder.*.qkv", q="dec.*.q", k="dec.*.k", v="dec.*.v"),
         ]
-        bridge = MegatronStateBridge(*mappings)
+        bridge = MegatronMappingRegistry(*mappings)
 
         # Test exact match pattern
         exact = bridge.get_mappings_by_pattern("embedding.weight")
@@ -331,12 +331,12 @@ class TestMegatronStateBridgeEdgeCases:
             GatedMLPMapping("e.mlp", gate="f.gate", up="f.up"),
             TPAwareMapping(megatron_param="g.*.weight", hf_param="h.*.weight"),
         ]
-        bridge = MegatronStateBridge(*mappings)
+        bridge = MegatronMappingRegistry(*mappings)
 
         description = bridge.describe()
 
         # Check header
-        assert "MegatronStateBridge with 4 mappings:" in description
+        assert "MegatronMappingRegistry with 4 mappings:" in description
 
         # Check each mapping is described
         assert "1. a.weight" in description
@@ -359,11 +359,11 @@ class TestMegatronStateBridgeEdgeCases:
         assert "bridge: TPAwareMapping" in description
 
     def test_initialization_with_list(self):
-        """Test that MegatronStateBridge can be initialized from a list using *."""
+        """Test that MegatronMappingRegistry can be initialized from a list using *."""
         mappings_list = [DirectMapping("a.weight", "b.weight"), DirectMapping("c.weight", "d.weight")]
 
         # Initialize using * to unpack list
-        bridge = MegatronStateBridge(*mappings_list)
+        bridge = MegatronMappingRegistry(*mappings_list)
         assert len(bridge) == 2
         assert bridge.get_all_mappings() == mappings_list
 
@@ -371,7 +371,7 @@ class TestMegatronStateBridgeEdgeCases:
         """Test that modifications to returned mappings don't affect the bridge."""
         mapping1 = DirectMapping("a.weight", "b.weight")
         mapping2 = DirectMapping("c.weight", "d.weight")
-        bridge = MegatronStateBridge(mapping1, mapping2)
+        bridge = MegatronMappingRegistry(mapping1, mapping2)
 
         # Get all mappings and modify the returned list
         all_mappings = bridge.get_all_mappings()

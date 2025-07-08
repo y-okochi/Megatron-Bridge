@@ -232,7 +232,7 @@ class TestMegatronCausalLlamaBridge:
         assert not isinstance(result, Llama31ModelProvider)
 
     def test_mapping_registry_implementation(self, mock_pretrained_llama):
-        """Test that mapping_registry returns a proper MegatronStateBridge."""
+        """Test that mapping_registry returns a proper MegatronMappingRegistry."""
         bridge = LlamaCausalBridge()
 
         # Get the mapping registry

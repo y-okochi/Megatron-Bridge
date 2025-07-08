@@ -198,8 +198,8 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
 
         .. code-block:: python
 
-            def mapping_registry(self) -> MegatronStateBridge:
-                return MegatronStateBridge(
+            def mapping_registry(self) -> MegatronMappingRegistry:
+                return MegatronMappingRegistry(
                     TPAwareMapping(
                         megatron_param="embedding.word_embeddings.weight",
                         hf_param="model.embed_tokens.weight"

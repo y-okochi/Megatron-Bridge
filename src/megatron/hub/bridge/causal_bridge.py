@@ -604,7 +604,7 @@ class CausalLMBridge(Generic[MegatronModelT]):
                         f"          # Return a ModelProvider instance\n"
                         f"          ...\n\n"
                         f"      def mapping_registry(self):\n"
-                        f"          # Return a MegatronStateBridge with weight mappings\n"
+                          f"          # Return a MegatronMappingRegistry with weight mappings\n"
                         f"          ...\n\n"
                         f"For reference implementations, see:\n"
                         f"  • src/megatron/hub/models/llama/llama_causal_bridge.py\n"

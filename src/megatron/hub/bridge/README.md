@@ -52,15 +52,15 @@ The bridge framework uses a layered architecture with clear separation of concer
 │                Orchestration Layer                      │
 │            (MegatronModelBridge)                        │
 ├─────────────────────────────────────────────────────────┤
-│    Mapping Layer     │    Transformation Layer          │
-│ (MegatronStateBridge)│   (MegatronParamMapping)         │
+│    Mapping Layer         │    Transformation Layer      │
+│ (MegatronMappingRegistry)│   (MegatronParamMapping)     │
 └─────────────────────────────────────────────────────────┘
 ```
 
 ### Core Components
 
 1. **MegatronModelBridge**: High-level orchestrator that coordinates the conversion process
-2. **MegatronStateBridge**: Registry of parameter name mappings between formats
+2. **MegatronMappingRegistry**: Registry of parameter name mappings between formats
 3. **MegatronParamMapping**: Handles weight transformations and distributed communication
 4. **CausalLMBridge**: User-friendly API for causal language models
 
@@ -83,7 +83,7 @@ class MegatronCausalLlamaBridge(MegatronModelBridge):
     
     def mapping_registry(self):
         # Define weight mappings
-        return MegatronStateBridge(
+        return MegatronMappingRegistry(
             TPAwareMapping(
                 megatron_param="embedding.word_embeddings.weight",
                 hf_param="model.embed_tokens.weight"
@@ -235,7 +235,7 @@ To add support for a new model architecture:
 3. **Define Weight Mappings**
    ```python
    def mapping_registry(self):
-       return MegatronStateBridge(
+       return MegatronMappingRegistry(
            # Define all weight mappings
        )
    ```
