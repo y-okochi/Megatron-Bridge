@@ -281,7 +281,7 @@ class TestQKVMapping:
         }
         megatron_module = MockModule(transformer_config, weight_shape=(64, 32))
 
-        with patch.object(bridge._tp_bridge, "to_megatron") as mock_to_megatron:
+        with patch.object(bridge._tp_mapping, "to_megatron") as mock_to_megatron:
             bridge.to_megatron(weights, megatron_module)
             mock_to_megatron.assert_called_once()
             merged_weight = mock_to_megatron.call_args[0][0]
@@ -298,7 +298,7 @@ class TestGatedMLPMapping:
         }
         megatron_module = MockModule(transformer_config, weight_shape=(256, 32))
 
-        with patch.object(bridge._tp_bridge, "to_megatron") as mock_to_megatron:
+        with patch.object(bridge._tp_mapping, "to_megatron") as mock_to_megatron:
             bridge.to_megatron(weights, megatron_module)
             mock_to_megatron.assert_called_once()
             merged_weight = mock_to_megatron.call_args[0][0]
@@ -310,7 +310,7 @@ class TestGatedMLPMapping:
         merged_weight = torch.randn(256, 32)
         megatron_module = MockModule(transformer_config, weight_shape=(256, 32))
 
-        with patch.object(bridge._tp_bridge, "from_megatron") as mock_from_megatron:
+        with patch.object(bridge._tp_mapping, "from_megatron") as mock_from_megatron:
             mock_from_megatron.return_value = {"gated.weight": merged_weight}
             result = bridge.from_megatron(merged_weight, megatron_module)
 
