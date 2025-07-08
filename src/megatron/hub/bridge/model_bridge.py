@@ -285,8 +285,8 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         raise NotImplementedError("Subclass must implement mapping_registry method")
 
     def load_weights_hf_to_megatron(
-            self, hf_pretrained: HFPreTrained, megatron_model: list[MegatronModel]
-    ) -> list[MegatronModel]:
+            self, hf_pretrained: HFPreTrained, megatron_model: Union[MegatronModel, List[MegatronModel]]
+    ) -> List[MegatronModel]:
         """Load HuggingFace weights into Megatron models.
 
         This method orchestrates the complete weight loading process from HuggingFace
@@ -299,11 +299,11 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         Args:
             hf_pretrained (HFPreTrained): HuggingFace model or state source containing the
                 weights to load.
-            megatron_model (list[MegatronModel]): List of Megatron model instances (one per
-                virtual pipeline stage).
+            megatron_model (Union[MegatronModel, List[MegatronModel]]): Megatron model instance
+                or list of model instances (one per virtual pipeline stage).
 
         Returns:
-            list[MegatronModel]: The input megatron_model list with loaded weights.
+            List[MegatronModel]: The input megatron_model as a list with loaded weights.
 
         Process:
         1. Build a plan mapping each Megatron parameter to its source
@@ -317,13 +317,16 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
             .. code-block:: python
 
                 hf_model = PreTrainedCausalLM.from_pretrained("gpt2")
-                megatron_model = [create_megatron_model()]
+                megatron_model = create_megatron_model()  # Single model or list
                 bridge.load_weights_hf_to_megatron(hf_model, megatron_model)
 
         Note:
             Progress is shown only on rank 0 to avoid cluttered output in
             distributed environments.
         """
+
+        if not isinstance(megatron_model, list):
+            megatron_model = [megatron_model]
 
         load_plan = list(self._build_plan_hf_to_megatron(hf_pretrained, megatron_model))
 
@@ -373,7 +376,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         return megatron_model
 
     def stream_weights_hf_to_megatron(
-            self, hf_pretrained: HFPreTrained, megatron_model: List[MegatronModel]
+            self, hf_pretrained: HFPreTrained, megatron_model: Union[MegatronModel, List[MegatronModel]]
     ) -> Iterable[MegatronWeightTuple]:
         """Generator variant of load_weights_hf_to_megatron for streaming weight conversion.
 
@@ -384,8 +387,8 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         Args:
             hf_pretrained (HFPreTrained): HuggingFace model or state source containing
                 the weights.
-            megatron_model (List[MegatronModel]): List of Megatron model instances to
-                extract configuration from.
+            megatron_model (Union[MegatronModel, List[MegatronModel]]): Megatron model instance
+                or list of model instances to extract configuration from.
 
         Yields:
             MegatronWeightTuple: Named tuples containing:
@@ -405,6 +408,9 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
             Only yields weights that belong to the current rank after TP/PP distribution.
         """
 
+        if not isinstance(megatron_model, list):
+            megatron_model = [megatron_model]
+
         for task in self._build_plan_hf_to_megatron(hf_pretrained, megatron_model):
             hf_state_dict: Mapping[str, torch.Tensor] = hf_pretrained.state
             if isinstance(task.mapping.hf_param, str):
@@ -418,7 +424,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
 
     def stream_weights_megatron_to_hf(
         self,
-            megatron_model: List[MegatronModel],
+            megatron_model: Union[MegatronModel, List[MegatronModel]],
         hf_pretrained: HFPreTrained,
         cpu: bool = True,
         order: Literal["megatron", "hf", "safetensors"] = "safetensors",
@@ -432,8 +438,8 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         ranks, broadcasting across pipeline parallel ranks, and format conversions.
 
         Args:
-            megatron_model (List[MegatronModel]): List of Megatron model instances (one per
-                virtual pipeline stage).
+            megatron_model (Union[MegatronModel, List[MegatronModel]]): Megatron model instance
+                or list of model instances (one per virtual pipeline stage).
             hf_pretrained (HFPreTrained): HuggingFace model/config for metadata
                 and mapping info.
             cpu (bool, optional): Whether to move tensors to CPU before yielding.
@@ -476,6 +482,9 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
             - REPLICATE: All ranks yield full weights
             - DISTRIBUTE: Each rank yields its shard (experimental)
         """
+
+        if not isinstance(megatron_model, list):
+            megatron_model = [megatron_model]
 
         # Normalize mode parameter
         if isinstance(mode, str):
@@ -798,7 +807,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         return param_name
 
     def _build_plan_hf_to_megatron(
-            self, hf_pretrained: HFPreTrained, megatron_model: list[MegatronModel]
+            self, hf_pretrained: HFPreTrained, megatron_model: List[MegatronModel]
     ) -> Iterable[_HFLoadTask]:
         """Construct the *HF ➜ Megatron* load plan.
 
@@ -846,14 +855,14 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
 
     def _build_plan_megatron_to_hf(
         self,
-            megatron_model: list[MegatronModel],
+            megatron_model: List[MegatronModel],
         hf_pretrained: HFPreTrained,
         order: Literal["megatron", "hf", "safetensors"],
     ) -> Iterable[_HFSaveTask]:
         """Construct the *Megatron ➜ HF* save plan.
 
         Args:
-            megatron_model (list[MegatronModel]): List of local Megatron
+            megatron_model (List[MegatronModel]): List of local Megatron
                 *pipeline* replicas (length ≥ 1, length > 1 only when
                 virtual-pipeline-parallelism (VP) is enabled).
             hf_pretrained (HFPreTrained): HF model whose *state* object provides
