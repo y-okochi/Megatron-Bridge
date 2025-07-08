@@ -40,6 +40,7 @@ from transformers.modeling_utils import PreTrainedModel
 
 from megatron.hub.bridge.mapping_registry import MegatronMappingRegistry
 from megatron.hub.bridge.param_mapping import MegatronParamMapping
+from megatron.hub.common.decorators import dispatch
 from megatron.hub.core.models.model_provider import ModelProviderProtocol
 
 MappingT = TypeVar("MappingT", bound=MegatronParamMapping)
@@ -965,12 +966,90 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
             different conversion scenarios. The registration is automatic when the
             class is defined.
         """
-        # Import here to avoid circular imports
-        from megatron.hub.bridge.bridge_dispatch import create_bridge_decorator
 
         return create_bridge_decorator(source=source, target=target)
-
 
 def is_tensor_parallel(param) -> bool:
     """Check if a parameter is tensor parallel distributed."""
     return hasattr(param, "tensor_model_parallel") and param.tensor_model_parallel
+
+
+# Core dispatch functions
+@dispatch
+def get_model_bridge(hf_architecture) -> "MegatronModelBridge":
+    """Get the appropriate model bridge for a given HuggingFace architecture."""
+    ...
+
+
+@dispatch
+def stream_weights_megatron_to_hf(
+        first_model: MegatronModel,
+        megatron_model: Union[MegatronModel, List[MegatronModel]],
+        hf_pretrained: HFPreTrained,
+        cpu: bool = True,
+        order: Literal["megatron", "hf", "safetensors"] = "safetensors",
+        show_progress: bool = True,
+        mode: Union[str, WeightDistributionMode] = WeightDistributionMode.CONSOLIDATE,
+) -> Iterable[HFWeightTuple]:
+    """Bridge Megatron model state to HuggingFace format."""
+    ...
+
+
+def register_bridge_implementation(
+        *,
+        source: Type["PreTrainedModel"],
+        target: Type["MegatronModule"],
+        bridge_class: Type["MegatronModelBridge"],
+) -> None:
+    """Register a bridge implementation with the dispatch system.
+
+    Args:
+        source: HuggingFace PreTrainedModel class (e.g., LlamaForCausalLM)
+        target: Megatron model class (e.g., GPTModel)
+        bridge_class: MegatronModelBridge implementation class
+    """
+    bridge_class_name = bridge_class.__name__
+
+    @get_model_bridge.impl(source)
+    def _get_model_bridge_impl(_) -> "MegatronModelBridge":
+        bridge = bridge_class()
+        return bridge
+
+    @stream_weights_megatron_to_hf.impl((source, target))
+    def _from_megatron_registered_impl(
+            _,
+            megatron_model: Union[MegatronModel, List[MegatronModel]],
+            hf_pretrained: HFPreTrained,
+            cpu: bool = True,
+            order: Literal["megatron", "hf", "safetensors"] = "safetensors",
+            show_progress: bool = True,
+            mode: Union[str, WeightDistributionMode] = WeightDistributionMode.CONSOLIDATE,
+    ) -> Iterable[HFWeightTuple]:
+        bridge = bridge_class()
+        return bridge.stream_weights_megatron_to_hf(
+            megatron_model, hf_pretrained, cpu=cpu, order=order, show_progress=show_progress, mode=mode
+        )
+
+    # Set meaningful names for debugging
+    _get_model_bridge_impl.__name__ = f"_bridge_with_{bridge_class_name}"
+    _from_megatron_registered_impl.__name__ = f"_from_megatron_with_{bridge_class_name}"
+
+
+def create_bridge_decorator(
+        *, source: Type["PreTrainedModel"], target: Type["MegatronModule"]
+) -> Callable[[Type["MegatronModelBridge"]], Type["MegatronModelBridge"]]:
+    """Create a decorator for registering bridge implementations.
+
+    Args:
+        source: HuggingFace PreTrainedModel class
+        target: Megatron model class
+
+    Returns:
+        Decorator function that registers the bridge implementation
+    """
+
+    def decorator(bridge_class: Type["MegatronModelBridge"]) -> Type["MegatronModelBridge"]:
+        register_bridge_implementation(source=source, target=target, bridge_class=bridge_class)
+        return bridge_class
+
+    return decorator
