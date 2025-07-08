@@ -983,7 +983,7 @@ def get_model_bridge(hf_architecture) -> "MegatronModelBridge":
 
 @dispatch
 def stream_weights_megatron_to_hf(
-        first_model: MegatronModel,
+        dispatch_instance: MegatronModel,
         megatron_model: Union[MegatronModel, List[MegatronModel]],
         hf_pretrained: HFPreTrained,
         cpu: bool = True,
