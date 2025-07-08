@@ -20,15 +20,14 @@ with the dispatch system, separating the registration logic from the core
 bridge functionality.
 """
 
-from typing import TYPE_CHECKING, Callable, Iterable, List, Literal, NamedTuple, Type, TypeVar, Union
+from typing import TYPE_CHECKING, Callable, Iterable, List, Literal, Type, TypeVar, Union
 
+from megatron.hub.bridge.model_bridge import HFWeightTuple, WeightDistributionMode
 from megatron.hub.common.decorators import dispatch
-from megatron.hub.bridge.model_bridge import WeightDistributionMode, HFWeightTuple
 
 if TYPE_CHECKING:
     from megatron.core.transformer.module import MegatronModule
     from transformers.modeling_utils import PreTrainedModel
-    import torch
 
 
 # Type variables for bridge registration
@@ -64,7 +63,7 @@ def register_bridge_implementation(
     bridge_class: Type["MegatronModelBridge"],
 ) -> None:
     """Register a bridge implementation with the dispatch system.
-    
+
     Args:
         source: HuggingFace PreTrainedModel class (e.g., LlamaForCausalLM)
         target: Megatron model class (e.g., GPTModel)
@@ -100,16 +99,17 @@ def create_bridge_decorator(
     *, source: Type["PreTrainedModel"], target: Type["MegatronModule"]
 ) -> Callable[[Type["MegatronModelBridge"]], Type["MegatronModelBridge"]]:
     """Create a decorator for registering bridge implementations.
-    
+
     Args:
         source: HuggingFace PreTrainedModel class
         target: Megatron model class
-        
+
     Returns:
         Decorator function that registers the bridge implementation
     """
+
     def decorator(bridge_class: Type["MegatronModelBridge"]) -> Type["MegatronModelBridge"]:
         register_bridge_implementation(source=source, target=target, bridge_class=bridge_class)
         return bridge_class
-    
-    return decorator 
+
+    return decorator

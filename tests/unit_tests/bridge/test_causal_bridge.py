@@ -455,7 +455,9 @@ class TestCausalLMBridgeEdgeCases:
 
         # Mock the export process
         with patch("megatron.hub.bridge.causal_bridge.PreTrainedCausalLM", MockPreTrainedCausalLM):
-            with patch("megatron.hub.bridge.causal_bridge.model_bridge.stream_weights_megatron_to_hf") as mock_bridge_state:
+            with patch(
+                    "megatron.hub.bridge.causal_bridge.model_bridge.stream_weights_megatron_to_hf"
+            ) as mock_bridge_state:
                 mock_weight_iter = [("weight1", torch.randn(10, 10)), ("weight2", torch.randn(5, 5))]
                 mock_bridge_state.return_value = iter(mock_weight_iter)
 

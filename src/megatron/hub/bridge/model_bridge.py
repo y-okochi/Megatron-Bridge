@@ -42,12 +42,12 @@ from megatron.hub.bridge.mapping_registry import MegatronMappingRegistry
 from megatron.hub.bridge.param_mapping import MegatronParamMapping
 from megatron.hub.core.models.model_provider import ModelProviderProtocol
 
-
 MappingT = TypeVar("MappingT", bound=MegatronParamMapping)
 HFPreTrained = TypeVar("HFPreTrained")
 ModelProviderTarget = TypeVar("ModelProviderTarget", bound=ModelProviderProtocol)
 MegatronModel = TypeVar("MegatronModel", bound=MegatronModule)
 _BridgeImplClass = TypeVar("_BridgeImplClass", bound="MegatronModelBridge")
+
 
 class WeightDistributionMode(Enum):
     """Weight distribution modes following PyTorch conventions."""
@@ -284,7 +284,9 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         """
         raise NotImplementedError("Subclass must implement mapping_registry method")
 
-    def load_weights_hf_to_megatron(self, hf_pretrained: HFPreTrained, megatron_models: list[MegatronModel]) -> list[MegatronModel]:
+    def load_weights_hf_to_megatron(
+            self, hf_pretrained: HFPreTrained, megatron_models: list[MegatronModel]
+    ) -> list[MegatronModel]:
         """Load HuggingFace weights into Megatron models.
 
         This method orchestrates the complete weight loading process from HuggingFace
@@ -370,7 +372,9 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
 
         return megatron_models
 
-    def stream_weights_hf_to_megatron(self, hf_pretrained: HFPreTrained, megatron_models: List[MegatronModel]) -> Iterable[MegatronWeightTuple]:
+    def stream_weights_hf_to_megatron(
+            self, hf_pretrained: HFPreTrained, megatron_models: List[MegatronModel]
+    ) -> Iterable[MegatronWeightTuple]:
         """Generator variant of load_weights_hf_to_megatron for streaming weight conversion.
 
         This method provides a memory-efficient way to convert weights by yielding
@@ -507,7 +511,9 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
                 weight = None
                 module = None
                 if task.pp_rank == mpu.get_pipeline_model_parallel_rank():
-                    module, weight = self._get_param_and_module_from_vp(megatron_models, task.vp_stage, task.param_name)
+                    module, weight = self._get_param_and_module_from_vp(
+                        megatron_models, task.vp_stage, task.param_name
+                    )
 
                 kv_pairs = task.from_megatron(weight, module)
 
@@ -791,7 +797,9 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         # TODO: Implement global layer number adjustment for VP
         return param_name
 
-    def _build_plan_hf_to_megatron(self, hf_src: HFPreTrained, megatron_models: list[MegatronModel]) -> Iterable[_HFLoadTask]:
+    def _build_plan_hf_to_megatron(
+            self, hf_src: HFPreTrained, megatron_models: list[MegatronModel]
+    ) -> Iterable[_HFLoadTask]:
         """Construct the *HF ➜ Megatron* load plan.
 
         The algorithm walks over every parameter of every destination model,
@@ -913,7 +921,6 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
             pp, vp, _ = sorted(param_locations[src_name])[0]
             yield _HFSaveTask(pp, vp, src_name, mapping)
 
-
     @classmethod
     def register_bridge(
         cls, *, source: Type[PreTrainedModel], target: Type[MegatronModel]
@@ -953,7 +960,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         """
         # Import here to avoid circular imports
         from megatron.hub.bridge.bridge_dispatch import create_bridge_decorator
-        
+
         return create_bridge_decorator(source=source, target=target)
 
 
