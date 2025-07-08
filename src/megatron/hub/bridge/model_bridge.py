@@ -43,6 +43,7 @@ from megatron.hub.bridge.param_mapping import MegatronParamMapping
 from megatron.hub.common.decorators import dispatch
 from megatron.hub.core.models.model_provider import ModelProviderProtocol
 
+
 MappingT = TypeVar("MappingT", bound=MegatronParamMapping)
 HFPreTrained = TypeVar("HFPreTrained")
 ModelProviderTarget = TypeVar("ModelProviderTarget", bound=ModelProviderProtocol)
@@ -286,7 +287,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         raise NotImplementedError("Subclass must implement mapping_registry method")
 
     def load_weights_hf_to_megatron(
-            self, hf_pretrained: HFPreTrained, megatron_model: Union[MegatronModel, List[MegatronModel]]
+        self, hf_pretrained: HFPreTrained, megatron_model: Union[MegatronModel, List[MegatronModel]]
     ) -> List[MegatronModel]:
         """Load HuggingFace weights into Megatron models.
 
@@ -377,7 +378,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         return megatron_model
 
     def stream_weights_hf_to_megatron(
-            self, hf_pretrained: HFPreTrained, megatron_model: Union[MegatronModel, List[MegatronModel]]
+        self, hf_pretrained: HFPreTrained, megatron_model: Union[MegatronModel, List[MegatronModel]]
     ) -> Iterable[MegatronWeightTuple]:
         """Generator variant of load_weights_hf_to_megatron for streaming weight conversion.
 
@@ -425,7 +426,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
 
     def stream_weights_megatron_to_hf(
         self,
-            megatron_model: Union[MegatronModel, List[MegatronModel]],
+        megatron_model: Union[MegatronModel, List[MegatronModel]],
         hf_pretrained: HFPreTrained,
         cpu: bool = True,
         order: Literal["megatron", "hf", "safetensors"] = "safetensors",
@@ -806,7 +807,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         return param_name
 
     def _build_plan_hf_to_megatron(
-            self, hf_pretrained: HFPreTrained, megatron_model: List[MegatronModel]
+        self, hf_pretrained: HFPreTrained, megatron_model: List[MegatronModel]
     ) -> Iterable[_HFLoadTask]:
         """Construct the *HF ➜ Megatron* load plan.
 
@@ -854,7 +855,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
 
     def _build_plan_megatron_to_hf(
         self,
-            megatron_model: List[MegatronModel],
+        megatron_model: List[MegatronModel],
         hf_pretrained: HFPreTrained,
         order: Literal["megatron", "hf", "safetensors"],
     ) -> Iterable[_HFSaveTask]:
@@ -984,23 +985,23 @@ def get_model_bridge(hf_architecture) -> "MegatronModelBridge":
 
 @dispatch
 def stream_weights_megatron_to_hf(
-        dispatch_instance: MegatronModel,
-        megatron_model: Union[MegatronModel, List[MegatronModel]],
-        hf_pretrained: HFPreTrained,
-        cpu: bool = True,
-        order: Literal["megatron", "hf", "safetensors"] = "safetensors",
-        show_progress: bool = True,
-        mode: Union[str, WeightDistributionMode] = WeightDistributionMode.CONSOLIDATE,
+    dispatch_instance: MegatronModel,
+    megatron_model: Union[MegatronModel, List[MegatronModel]],
+    hf_pretrained: HFPreTrained,
+    cpu: bool = True,
+    order: Literal["megatron", "hf", "safetensors"] = "safetensors",
+    show_progress: bool = True,
+    mode: Union[str, WeightDistributionMode] = WeightDistributionMode.CONSOLIDATE,
 ) -> Iterable[HFWeightTuple]:
     """Bridge Megatron model state to HuggingFace format."""
     ...
 
 
 def register_bridge_implementation(
-        *,
-        source: Type["PreTrainedModel"],
-        target: Type["MegatronModule"],
-        bridge_class: Type["MegatronModelBridge"],
+    *,
+    source: Type["PreTrainedModel"],
+    target: Type["MegatronModule"],
+    bridge_class: Type["MegatronModelBridge"],
 ) -> None:
     """Register a bridge implementation with the dispatch system.
 
@@ -1018,13 +1019,13 @@ def register_bridge_implementation(
 
     @stream_weights_megatron_to_hf.impl((source, target))
     def _megatron_to_hf_registered_impl(
-            _,
-            megatron_model: Union[MegatronModel, List[MegatronModel]],
-            hf_pretrained: HFPreTrained,
-            cpu: bool = True,
-            order: Literal["megatron", "hf", "safetensors"] = "safetensors",
-            show_progress: bool = True,
-            mode: Union[str, WeightDistributionMode] = WeightDistributionMode.CONSOLIDATE,
+        _,
+        megatron_model: Union[MegatronModel, List[MegatronModel]],
+        hf_pretrained: HFPreTrained,
+        cpu: bool = True,
+        order: Literal["megatron", "hf", "safetensors"] = "safetensors",
+        show_progress: bool = True,
+        mode: Union[str, WeightDistributionMode] = WeightDistributionMode.CONSOLIDATE,
     ) -> Iterable[HFWeightTuple]:
         bridge = bridge_class()
         return bridge.stream_weights_megatron_to_hf(
@@ -1037,7 +1038,7 @@ def register_bridge_implementation(
 
 
 def create_bridge_decorator(
-        *, source: Type["PreTrainedModel"], target: Type["MegatronModule"]
+    *, source: Type["PreTrainedModel"], target: Type["MegatronModule"]
 ) -> Callable[[Type["MegatronModelBridge"]], Type["MegatronModelBridge"]]:
     """Create a decorator for registering bridge implementations.
 

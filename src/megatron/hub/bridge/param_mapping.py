@@ -22,6 +22,7 @@ import torch.nn as nn
 from megatron.core import mpu
 from megatron.core.transformer.transformer_config import TransformerConfig
 
+
 WeightType = TypeVar("WeightType", torch.Tensor, Dict[str, torch.Tensor])
 
 
@@ -118,7 +119,7 @@ class MegatronParamMapping(ABC, Generic[WeightType]):
     @abstractmethod
     def hf_to_megatron(
         self,
-            hf_weights: WeightType,
+        hf_weights: WeightType,
         megatron_module: nn.Module,
     ) -> torch.Tensor:
         """Convert hf_weights TO Megatron format.
@@ -140,7 +141,7 @@ class MegatronParamMapping(ABC, Generic[WeightType]):
     @abstractmethod
     def megatron_to_hf(
         self,
-            megatron_weights: Optional[torch.Tensor],
+        megatron_weights: Optional[torch.Tensor],
         megatron_module: Optional[nn.Module],
     ) -> Dict[str, torch.Tensor]:
         """Convert weights FROM Megatron format.
@@ -443,7 +444,7 @@ class DirectMapping(MegatronParamMapping[torch.Tensor]):
 
     def hf_to_megatron(
         self,
-            hf_weights: torch.Tensor,
+        hf_weights: torch.Tensor,
         megatron_module: nn.Module,
     ) -> torch.Tensor:
         """Direct copy - no transformation or distribution."""
@@ -451,7 +452,7 @@ class DirectMapping(MegatronParamMapping[torch.Tensor]):
 
     def megatron_to_hf(
         self,
-            megatron_weights: Optional[torch.Tensor],
+        megatron_weights: Optional[torch.Tensor],
         megatron_module: Optional[nn.Module],
     ) -> Dict[str, torch.Tensor]:
         """Direct copy with PP broadcast."""
@@ -509,7 +510,7 @@ class ColumnParallelMapping(MegatronParamMapping[torch.Tensor]):
 
     def hf_to_megatron(
         self,
-            hf_weights: torch.Tensor,
+        hf_weights: torch.Tensor,
         megatron_module: nn.Module,
     ) -> torch.Tensor:
         """Split weight along dim 0 and distribute to TP ranks."""
@@ -572,7 +573,7 @@ class ColumnParallelMapping(MegatronParamMapping[torch.Tensor]):
 
     def megatron_to_hf(
         self,
-            megatron_weights: Optional[torch.Tensor],
+        megatron_weights: Optional[torch.Tensor],
         megatron_module: Optional[nn.Module],
     ) -> Dict[str, torch.Tensor]:
         """Gather from all TP ranks and concatenate."""
@@ -618,7 +619,7 @@ class RowParallelMapping(MegatronParamMapping[torch.Tensor]):
 
     def hf_to_megatron(
         self,
-            hf_weights: torch.Tensor,
+        hf_weights: torch.Tensor,
         megatron_module: nn.Module,
     ) -> torch.Tensor:
         """Split weight along dim 1 and distribute to TP ranks."""
@@ -645,7 +646,7 @@ class RowParallelMapping(MegatronParamMapping[torch.Tensor]):
 
     def megatron_to_hf(
         self,
-            megatron_weights: Optional[torch.Tensor],
+        megatron_weights: Optional[torch.Tensor],
         megatron_module: Optional[nn.Module],
     ) -> Dict[str, torch.Tensor]:
         """Gather from all TP ranks and concatenate."""
@@ -680,7 +681,7 @@ class ReplicatedMapping(MegatronParamMapping[torch.Tensor]):
 
     def hf_to_megatron(
         self,
-            hf_weights: torch.Tensor,
+        hf_weights: torch.Tensor,
         megatron_module: nn.Module,
     ) -> torch.Tensor:
         """Replicate weight to all TP ranks."""
@@ -700,7 +701,7 @@ class ReplicatedMapping(MegatronParamMapping[torch.Tensor]):
 
     def megatron_to_hf(
         self,
-            megatron_weights: Optional[torch.Tensor],
+        megatron_weights: Optional[torch.Tensor],
         megatron_module: Optional[nn.Module],
     ) -> Dict[str, torch.Tensor]:
         """Return weight only from rank 0 to avoid duplication."""
@@ -852,7 +853,7 @@ class TPAwareMapping(MegatronParamMapping[torch.Tensor]):
 
     def hf_to_megatron(
         self,
-            hf_weights: torch.Tensor,
+        hf_weights: torch.Tensor,
         megatron_module: nn.Module,
     ) -> torch.Tensor:
         """Delegate to appropriate mapping based on module type."""
@@ -869,7 +870,7 @@ class TPAwareMapping(MegatronParamMapping[torch.Tensor]):
 
     def megatron_to_hf(
         self,
-            megatron_weights: Optional[torch.Tensor],
+        megatron_weights: Optional[torch.Tensor],
         megatron_module: Optional[nn.Module],
     ) -> Dict[str, torch.Tensor]:
         """Delegate to appropriate mapping based on module type."""
@@ -958,7 +959,7 @@ class QKVMapping(MegatronParamMapping[Dict[str, torch.Tensor]]):
 
     def hf_to_megatron(
         self,
-            hf_weights: Dict[str, torch.Tensor],
+        hf_weights: Dict[str, torch.Tensor],
         megatron_module: nn.Module,
     ) -> torch.Tensor:
         """Merge Q, K, V into interleaved format and distribute."""
@@ -980,7 +981,7 @@ class QKVMapping(MegatronParamMapping[Dict[str, torch.Tensor]]):
 
     def megatron_to_hf(
         self,
-            megatron_weights: Optional[torch.Tensor],
+        megatron_weights: Optional[torch.Tensor],
         megatron_module: Optional[nn.Module],
     ) -> Dict[str, torch.Tensor]:
         """Gather QKV shards and split into Q, K, V."""
@@ -1061,7 +1062,7 @@ class GatedMLPMapping(MegatronParamMapping[Dict[str, torch.Tensor]]):
 
     def hf_to_megatron(
         self,
-            hf_weights: Dict[str, torch.Tensor],
+        hf_weights: Dict[str, torch.Tensor],
         megatron_module: nn.Module,
     ) -> torch.Tensor:
         """Merge gate and up projections and distribute."""
@@ -1073,7 +1074,7 @@ class GatedMLPMapping(MegatronParamMapping[Dict[str, torch.Tensor]]):
 
     def megatron_to_hf(
         self,
-            megatron_weights: Optional[torch.Tensor],
+        megatron_weights: Optional[torch.Tensor],
         megatron_module: Optional[nn.Module],
     ) -> Dict[str, torch.Tensor]:
         """Gather MLP shards and split into gate and up."""
@@ -1141,7 +1142,7 @@ class MOEMapping(MegatronParamMapping[torch.Tensor]):
 
     def hf_to_megatron(
         self,
-            hf_weights: torch.Tensor,
+        hf_weights: torch.Tensor,
         megatron_module: nn.Module,
     ) -> torch.Tensor:
         """
@@ -1174,7 +1175,7 @@ class MOEMapping(MegatronParamMapping[torch.Tensor]):
 
     def megatron_to_hf(
         self,
-            megatron_weights: Optional[torch.Tensor],
+        megatron_weights: Optional[torch.Tensor],
         megatron_module: Optional[nn.Module],
     ) -> Dict[str, torch.Tensor]:
         """
