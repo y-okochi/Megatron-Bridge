@@ -18,7 +18,7 @@ from typing import List, Optional
 import torch
 from megatron.core.distributed import DistributedDataParallelConfig
 
-from megatron.hub.models.llama import Llama3ModelProvider8B
+from megatron.hub.models.llama import Llama31ModelProvider405B
 from megatron.hub.recipes.utils.dataset_utils import get_blend_fields_from_data_paths
 from megatron.hub.recipes.utils.optimizer_utils import distributed_fused_adam_with_cosine_annealing
 from megatron.hub.training.config import (
@@ -34,15 +34,17 @@ from megatron.hub.training.mixed_precision import MixedPrecisionConfig, get_mixe
 
 
 def model_config(
-    tensor_parallelism: int = 1,
-    pipeline_parallelism: int = 1,
-    pipeline_parallelism_dtype: Optional[torch.dtype] = None,
-    virtual_pipeline_parallelism: Optional[int] = None,
-    context_parallelism: int = 2,
-    sequence_parallelism: bool = False,
-) -> Llama3ModelProvider8B:
+    tensor_parallelism: int = 8,
+    pipeline_parallelism: int = 8,
+    pipeline_parallelism_dtype: Optional[torch.dtype] = torch.bfloat16,
+    virtual_pipeline_parallelism: Optional[int] = 2,
+    context_parallelism: int = 4,
+    sequence_parallelism: bool = True,
+    account_for_embedding_in_pipeline_split: bool = True,
+    account_for_loss_in_pipeline_split: bool = True,
+) -> Llama31ModelProvider405B:
     """
-    Configure the Llama3 8B model.
+    Configure the Llama3.1 405B model.
 
     Args:
         tensor_parallelism (int): Degree of tensor model parallelism.
@@ -51,17 +53,21 @@ def model_config(
         virtual_pipeline_parallelism (Optional[int]): Size of virtual pipeline parallelism.
         context_parallelism (int): Degree of context parallelism.
         sequence_parallelism (bool): Whether to use sequence parallelism.
+        account_for_embedding_in_pipeline_split (bool): Whether to account for embedding in pipeline split.
+        account_for_loss_in_pipeline_split (bool): Whether to account for loss in pipeline split.
 
     Returns:
-        Llama3ModelProvider8B: Configuration for the Llama3 8B model.
+        Llama31ModelProvider405B: Configuration for the Llama3.1 405B model.
     """
-    return Llama3ModelProvider8B(
+    return Llama31ModelProvider405B(
         tensor_model_parallel_size=tensor_parallelism,
         pipeline_model_parallel_size=pipeline_parallelism,
         pipeline_dtype=pipeline_parallelism_dtype,
         virtual_pipeline_model_parallel_size=virtual_pipeline_parallelism,
         context_parallel_size=context_parallelism,
         sequence_parallel=sequence_parallelism,
+        account_for_embedding_in_pipeline_split=account_for_embedding_in_pipeline_split,
+        account_for_loss_in_pipeline_split=account_for_loss_in_pipeline_split,
     )
 
 
@@ -77,17 +83,18 @@ def pretrain_config(
     per_split_data_args_path: Optional[str] = None,
     mock: bool = False,
     # Model configuration
-    tensor_parallelism: int = 1,
-    pipeline_parallelism: int = 1,
-    pipeline_parallelism_dtype: Optional[torch.dtype] = None,
-    virtual_pipeline_parallelism: Optional[int] = None,
-    context_parallelism: int = 2,
-    sequence_parallelism: bool = False,
+    tensor_parallelism: int = 8,
+    pipeline_parallelism: int = 8,
+    pipeline_parallelism_dtype: Optional[torch.dtype] = torch.bfloat16,
+    virtual_pipeline_parallelism: Optional[int] = 2,
+    context_parallelism: int = 4,
+    sequence_parallelism: bool = True,
+    account_for_embedding_in_pipeline_split: bool = True,
+    account_for_loss_in_pipeline_split: bool = True,
     # Training hyperparameters
     train_iters: int = 1_168_251,
     global_batch_size: int = 512,
     micro_batch_size: int = 1,
-    seq_length: int = 8192,
     lr: float = 3e-4,
     min_lr: float = 3e-5,
     lr_warmup_iters: int = 2000,
@@ -95,7 +102,7 @@ def pretrain_config(
     precision_config: str | MixedPrecisionConfig = "bf16_mixed",
 ) -> ConfigContainer:
     """
-    Create a pre-training configuration for Llama3 8B model.
+    Create a pre-training configuration for Llama3.1 405B model.
 
     Args:
         dir (Optional[str]): Base directory for saving logs and checkpoints.
@@ -113,17 +120,21 @@ def pretrain_config(
         virtual_pipeline_parallelism (Optional[int]): Size of virtual pipeline parallelism.
         context_parallelism (int): Degree of context parallelism to be passed to model_config.
         sequence_parallelism (bool): Whether to use sequence parallelism.
+        account_for_embedding_in_pipeline_split (bool): Whether to account for embedding in pipeline split.
+        account_for_loss_in_pipeline_split (bool): Whether to account for loss in pipeline split.
         train_iters (int): Total number of training iterations.
         global_batch_size (int): Global batch size for training.
         micro_batch_size (int): Micro batch size for training.
-        seq_length (int): Sequence length for training data.
         lr (float): Learning rate.
         min_lr (float): Minimum learning rate for cosine decay.
-        lr_warmup_iters (int) Number of warmup iterations for the learning rate.
+        lr_warmup_iters (int): Number of warmup iterations for the learning rate.
         precision_config (str | MixedPrecisionConfig): Precision configuration for the model.
 
     Returns:
         ConfigContainer: Configuration for pre-training.
+
+    Note:
+        Sequence length is hardcoded to 8192 for Llama3.1 405B pretraining.
     """
     base_output_dir = dir if dir is not None else os.path.join(os.getcwd(), "nemo_experiments")
     run_output_dir = os.path.join(base_output_dir, name)
@@ -141,15 +152,13 @@ def pretrain_config(
         virtual_pipeline_parallelism=virtual_pipeline_parallelism,
         context_parallelism=context_parallelism,
         sequence_parallelism=sequence_parallelism,
+        account_for_embedding_in_pipeline_split=account_for_embedding_in_pipeline_split,
+        account_for_loss_in_pipeline_split=account_for_loss_in_pipeline_split,
     )
 
     opt_config, scheduler = distributed_fused_adam_with_cosine_annealing(
         lr_warmup_iters=lr_warmup_iters,
         lr_decay_iters=train_iters,
-        adam_beta1=0.9,
-        adam_beta2=0.95,
-        adam_eps=1e-5,
-        weight_decay=0.1,
         max_lr=lr,
         min_lr=min_lr,
     )
@@ -179,7 +188,7 @@ def pretrain_config(
             reset_attention_mask=False,
             reset_position_ids=False,
             eod_mask_loss=False,
-            sequence_length=seq_length,
+            sequence_length=8192,  # Hardcoded to 8192 for Llama3.1 405B pretraining
             num_dataset_builder_threads=1,
             blend=blend,
             blend_per_split=blend_per_split,
@@ -204,6 +213,7 @@ def pretrain_config(
         rng=RNGConfig(seed=1234),
     )
 
+    # Apply precision configuration
     if isinstance(precision_config, str):
         precision_config = get_mixed_precision_config(precision_config)
     precision_config.setup(cfg.model, cfg.optimizer, cfg.ddp)

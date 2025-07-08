@@ -20,7 +20,7 @@ import pytest
 import torch
 
 from megatron.hub.models.llama import Llama3ModelProvider8B
-from megatron.hub.recipes.llama.llama3_8b import model_config, pretrain_config
+from megatron.hub.recipes.llama.llama3_8b_16k import model_config, pretrain_config
 from megatron.hub.training.config import ConfigContainer
 
 
@@ -33,71 +33,71 @@ class TestModelConfig:
         config = model_config()
 
         assert isinstance(config, Llama3ModelProvider8B)
-        assert config.tensor_model_parallel_size == 1
-        assert config.pipeline_model_parallel_size == 1
-        assert config.pipeline_dtype is None
+        assert config.tensor_model_parallel_size == 4
+        assert config.pipeline_model_parallel_size == 2
+        assert config.pipeline_dtype == torch.bfloat16
         assert config.virtual_pipeline_model_parallel_size is None
         assert config.context_parallel_size == 2
-        assert config.sequence_parallel is False
+        assert config.sequence_parallel is True
 
     def test_model_config_custom_tensor_parallelism(self):
         """Test model_config with custom tensor parallelism."""
-        config = model_config(tensor_parallelism=4)
+        config = model_config(tensor_parallelism=8)
 
-        assert config.tensor_model_parallel_size == 4
-        assert config.pipeline_model_parallel_size == 1  # default
+        assert config.tensor_model_parallel_size == 8
+        assert config.pipeline_model_parallel_size == 2  # default
         assert config.context_parallel_size == 2  # default
 
     def test_model_config_custom_pipeline_parallelism(self):
         """Test model_config with custom pipeline parallelism."""
-        config = model_config(pipeline_parallelism=8, pipeline_parallelism_dtype=torch.float16)
+        config = model_config(pipeline_parallelism=4, pipeline_parallelism_dtype=torch.float16)
 
-        assert config.tensor_model_parallel_size == 1  # default
-        assert config.pipeline_model_parallel_size == 8
+        assert config.tensor_model_parallel_size == 4  # default
+        assert config.pipeline_model_parallel_size == 4
         assert config.pipeline_dtype is torch.float16
 
     def test_model_config_with_pipeline_dtype(self):
         """Test model_config with pipeline dtype specified."""
-        config = model_config(pipeline_parallelism=2, pipeline_parallelism_dtype=torch.float16)
+        config = model_config(pipeline_parallelism=4, pipeline_parallelism_dtype=torch.float32)
 
-        assert config.pipeline_model_parallel_size == 2
-        assert config.pipeline_dtype == torch.float16
+        assert config.pipeline_model_parallel_size == 4
+        assert config.pipeline_dtype == torch.float32
 
     def test_model_config_virtual_pipeline_parallelism(self):
         """Test model_config with virtual pipeline parallelism."""
-        config = model_config(virtual_pipeline_parallelism=4)
+        config = model_config(virtual_pipeline_parallelism=8)
 
-        assert config.virtual_pipeline_model_parallel_size == 4
+        assert config.virtual_pipeline_model_parallel_size == 8
 
     def test_model_config_context_parallelism(self):
         """Test model_config with custom context parallelism."""
-        config = model_config(context_parallelism=8)
+        config = model_config(context_parallelism=4)
 
-        assert config.context_parallel_size == 8
+        assert config.context_parallel_size == 4
 
-    def test_model_config_sequence_parallelism_enabled(self):
-        """Test model_config with sequence parallelism enabled."""
-        config = model_config(sequence_parallelism=True, tensor_parallelism=2)
+    def test_model_config_sequence_parallelism_disabled(self):
+        """Test model_config with sequence parallelism disabled."""
+        config = model_config(sequence_parallelism=False)
 
-        assert config.sequence_parallel is True
+        assert config.sequence_parallel is False
 
     def test_model_config_all_custom_parameters(self):
         """Test model_config with all parameters customized."""
         config = model_config(
-            tensor_parallelism=2,
+            tensor_parallelism=8,
             pipeline_parallelism=4,
-            pipeline_parallelism_dtype=torch.bfloat16,
-            virtual_pipeline_parallelism=8,
-            context_parallelism=16,
-            sequence_parallelism=True,
+            pipeline_parallelism_dtype=torch.float32,
+            virtual_pipeline_parallelism=16,
+            context_parallelism=8,
+            sequence_parallelism=False,
         )
 
-        assert config.tensor_model_parallel_size == 2
+        assert config.tensor_model_parallel_size == 8
         assert config.pipeline_model_parallel_size == 4
-        assert config.pipeline_dtype == torch.bfloat16
-        assert config.virtual_pipeline_model_parallel_size == 8
-        assert config.context_parallel_size == 16
-        assert config.sequence_parallel is True
+        assert config.pipeline_dtype == torch.float32
+        assert config.virtual_pipeline_model_parallel_size == 16
+        assert config.context_parallel_size == 8
+        assert config.sequence_parallel is False
 
 
 @pytest.mark.unit
@@ -127,7 +127,7 @@ class TestPretrainConfig:
         assert config.optimizer.fp16 is False
 
         # Check dataset configuration (should be in mock mode)
-        assert config.dataset.sequence_length == 8192
+        assert config.dataset.sequence_length == 16384  # 16k default
         assert config.dataset.split == "1,1,1"
         assert config.dataset.blend is None
         assert config.dataset.blend_per_split is None
@@ -138,7 +138,6 @@ class TestPretrainConfig:
             train_iters=10000,
             global_batch_size=256,
             micro_batch_size=2,
-            seq_length=4096,
             lr=1e-4,
             min_lr=1e-5,
             lr_warmup_iters=1000,
@@ -147,7 +146,6 @@ class TestPretrainConfig:
         assert config.train.train_iters == 10000
         assert config.train.global_batch_size == 256
         assert config.train.micro_batch_size == 2
-        assert config.dataset.sequence_length == 4096
         assert config.optimizer.lr == 1e-4
         assert config.optimizer.min_lr == 1e-5
         assert config.scheduler.lr_warmup_iters == 1000  # Note: fixed in scheduler config
@@ -156,17 +154,17 @@ class TestPretrainConfig:
     def test_pretrain_config_custom_model_parameters(self):
         """Test pretrain_config with custom model parameters."""
         config = pretrain_config(
-            tensor_parallelism=2,
+            tensor_parallelism=8,
             pipeline_parallelism=4,
-            context_parallelism=8,
-            sequence_parallelism=True,
-            pipeline_parallelism_dtype=torch.bfloat16,
+            context_parallelism=4,
+            sequence_parallelism=False,
+            pipeline_parallelism_dtype=torch.float32,
         )
 
-        assert config.model.tensor_model_parallel_size == 2
+        assert config.model.tensor_model_parallel_size == 8
         assert config.model.pipeline_model_parallel_size == 4
-        assert config.model.context_parallel_size == 8
-        assert config.model.sequence_parallel is True
+        assert config.model.context_parallel_size == 4
+        assert config.model.sequence_parallel is False
         assert config.model.pipeline_dtype == torch.bfloat16
 
     def test_pretrain_config_with_custom_directory(self):
@@ -309,17 +307,17 @@ class TestPretrainConfig:
     @pytest.mark.parametrize(
         "tensor_parallelism,pipeline_parallelism,context_parallelism",
         [
-            (1, 1, 1),
-            (2, 1, 4),
-            (1, 4, 2),
-            (2, 2, 8),
-            (4, 4, 16),
+            (2, 1, 1),
+            (4, 2, 2),
+            (8, 2, 4),
+            (4, 4, 2),
+            (8, 4, 8),
         ],
     )
     def test_pretrain_config_parallelism_combinations(
         self, tensor_parallelism, pipeline_parallelism, context_parallelism
     ):
-        """Test various parallelism combinations."""
+        """Test various parallelism combinations optimized for 16k."""
         config = pretrain_config(
             tensor_parallelism=tensor_parallelism,
             pipeline_parallelism=pipeline_parallelism,
@@ -334,10 +332,10 @@ class TestPretrainConfig:
     @pytest.mark.parametrize(
         "global_batch_size,micro_batch_size",
         [
-            (128, 1),
-            (512, 2),
-            (1024, 4),
-            (256, 8),
+            (256, 1),
+            (512, 1),
+            (1024, 2),
+            (512, 4),
         ],
     )
     def test_pretrain_config_batch_size_combinations(self, global_batch_size, micro_batch_size):
@@ -347,40 +345,34 @@ class TestPretrainConfig:
         assert config.train.global_batch_size == global_batch_size
         assert config.train.micro_batch_size == micro_batch_size
 
-    @pytest.mark.parametrize("seq_length", [1024, 2048, 4096, 8192, 16384])
-    def test_pretrain_config_sequence_lengths(self, seq_length):
-        """Test various sequence lengths."""
-        config = pretrain_config(seq_length=seq_length)
+    def test_pretrain_config_16k_optimized_defaults(self):
+        """Test that 16k specific optimizations are applied by default."""
+        config = pretrain_config()
 
-        assert config.dataset.sequence_length == seq_length
+        # Check model defaults optimized for 16k
+        assert config.model.tensor_model_parallel_size == 4  # Higher than 8k version
+        assert config.model.pipeline_model_parallel_size == 2  # Higher than 8k version
+        assert config.model.pipeline_dtype == torch.bfloat16  # Optimized dtype
+        assert config.model.sequence_parallel is True  # Enabled for long sequences
+        assert config.model.context_parallel_size == 2  # Context parallelism for efficiency
 
-    def test_pretrain_config_precision_fp16_mixed(self):
-        """Ensure precision recipe 'fp16_mixed' correctly updates model, optimizer, and ddp config."""
-        config = pretrain_config(precision_config="fp16_mixed")
+        # Check dataset defaults
+        assert config.dataset.sequence_length == 16384  # 16k sequence length
 
-        # Model should be FP16, not BF16
-        assert config.model.fp16 is True
-        assert getattr(config.model, "bf16", False) is False
+    @pytest.mark.parametrize("precision", ["fp16_mixed", "bf16_with_fp8_mixed"])
+    def test_precision_recipes(self, precision):
+        """Ensure precision recipes properly update configs for 8B 16k recipe."""
+        cfg = pretrain_config(precision_config=precision)
 
-        # Optimizer flags propagated
-        assert config.optimizer.fp16 is True
-        assert config.optimizer.bf16 is False
-
-        # DDP flag overridden by precision recipe
-        assert config.ddp.grad_reduce_in_fp32 is False
-
-    def test_pretrain_config_precision_bf16_with_fp8_mixed(self):
-        """Ensure recipe 'bf16_with_fp8_mixed' sets BF16 + FP8 related fields."""
-        config = pretrain_config(precision_config="bf16_with_fp8_mixed")
-
-        # Model flags
-        assert config.model.bf16 is True
-        assert config.model.fp8 == "hybrid"
-        assert config.model.fp8_recipe == "delayed"
-
-        # Optimizer should remain in BF16 mode
-        assert config.optimizer.bf16 is True
-        assert config.optimizer.fp16 is False
-
-        # DDP grad reduction should stay in FP32 for BF16 recipe
-        assert config.ddp.grad_reduce_in_fp32 is True
+        if precision == "fp16_mixed":
+            assert cfg.model.fp16 is True
+            assert getattr(cfg.model, "bf16", False) is False
+            assert cfg.optimizer.fp16 is True
+            assert cfg.optimizer.bf16 is False
+            assert cfg.ddp.grad_reduce_in_fp32 is False
+        elif precision == "bf16_with_fp8_mixed":
+            assert cfg.model.bf16 is True
+            assert cfg.model.fp8 == "hybrid"
+            assert cfg.optimizer.bf16 is True
+            assert cfg.optimizer.fp16 is False
+            assert cfg.ddp.grad_reduce_in_fp32 is True

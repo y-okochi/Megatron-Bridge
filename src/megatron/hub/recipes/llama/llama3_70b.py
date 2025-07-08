@@ -18,7 +18,7 @@ from typing import List, Optional
 import torch
 from megatron.core.distributed import DistributedDataParallelConfig
 
-from megatron.hub.models.llama import Llama3ModelProvider8B
+from megatron.hub.models.llama import Llama3ModelProvider70B
 from megatron.hub.recipes.utils.dataset_utils import get_blend_fields_from_data_paths
 from megatron.hub.recipes.utils.optimizer_utils import distributed_fused_adam_with_cosine_annealing
 from megatron.hub.training.config import (
@@ -34,15 +34,15 @@ from megatron.hub.training.mixed_precision import MixedPrecisionConfig, get_mixe
 
 
 def model_config(
-    tensor_parallelism: int = 1,
-    pipeline_parallelism: int = 1,
-    pipeline_parallelism_dtype: Optional[torch.dtype] = None,
-    virtual_pipeline_parallelism: Optional[int] = None,
+    tensor_parallelism: int = 4,
+    pipeline_parallelism: int = 4,
+    pipeline_parallelism_dtype: Optional[torch.dtype] = torch.bfloat16,
+    virtual_pipeline_parallelism: Optional[int] = 5,
     context_parallelism: int = 2,
-    sequence_parallelism: bool = False,
-) -> Llama3ModelProvider8B:
+    sequence_parallelism: bool = True,
+) -> Llama3ModelProvider70B:
     """
-    Configure the Llama3 8B model.
+    Configure the Llama3 70B model.
 
     Args:
         tensor_parallelism (int): Degree of tensor model parallelism.
@@ -53,9 +53,9 @@ def model_config(
         sequence_parallelism (bool): Whether to use sequence parallelism.
 
     Returns:
-        Llama3ModelProvider8B: Configuration for the Llama3 8B model.
+        Llama3ModelProvider70B: Configuration for the Llama3 70B model.
     """
-    return Llama3ModelProvider8B(
+    return Llama3ModelProvider70B(
         tensor_model_parallel_size=tensor_parallelism,
         pipeline_model_parallel_size=pipeline_parallelism,
         pipeline_dtype=pipeline_parallelism_dtype,
@@ -77,12 +77,12 @@ def pretrain_config(
     per_split_data_args_path: Optional[str] = None,
     mock: bool = False,
     # Model configuration
-    tensor_parallelism: int = 1,
-    pipeline_parallelism: int = 1,
-    pipeline_parallelism_dtype: Optional[torch.dtype] = None,
-    virtual_pipeline_parallelism: Optional[int] = None,
+    tensor_parallelism: int = 4,
+    pipeline_parallelism: int = 4,
+    pipeline_parallelism_dtype: Optional[torch.dtype] = torch.bfloat16,
+    virtual_pipeline_parallelism: Optional[int] = 5,
     context_parallelism: int = 2,
-    sequence_parallelism: bool = False,
+    sequence_parallelism: bool = True,
     # Training hyperparameters
     train_iters: int = 1_168_251,
     global_batch_size: int = 512,
@@ -95,7 +95,7 @@ def pretrain_config(
     precision_config: str | MixedPrecisionConfig = "bf16_mixed",
 ) -> ConfigContainer:
     """
-    Create a pre-training configuration for Llama3 8B model.
+    Create a pre-training configuration for Llama3 70B model.
 
     Args:
         dir (Optional[str]): Base directory for saving logs and checkpoints.
@@ -146,10 +146,6 @@ def pretrain_config(
     opt_config, scheduler = distributed_fused_adam_with_cosine_annealing(
         lr_warmup_iters=lr_warmup_iters,
         lr_decay_iters=train_iters,
-        adam_beta1=0.9,
-        adam_beta2=0.95,
-        adam_eps=1e-5,
-        weight_decay=0.1,
         max_lr=lr,
         min_lr=min_lr,
     )
@@ -204,6 +200,7 @@ def pretrain_config(
         rng=RNGConfig(seed=1234),
     )
 
+    # Apply precision configuration
     if isinstance(precision_config, str):
         precision_config = get_mixed_precision_config(precision_config)
     precision_config.setup(cfg.model, cfg.optimizer, cfg.ddp)
