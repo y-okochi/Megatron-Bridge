@@ -174,15 +174,15 @@ Create custom param mappings for special formats:
 
 ```python
 class MyCustomMapping(MegatronParamMapping):
-    def to_megatron(self, weights, megatron_module):
+   def hf_to_megatron(self, hf_weights, megatron_module):
         # Custom transformation logic
-        transformed = my_transform(weights)
+        transformed = my_transform(hf_weights)
         # Use provided helpers for distribution
         return self.scatter_to_tp_ranks(transformed, dim=0)
-    
-    def from_megatron(self, weight, module):
+
+   def megatron_to_hf(self, megatron_weights, module):
         # Gather and inverse transform
-        gathered = self.gather_from_tp_ranks(weight, dim=0)
+        gathered = self.gather_from_tp_ranks(megatron_weights, dim=0)
         return {"custom_weight": my_inverse_transform(gathered)}
 ```
 

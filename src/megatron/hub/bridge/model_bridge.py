@@ -114,13 +114,13 @@ class _HFLoadTask(Generic[MappingT]):
     megatron_param: torch.Tensor
     mapping: MappingT
 
-    def to_megatron(
+    def hf_to_megatron(
         self,
         weights: Union[torch.Tensor, Mapping[str, torch.Tensor]],
         megatron_module: torch.nn.Module,
     ) -> torch.Tensor:
-        """Forward to the underlying bridge's `to_megatron`."""
-        return self.mapping.to_megatron(weights, megatron_module)
+        """Forward to the underlying bridge's `hf_to_megatron`."""
+        return self.mapping.hf_to_megatron(weights, megatron_module)
 
 
 @dataclass(frozen=True)
@@ -144,13 +144,13 @@ class _HFSaveTask(Generic[MappingT]):
     param_name: str
     mapping: MappingT
 
-    def from_megatron(
+    def megatron_to_hf(
         self,
         megatron_weight: Optional[torch.Tensor],
         megatron_module: Optional[torch.nn.Module],
     ) -> Dict[str, torch.Tensor]:
-        """Forward to the underlying bridge's `from_megatron`."""
-        return self.mapping.from_megatron(megatron_weight, megatron_module)
+        """Forward to the underlying bridge's `megatron_to_hf`."""
+        return self.mapping.megatron_to_hf(megatron_weight, megatron_module)
 
 
 class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronModel]):
@@ -357,7 +357,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
                     megatron_weights = {k: hf_state_dict[v] for k, v in task.mapping.hf_param.items()}
 
                 # 2) Delegate conversion & distribution to the bridge
-                weight_local = task.to_megatron(megatron_weights, task.megatron_module)
+                weight_local = task.hf_to_megatron(megatron_weights, task.megatron_module)
 
                 # 3) Copy into Megatron param if this rank received a shard
                 if weight_local is not None:
@@ -419,7 +419,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
             else:
                 src_weights = {k: hf_state_dict[v] for k, v in task.mapping.hf_param.items()}
 
-            shard = task.to_megatron(src_weights, task.megatron_module)
+            shard = task.hf_to_megatron(src_weights, task.megatron_module)
             if shard is not None:
                 yield MegatronWeightTuple(task.vp_stage, task.param_name, shard)
 
@@ -523,7 +523,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
                 if task.pp_rank == mpu.get_pipeline_model_parallel_rank():
                     module, weight = self._get_param_and_module_from_vp(megatron_model, task.vp_stage, task.param_name)
 
-                kv_pairs = task.from_megatron(weight, module)
+                kv_pairs = task.megatron_to_hf(weight, module)
 
                 # Handle distribution modes
                 if mode == WeightDistributionMode.REPLICATE:
@@ -1016,7 +1016,7 @@ def register_bridge_implementation(
         return bridge
 
     @stream_weights_megatron_to_hf.impl((source, target))
-    def _from_megatron_registered_impl(
+    def _megatron_to_hf_registered_impl(
             _,
             megatron_model: Union[MegatronModel, List[MegatronModel]],
             hf_pretrained: HFPreTrained,
@@ -1032,7 +1032,7 @@ def register_bridge_implementation(
 
     # Set meaningful names for debugging
     _get_model_bridge_impl.__name__ = f"_bridge_with_{bridge_class_name}"
-    _from_megatron_registered_impl.__name__ = f"_from_megatron_with_{bridge_class_name}"
+    _megatron_to_hf_registered_impl.__name__ = f"_megatron_to_hf_with_{bridge_class_name}"
 
 
 def create_bridge_decorator(
