@@ -14,8 +14,8 @@
 
 import pytest
 
-from megatron.hub.bridge.state_bridge import MegatronStateBridge
 from megatron.hub.bridge.param_mapping import DirectMapping, QKVMapping
+from megatron.hub.bridge.state_bridge import MegatronStateBridge
 
 
 class TestMegatronStateBridge:
