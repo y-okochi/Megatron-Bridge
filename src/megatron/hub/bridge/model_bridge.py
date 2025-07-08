@@ -520,9 +520,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
                 weight = None
                 module = None
                 if task.pp_rank == mpu.get_pipeline_model_parallel_rank():
-                    module, weight = self._get_param_and_module_from_vp(
-                        megatron_model, task.vp_stage, task.param_name
-                    )
+                    module, weight = self._get_param_and_module_from_vp(megatron_model, task.vp_stage, task.param_name)
 
                 kv_pairs = task.from_megatron(weight, module)
 
