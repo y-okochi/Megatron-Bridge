@@ -969,6 +969,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
 
         return create_bridge_decorator(source=source, target=target)
 
+
 def is_tensor_parallel(param) -> bool:
     """Check if a parameter is tensor parallel distributed."""
     return hasattr(param, "tensor_model_parallel") and param.tensor_model_parallel
