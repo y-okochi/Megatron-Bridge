@@ -18,10 +18,9 @@ from typing import List, Optional
 import torch
 from megatron.core.distributed import DistributedDataParallelConfig
 
-from megatron.hub.models.llama import Llama2ModelProvider7B
+from megatron.hub.models.llama import Llama4Experts16ModelProvider
 from megatron.hub.recipes.utils.dataset_utils import get_blend_fields_from_data_paths
 from megatron.hub.recipes.utils.optimizer_utils import distributed_fused_adam_with_cosine_annealing
-from megatron.hub.training.comm_overlap import CommOverlapConfig
 from megatron.hub.training.config import (
     CheckpointConfig,
     ConfigContainer,
@@ -35,15 +34,17 @@ from megatron.hub.training.mixed_precision import MixedPrecisionConfig, get_mixe
 
 
 def model_config(
-    tensor_parallelism: int = 2,
+    tensor_parallelism: int = 4,
     pipeline_parallelism: int = 1,
     pipeline_parallelism_dtype: Optional[torch.dtype] = None,
     virtual_pipeline_parallelism: Optional[int] = None,
     context_parallelism: int = 1,
-    sequence_parallelism: bool = False,
-) -> Llama2ModelProvider7B:
+    sequence_parallelism: bool = True,
+    expert_tensor_parallelism: int = 4,
+    expert_model_parallelism: int = 16,
+) -> Llama4Experts16ModelProvider:
     """
-    Configure the Llama2 7B model.
+    Configure the Llama4 16-Experts (Scout) model.
 
     Args:
         tensor_parallelism (int): Degree of tensor model parallelism.
@@ -52,17 +53,21 @@ def model_config(
         virtual_pipeline_parallelism (Optional[int]): Size of virtual pipeline parallelism.
         context_parallelism (int): Degree of context parallelism.
         sequence_parallelism (bool): Whether to use sequence parallelism.
+        expert_tensor_parallelism (int): Degree of expert tensor parallelism.
+        expert_model_parallelism (int): Degree of expert model parallelism.
 
     Returns:
-        Llama2ModelProvider7B: Configuration for the Llama2 7B model.
+        Llama4Experts16ModelProvider: Configuration for the Llama4 16-Experts (Scout) model.
     """
-    return Llama2ModelProvider7B(
+    return Llama4Experts16ModelProvider(
         tensor_model_parallel_size=tensor_parallelism,
         pipeline_model_parallel_size=pipeline_parallelism,
         pipeline_dtype=pipeline_parallelism_dtype,
         virtual_pipeline_model_parallel_size=virtual_pipeline_parallelism,
         context_parallel_size=context_parallelism,
         sequence_parallel=sequence_parallelism,
+        expert_tensor_parallel_size=expert_tensor_parallelism,
+        expert_model_parallel_size=expert_model_parallelism,
     )
 
 
@@ -78,26 +83,26 @@ def pretrain_config(
     per_split_data_args_path: Optional[str] = None,
     mock: bool = False,
     # Model configuration
-    tensor_parallelism: int = 2,
+    tensor_parallelism: int = 4,
     pipeline_parallelism: int = 1,
     pipeline_parallelism_dtype: Optional[torch.dtype] = None,
     virtual_pipeline_parallelism: Optional[int] = None,
     context_parallelism: int = 1,
-    sequence_parallelism: bool = False,
+    sequence_parallelism: bool = True,
+    expert_tensor_parallelism: int = 4,
+    expert_model_parallelism: int = 16,
     # Training hyperparameters
     train_iters: int = 1_168_251,
     global_batch_size: int = 512,
     micro_batch_size: int = 1,
-    seq_length: int = 4096,
     lr: float = 3e-4,
     min_lr: float = 3e-5,
     lr_warmup_iters: int = 2000,
     # Precision recipe
     precision_config: str | MixedPrecisionConfig = "bf16_mixed",
-    comm_overlap_config: CommOverlapConfig | None = None,
 ) -> ConfigContainer:
     """
-    Create a pre-training configuration for Llama2 7B model.
+    Create a pre-training configuration for Llama4 16-Experts (Scout) model.
 
     Args:
         dir (Optional[str]): Base directory for saving logs and checkpoints.
@@ -113,20 +118,23 @@ def pretrain_config(
         pipeline_parallelism (int): Degree of pipeline model parallelism.
         pipeline_parallelism_dtype (Optional[torch.dtype]): Data type for pipeline parallelism.
         virtual_pipeline_parallelism (Optional[int]): Size of virtual pipeline parallelism.
-        context_parallelism (int): Degree of context parallelism to be passed to model_config.
+        context_parallelism (int): Degree of context parallelism.
         sequence_parallelism (bool): Whether to use sequence parallelism.
+        expert_tensor_parallelism (int): Degree of expert tensor parallelism.
+        expert_model_parallelism (int): Degree of expert model parallelism.
         train_iters (int): Total number of training iterations.
         global_batch_size (int): Global batch size for training.
         micro_batch_size (int): Micro batch size for training.
-        seq_length (int): Sequence length for training data.
         lr (float): Learning rate.
         min_lr (float): Minimum learning rate for cosine decay.
         lr_warmup_iters (int): Number of warmup iterations for the learning rate.
         precision_config (str | MixedPrecisionConfig): Precision configuration for the model.
-        comm_overlap_config (CommOverlapConfig | None): Communication overlap configuration for the model.
 
     Returns:
         ConfigContainer: Configuration for pre-training.
+
+    Note:
+        Sequence length is set to 8192 for Llama4 16-Experts pretraining.
     """
     base_output_dir = dir if dir is not None else os.path.join(os.getcwd(), "nemo_experiments")
     run_output_dir = os.path.join(base_output_dir, name)
@@ -144,15 +152,13 @@ def pretrain_config(
         virtual_pipeline_parallelism=virtual_pipeline_parallelism,
         context_parallelism=context_parallelism,
         sequence_parallelism=sequence_parallelism,
+        expert_tensor_parallelism=expert_tensor_parallelism,
+        expert_model_parallelism=expert_model_parallelism,
     )
 
     opt_config, scheduler = distributed_fused_adam_with_cosine_annealing(
         lr_warmup_iters=lr_warmup_iters,
         lr_decay_iters=train_iters,
-        adam_beta1=0.9,
-        adam_beta2=0.95,
-        adam_eps=1e-5,
-        weight_decay=0.1,
         max_lr=lr,
         min_lr=min_lr,
     )
@@ -166,9 +172,6 @@ def pretrain_config(
             eval_iters=32,
             global_batch_size=global_batch_size,
             micro_batch_size=micro_batch_size,
-            manual_gc=True,
-            manual_gc_interval=100,
-            manual_gc_eval=100,
         ),
         optimizer=opt_config,
         scheduler=scheduler,
@@ -185,7 +188,7 @@ def pretrain_config(
             reset_attention_mask=False,
             reset_position_ids=False,
             eod_mask_loss=False,
-            sequence_length=seq_length,
+            sequence_length=8192,
             num_dataset_builder_threads=1,
             blend=blend,
             blend_per_split=blend_per_split,
@@ -208,17 +211,11 @@ def pretrain_config(
             async_save=True,
         ),
         rng=RNGConfig(seed=1234),
-        comm_overlap=comm_overlap_config,
     )
 
     # Apply precision configuration
     if isinstance(precision_config, str):
         precision_config = get_mixed_precision_config(precision_config)
     precision_config.setup(cfg.model, cfg.optimizer, cfg.ddp)
-
-    if cfg.comm_overlap is None:
-        cfg.comm_overlap = CommOverlapConfig(
-            tp_comm_overlap=False,
-        )
 
     return cfg
