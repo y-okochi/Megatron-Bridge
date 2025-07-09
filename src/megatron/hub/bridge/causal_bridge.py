@@ -144,7 +144,7 @@ class CausalLMBridge(Generic[MegatronModelT]):
             >>> from transformers import AutoConfig
             >>>
             >>> # Load just the configuration
-            >>> config = AutoConfig.from_hf_pretrained("meta-llama/Llama-3-8B")
+            >>> config = AutoConfig.from_pretrained("meta-llama/Llama-3-8B")
             >>>
             >>> # Create bridge from config (no weights)
             >>> bridge = CausalLMBridge.from_hf_config(config)
@@ -202,10 +202,10 @@ class CausalLMBridge(Generic[MegatronModelT]):
             ... )
         """
         # First load just the config to check architecture support
-        config = AutoConfig.from_hf_pretrained(path)
+        config = AutoConfig.from_pretrained(path)
         cls._validate_config(config, path)
 
-        return cls(PreTrainedCausalLM.from_hf_pretrained(path, **kwargs))
+        return cls(PreTrainedCausalLM.from_pretrained(path, **kwargs))
 
     @overload
     def __call__(

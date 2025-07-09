@@ -68,7 +68,7 @@ class PreTrainedBase(ABC):
 
         # Save the config if it's already loaded
         if hasattr(self, "_config") and self._config is not None:
-            self._config.save_hf_pretrained(save_path)
+            self._config.save_pretrained(save_path)
 
         # Iterate over required artifacts to save them in a predictable order
         for name in self.ARTIFACTS:
@@ -76,14 +76,14 @@ class PreTrainedBase(ABC):
             attr_name = f"_{name}"
             if hasattr(self, attr_name):
                 artifact = getattr(self, attr_name)
-                if artifact is not None and hasattr(artifact, "save_hf_pretrained"):
-                    artifact.save_hf_pretrained(save_path)
+                if artifact is not None and hasattr(artifact, "save_pretrained"):
+                    artifact.save_pretrained(save_path)
 
-        # Iterate over optional artifacts - only save if they exist and have save_hf_pretrained
+        # Iterate over optional artifacts - only save if they exist and have save_pretrained
         for name in self.OPTIONAL_ARTIFACTS:
             artifact = getattr(self, name, None)
-            if artifact is not None and hasattr(artifact, "save_hf_pretrained"):
-                artifact.save_hf_pretrained(save_path)
+            if artifact is not None and hasattr(artifact, "save_pretrained"):
+                artifact.save_pretrained(save_path)
 
     @abstractmethod
     def _load_model(self) -> PreTrainedModel:

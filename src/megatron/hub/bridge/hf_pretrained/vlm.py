@@ -47,7 +47,7 @@ class PreTrainedVLM(PreTrainedBase, Generic[VLMType]):
         >>> from PIL import Image
         >>>
         >>> # Create instance - no model loading happens yet
-        >>> vlm = PreTrainedVLM.from_hf_pretrained("llava-hf/llava-1.5-7b-hf")
+        >>> vlm = PreTrainedVLM.from_pretrained("llava-hf/llava-1.5-7b-hf")
         >>>
         >>> # Load an image
         >>> image = Image.open("cat.jpg")
@@ -88,7 +88,7 @@ class PreTrainedVLM(PreTrainedBase, Generic[VLMType]):
         >>> from megatron.hub.bridge.hf_pretrained.vlm import PreTrainedVLM
         >>>
         >>> # Type-safe access to Llava-specific features
-        >>> llava: PreTrainedVLM[LlavaForConditionalGeneration] = PreTrainedVLM.from_hf_pretrained(
+        >>> llava: PreTrainedVLM[LlavaForConditionalGeneration] = PreTrainedVLM.from_pretrained(
         ...     "llava-hf/llava-1.5-7b-hf",
         ...     torch_dtype=torch.float16,
         ...     device="cuda"
@@ -105,7 +105,7 @@ class PreTrainedVLM(PreTrainedBase, Generic[VLMType]):
 
         Custom preprocessing and generation:
         >>> # Load with custom settings
-        >>> vlm = PreTrainedVLM.from_hf_pretrained(
+        >>> vlm = PreTrainedVLM.from_pretrained(
         ...     "Qwen/Qwen-VL-Chat",
         ...     trust_remote_code=True,
         ...     device_map="auto",
@@ -134,8 +134,8 @@ class PreTrainedVLM(PreTrainedBase, Generic[VLMType]):
         >>>
         >>> # Load components separately
         >>> from transformers import AutoProcessor, AutoModel
-        >>> vlm.processor = AutoProcessor.from_hf_pretrained("microsoft/Florence-2-base")
-        >>> vlm.model = AutoModel.from_hf_pretrained("microsoft/Florence-2-base")
+        >>> vlm.processor = AutoProcessor.from_pretrained("microsoft/Florence-2-base")
+        >>> vlm.model = AutoModel.from_pretrained("microsoft/Florence-2-base")
         >>>
         >>> # Use for various vision tasks
         >>> task_prompt = "<OD>"  # Object detection task
@@ -210,7 +210,7 @@ class PreTrainedVLM(PreTrainedBase, Generic[VLMType]):
             model_kwargs["config"] = config
 
         # Try AutoModel first for VLMs
-        model = AutoModel.from_hf_pretrained(self.model_name_or_path, **model_kwargs)
+        model = AutoModel.from_pretrained(self.model_name_or_path, **model_kwargs)
 
         # Move to device
         model = model.to(self.device)
@@ -226,7 +226,7 @@ class PreTrainedVLM(PreTrainedBase, Generic[VLMType]):
         if self.model_name_or_path is None:
             raise ValueError("model_name_or_path must be provided to load config")
 
-        return AutoConfig.from_hf_pretrained(
+        return AutoConfig.from_pretrained(
             self.model_name_or_path,
             trust_remote_code=self.trust_remote_code,
             **self.init_kwargs,

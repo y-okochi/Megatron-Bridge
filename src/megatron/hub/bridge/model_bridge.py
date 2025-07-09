@@ -317,7 +317,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         Example:
             .. code-block:: python
 
-                hf_model = PreTrainedCausalLM.from_hf_pretrained("gpt2")
+                hf_model = PreTrainedCausalLM.from_pretrained("gpt2")
                 megatron_model = create_megatron_model()  # Single model or list
                 bridge.load_weights_hf_to_megatron(hf_model, megatron_model)
 

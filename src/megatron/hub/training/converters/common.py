@@ -162,7 +162,7 @@ def save_hf_tokenizer_assets(tokenizer_name_or_path: str, save_path: str = "/tmp
     """
     from transformers import AutoTokenizer
 
-    tok = AutoTokenizer.from_hf_pretrained(tokenizer_name_or_path, trust_remote_code=True)
+    tok = AutoTokenizer.from_pretrained(tokenizer_name_or_path, trust_remote_code=True)
     # Save tokenizer assets to save_path.
     tok.save_hf_pretrained(save_path)
     return save_path

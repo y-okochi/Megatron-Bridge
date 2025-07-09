@@ -85,7 +85,7 @@ class TestCausalLMBridge:
             mock_pretrained_cls.from_hf_pretrained.return_value = mock_model
 
             with patch("megatron.hub.bridge.causal_bridge.AutoConfig") as mock_autoconfig:
-                mock_autoconfig.from_hf_pretrained.return_value = mock_config
+                mock_AutoConfig.from_pretrained.return_value = mock_config
 
                 # Skip architecture validation for this test
                 with patch.object(CausalLMBridge, "_validate_config"):

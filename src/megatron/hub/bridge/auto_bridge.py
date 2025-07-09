@@ -86,7 +86,7 @@ class AutoBridge:
         """
         # Load only the configuration - this is fast and doesn't load weights
         try:
-            config = AutoConfig.from_hf_pretrained(path, trust_remote_code=kwargs.get("trust_remote_code", False))
+            config = AutoConfig.from_pretrained(path, trust_remote_code=kwargs.get("trust_remote_code", False))
         except Exception as e:
             raise ValueError(
                 f"Failed to load configuration from {path}. "

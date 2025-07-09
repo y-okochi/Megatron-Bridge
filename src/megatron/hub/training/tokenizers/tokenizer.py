@@ -134,7 +134,7 @@ def build_tokenizer(
         kwargs = {}
         if tokenizer_config.tokenizer_prompt_format == "nvlm-yi-34b":
             kwargs = {"from_slow": True, "legacy": False, "add_bos_token": True}
-        underlying_tokenizer = _transformers.AutoTokenizer.from_hf_pretrained(
+        underlying_tokenizer = _transformers.AutoTokenizer.from_pretrained(
             pretrained_model_name_or_path=tokenizer_config.tokenizer_model, **kwargs
         )
         tokenizer = MultimodalTokenizer(
