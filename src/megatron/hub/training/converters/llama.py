@@ -22,7 +22,6 @@ from megatron.hub.models.llama import Llama4ModelProvider, Llama31ModelProvider,
 from megatron.hub.training.converters.common import BaseExporter, BaseImporter, dtype_from_hf
 from megatron.hub.training.converters.state_transform import TransformFns, apply_transforms, state_transform
 
-
 if TYPE_CHECKING:
     from transformers import LlamaConfig as HFLlamaConfig
     from transformers import LlamaForCausalLM
@@ -188,7 +187,7 @@ class HFLlamaImporter(BaseImporter):
         """
         from transformers import LlamaForCausalLM
 
-        return LlamaForCausalLM.from_pretrained(str(self.input_path), torch_dtype="auto")
+        return LlamaForCausalLM.from_hf_pretrained(str(self.input_path), torch_dtype="auto")
 
     def convert_state(self, source, target):
         """Convert state dict from HF format to megatron.hub format.
@@ -303,7 +302,7 @@ class HFLlamaImporter(BaseImporter):
 
         if self._hf_config is not None:
             return self._hf_config
-        self._hf_config = HFLlamaConfig.from_pretrained(str(self.input_path))
+        self._hf_config = HFLlamaConfig.from_hf_pretrained(str(self.input_path))
         return self._hf_config
 
     @property
@@ -321,9 +320,9 @@ class HFLlamaImporter(BaseImporter):
 
         from transformers import AutoConfig, GenerationConfig
 
-        source = AutoConfig.from_pretrained(str(self.input_path))
+        source = AutoConfig.from_hf_pretrained(str(self.input_path))
         try:
-            generation_config = GenerationConfig.from_pretrained(str(self.input_path))
+            generation_config = GenerationConfig.from_hf_pretrained(str(self.input_path))
         except Exception:
             generation_config = None
 
