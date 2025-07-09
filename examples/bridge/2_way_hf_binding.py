@@ -21,7 +21,7 @@ The process is as follows:
     (e.g., "meta-llama/Llama-3.2-1B"). This downloads the model from the Hub and loads it.
 2. The bridge's `to_megatron` method is called to get a Megatron-LM compatible model provider.
 3. The model provider is used to instantiate the Megatron-LM model.
-4. Finally, the `save_pretrained` method is used to save the Megatron-LM
+4. Finally, the `save_hf_pretrained` method is used to save the Megatron-LM
     model back into the Hugging Face format. A new directory, named after the
     model, will be created for the converted model files. By default, this
     directory is created in the current working directory, but a different
@@ -35,7 +35,6 @@ from rich.console import Console
 
 from megatron.hub import CausalLMBridge
 from megatron.hub.bridge.utils import weights_verification_table
-
 
 console = Console()
 HF_MODEL_ID = "meta-llama/Llama-3.2-1B"

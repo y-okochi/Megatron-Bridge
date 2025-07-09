@@ -162,9 +162,9 @@ def save_hf_tokenizer_assets(tokenizer_name_or_path: str, save_path: str = "/tmp
     """
     from transformers import AutoTokenizer
 
-    tok = AutoTokenizer.from_pretrained(tokenizer_name_or_path, trust_remote_code=True)
+    tok = AutoTokenizer.from_hf_pretrained(tokenizer_name_or_path, trust_remote_code=True)
     # Save tokenizer assets to save_path.
-    tok.save_pretrained(save_path)
+    tok.save_hf_pretrained(save_path)
     return save_path
 
 
@@ -264,7 +264,7 @@ class BaseImporter(ABC):
         (self.output_path / HF_ASSETS_DIR).mkdir(parents=True, exist_ok=True)
         self._hf_config = None
         self._tron_config = None
-        self.hf_config.save_pretrained(str(self.output_path / HF_ASSETS_DIR))
+        self.hf_config.save_hf_pretrained(str(self.output_path / HF_ASSETS_DIR))
 
     @property
     def tokenizer(self) -> "_HuggingFaceTokenizer":
@@ -476,7 +476,7 @@ class BaseExporter(ABC):
         from transformers.modeling_utils import no_init_weights
 
         with no_init_weights(True):
-            return AutoModelForCausalLM.from_config(self.hf_config, torch_dtype=dtype)
+            return AutoModelForCausalLM.from_hf_config(self.hf_config, torch_dtype=dtype)
 
     def init_tron_model(self) -> tuple[dict[str, torch.Tensor], GPTModelProvider | T5ModelProvider]:
         """Load the megatron hub model state dict and config from a distributed checkpoint.
@@ -539,17 +539,17 @@ class BaseExporter(ABC):
         if self.hf_config.tie_word_embeddings:
             state_dict = target.state_dict()
             state_dict.pop("lm_head.weight")
-            target.save_pretrained(self.output_path, state_dict=state_dict)
+            target.save_hf_pretrained(self.output_path, state_dict=state_dict)
         else:
-            target.save_pretrained(self.output_path)
+            target.save_hf_pretrained(self.output_path)
 
         try:
-            self.tokenizer.save_pretrained(self.output_path)
+            self.tokenizer.save_hf_pretrained(self.output_path)
         except Exception:
             logger.warning("Failed to save tokenizer")
 
         if self.tron_config.generation_config is not None:
-            self.tron_config.generation_config.save_pretrained(self.output_path)
+            self.tron_config.generation_config.save_hf_pretrained(self.output_path)
 
         print(f"Converted {self.input_path} to {self.output_path}.")
         return self.output_path

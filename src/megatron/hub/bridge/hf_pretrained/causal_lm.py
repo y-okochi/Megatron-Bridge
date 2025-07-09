@@ -29,7 +29,6 @@ from transformers.generation.utils import GenerateOutput
 
 from megatron.hub.bridge.hf_pretrained.base import PreTrainedBase
 
-
 # Python 3.12+ supports PEP 692 (TypedDict Unpack)
 if sys.version_info >= (3, 12):
     from typing import TypedDict, Unpack
@@ -50,7 +49,7 @@ class PreTrainedCausalLM(PreTrainedBase, Generic[CausalLMType]):
         Basic usage with lazy loading:
         >>> from mbridge.pretrained import PreTrainedCausalLM
         >>> # Create instance - no model loading happens yet
-        >>> model = PreTrainedCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
+        >>> model = PreTrainedCausalLM.from_hf_pretrained("meta-llama/Llama-2-7b-chat-hf")
         >>> # Components are loaded on first access
         >>> config = model.config  # Loads config
         >>> tokenizer = model.tokenizer  # Loads tokenizer
@@ -63,7 +62,7 @@ class PreTrainedCausalLM(PreTrainedBase, Generic[CausalLMType]):
         >>> from transformers import LlamaForCausalLM
         >>> from mbridge.pretrained import PreTrainedCausalLM
         >>> # Type-safe access to Llama-specific features
-        >>> llama_model: PreTrainedCausalLM[LlamaForCausalLM] = PreTrainedCausalLM.from_pretrained(
+        >>> llama_model: PreTrainedCausalLM[LlamaForCausalLM] = PreTrainedCausalLM.from_hf_pretrained(
         ...     "meta-llama/Llama-2-7b-chat-hf",
         ...     torch_dtype=torch.float16,
         ...     device="cuda"
@@ -73,7 +72,7 @@ class PreTrainedCausalLM(PreTrainedBase, Generic[CausalLMType]):
 
         Loading with custom configurations:
         >>> # Load model with specific settings
-        >>> model = PreTrainedCausalLM.from_pretrained(
+        >>> model = PreTrainedCausalLM.from_hf_pretrained(
         ...     "gpt2",
         ...     device="cuda:0",
         ...     torch_dtype=torch.bfloat16,
@@ -94,9 +93,9 @@ class PreTrainedCausalLM(PreTrainedBase, Generic[CausalLMType]):
         >>> model = PreTrainedCausalLM()
         >>> # Manually set components
         >>> from transformers import AutoConfig, AutoTokenizer, AutoModelForCausalLM
-        >>> model.config = AutoConfig.from_pretrained("microsoft/phi-2")
-        >>> model.tokenizer = AutoTokenizer.from_pretrained("microsoft/phi-2")
-        >>> model.model = AutoModelForCausalLM.from_pretrained("microsoft/phi-2")
+        >>> model.config = AutoConfig.from_hf_pretrained("microsoft/phi-2")
+        >>> model.tokenizer = AutoTokenizer.from_hf_pretrained("microsoft/phi-2")
+        >>> model.model = AutoModelForCausalLM.from_hf_pretrained("microsoft/phi-2")
         >>> # Save all components
         >>> model.save_artifacts("./my_model")
 
@@ -135,7 +134,7 @@ class PreTrainedCausalLM(PreTrainedBase, Generic[CausalLMType]):
             device: Device to load model on (e.g., 'cuda', 'cpu')
             torch_dtype: Data type to load model in (e.g., torch.float16)
             trust_remote_code: Whether to trust remote code when loading
-            **kwargs: Additional arguments passed to from_pretrained methods
+            **kwargs: Additional arguments passed to from_hf_pretrained methods
         """
         self._model_name_or_path = model_name_or_path
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
@@ -158,7 +157,7 @@ class PreTrainedCausalLM(PreTrainedBase, Generic[CausalLMType]):
         if config is not None:
             model_kwargs["config"] = config
 
-        model = AutoModelForCausalLM.from_pretrained(self.model_name_or_path, **model_kwargs)
+        model = AutoModelForCausalLM.from_hf_pretrained(self.model_name_or_path, **model_kwargs)
         model = model.to(self.device)
 
         generation_config = getattr(self, "_generation_config", None)
@@ -170,7 +169,7 @@ class PreTrainedCausalLM(PreTrainedBase, Generic[CausalLMType]):
         """Load the model config."""
         if self.model_name_or_path is None:
             raise ValueError("model_name_or_path must be provided to load config")
-        return AutoConfig.from_pretrained(
+        return AutoConfig.from_hf_pretrained(
             self.model_name_or_path,
             trust_remote_code=self.trust_remote_code,
             **self.init_kwargs,
@@ -180,7 +179,7 @@ class PreTrainedCausalLM(PreTrainedBase, Generic[CausalLMType]):
         """Load the tokenizer."""
         if self.model_name_or_path is None:
             raise ValueError("model_name_or_path must be provided to load tokenizer")
-        tokenizer = AutoTokenizer.from_pretrained(
+        tokenizer = AutoTokenizer.from_hf_pretrained(
             self.model_name_or_path,
             trust_remote_code=self.trust_remote_code,
             **self.init_kwargs,
@@ -503,7 +502,7 @@ class PreTrainedCausalLM(PreTrainedBase, Generic[CausalLMType]):
             self._model = self._model.float()
         return self
 
-    def save_pretrained(self, save_directory: Union[str, Path]):
+    def save_hf_pretrained(self, save_directory: Union[str, Path]):
         """
         Save all components (model, tokenizer, config, generation_config) to a directory.
 
@@ -520,7 +519,7 @@ class PreTrainedCausalLM(PreTrainedBase, Generic[CausalLMType]):
 
         # Save model if loaded
         if hasattr(self, "_model") and self._model is not None:
-            self._model.save_pretrained(save_path)
+            self._model.save_hf_pretrained(save_path)
 
         # Use the base class save_artifacts to save config and all artifacts
         self.save_artifacts(save_path)
@@ -581,12 +580,12 @@ class PreTrainedCausalLM(PreTrainedBase, Generic[CausalLMType]):
             model_repr_content = f"{model_class_name} [layers={layers}, hidden_size={hidden_size}, loaded]"
         elif "config" in self.__dict__:  # Model not loaded, but config is
             config = self.config
-            model_class_name_from_config = "CausalLM"  # Default
+            model_class_name_from_hf_config = "CausalLM"  # Default
             if hasattr(config, "architectures") and config.architectures:
-                model_class_name_from_config = config.architectures[0]
+                model_class_name_from_hf_config = config.architectures[0]
             elif getattr(config, "model_type", None):
                 mt = config.model_type
-                model_class_name_from_config = f"{mt.capitalize()}Model" if mt else "CausalLM"
+                model_class_name_from_hf_config = f"{mt.capitalize()}Model" if mt else "CausalLM"
 
             details_parts = []
             if getattr(config, "num_hidden_layers", None) is not None:
@@ -597,9 +596,9 @@ class PreTrainedCausalLM(PreTrainedBase, Generic[CausalLMType]):
             details_str = ", ".join(details_parts)
             status_suffix = "not loaded"
             if details_str:
-                model_repr_content = f"{model_class_name_from_config}({details_str}) [{status_suffix}]"
+                model_repr_content = f"{model_class_name_from_hf_config}({details_str}) [{status_suffix}]"
             else:
-                model_repr_content = f"{model_class_name_from_config} [{status_suffix}]"
+                model_repr_content = f"{model_class_name_from_hf_config} [{status_suffix}]"
         else:  # Model and Config also not loaded
             model_repr_content = "AutoModelForCausalLM [not loaded]"
 

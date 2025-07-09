@@ -70,9 +70,9 @@ class TestCausalLMBridge:
             "vocab_size": 128256,
         }
 
-    def test_from_pretrained_with_model_id(self):
-        """Test from_pretrained with model ID string."""
-        # This test checks that from_pretrained creates correct bridge instance
+    def test_from_hf_pretrained_with_model_id(self):
+        """Test from_hf_pretrained with model ID string."""
+        # This test checks that from_hf_pretrained creates correct bridge instance
         # We'll use a mock pretrained model
         mock_model = Mock(spec=MockPreTrainedCausalLM)
         mock_config = Mock(spec=PretrainedConfig)
@@ -81,24 +81,24 @@ class TestCausalLMBridge:
 
         with patch("megatron.hub.bridge.causal_bridge.PreTrainedCausalLM", MockPreTrainedCausalLM) as mock_cls:
             mock_pretrained_cls = Mock()
-            mock_cls.from_pretrained = mock_pretrained_cls.from_pretrained
-            mock_pretrained_cls.from_pretrained.return_value = mock_model
+            mock_cls.from_hf_pretrained = mock_pretrained_cls.from_hf_pretrained
+            mock_pretrained_cls.from_hf_pretrained.return_value = mock_model
 
             with patch("megatron.hub.bridge.causal_bridge.AutoConfig") as mock_autoconfig:
-                mock_autoconfig.from_pretrained.return_value = mock_config
+                mock_autoconfig.from_hf_pretrained.return_value = mock_config
 
                 # Skip architecture validation for this test
                 with patch.object(CausalLMBridge, "_validate_config"):
                     # Mock the PreTrainedCausalLM type check
                     with patch("megatron.hub.bridge.causal_bridge.PreTrainedCausalLM", MockPreTrainedCausalLM):
-                        # Call from_pretrained
+                        # Call from_hf_pretrained
                         model_id = "gpt2"
-                        result = CausalLMBridge.from_pretrained(model_id, trust_remote_code=True)
+                        result = CausalLMBridge.from_hf_pretrained(model_id, trust_remote_code=True)
 
                     # Assertions
                     assert isinstance(result, CausalLMBridge)
                     assert result.hf_pretrained == mock_model
-                    mock_pretrained_cls.from_pretrained.assert_called_once_with(model_id, trust_remote_code=True)
+                    mock_pretrained_cls.from_hf_pretrained.assert_called_once_with(model_id, trust_remote_code=True)
 
     def test_from_pretrained_with_path(self):
         """Test from_pretrained with Path object."""
@@ -169,8 +169,8 @@ class TestCausalLMBridge:
                         attn_implementation="flash_attention_2",
                     )
 
-    def test_to_provider_basic(self, llama_config):
-        """Test basic to_provider conversion."""
+    def test_to_megatron_provider_basic(self, llama_config):
+        """Test basic to_megatron_provider conversion."""
         # Setup mocks
         mock_hf_model = Mock(spec=MockPreTrainedCausalLM)
         mock_hf_model.config = LlamaConfig(**llama_config)
@@ -184,14 +184,14 @@ class TestCausalLMBridge:
             with patch.object(CausalLMBridge, "_model_bridge", mock_model_bridge):
                 # Create bridge and convert
                 bridge = CausalLMBridge(mock_hf_model)
-                result = bridge.to_provider(load_weights=False)
+                result = bridge.to_megatron_provider(load_weights=False)
 
                 # Assertions
                 assert result == mock_provider
                 mock_model_bridge.provider_bridge.assert_called_once_with(mock_hf_model)
 
-    def test_to_provider_with_different_model_types(self):
-        """Test to_provider with different model architectures."""
+    def test_to_megatron_provider_with_different_model_types(self):
+        """Test to_megatron_provider with different model architectures."""
         # Test with GPT2 model
         mock_gpt2_model = Mock(spec=MockPreTrainedCausalLM)
         mock_gpt2_model.config = Mock(model_type="gpt2")
@@ -204,13 +204,13 @@ class TestCausalLMBridge:
         with patch("megatron.hub.bridge.causal_bridge.PreTrainedCausalLM", MockPreTrainedCausalLM):
             with patch.object(CausalLMBridge, "_model_bridge", mock_model_bridge):
                 bridge = CausalLMBridge(mock_gpt2_model)
-                result = bridge.to_provider(load_weights=False)
+                result = bridge.to_megatron_provider(load_weights=False)
 
                 assert result == mock_provider
                 mock_model_bridge.provider_bridge.assert_called_once_with(mock_gpt2_model)
 
-    def test_to_provider_with_custom_kwargs(self, llama_config):
-        """Test to_provider with custom keyword arguments."""
+    def test_to_megatron_provider_with_custom_kwargs(self, llama_config):
+        """Test to_megatron_provider with custom keyword arguments."""
         # Setup mocks
         mock_hf_model = Mock(spec=MockPreTrainedCausalLM)
         mock_hf_model.config = LlamaConfig(**llama_config)
@@ -226,7 +226,7 @@ class TestCausalLMBridge:
             with patch.object(CausalLMBridge, "_model_bridge", mock_model_bridge):
                 # Create bridge and convert with load_weights=True
                 bridge = CausalLMBridge(mock_hf_model)
-                result = bridge.to_provider(load_weights=True)
+                result = bridge.to_megatron_provider(load_weights=True)
 
                 # Assertions
                 assert result == mock_provider
@@ -234,8 +234,8 @@ class TestCausalLMBridge:
                 # Check that a pre-wrap hook was registered for loading weights
                 mock_provider.register_pre_wrap_hook.assert_called_once()
 
-    def test_to_provider_error_handling(self):
-        """Test to_provider error handling."""
+    def test_to_megatron_provider_error_handling(self):
+        """Test to_megatron_provider error handling."""
         # Setup mock to raise an exception
         mock_hf_model = Mock(spec=MockPreTrainedCausalLM)
 
@@ -249,7 +249,7 @@ class TestCausalLMBridge:
 
                 # Should propagate the exception
                 with pytest.raises(ValueError, match="Unsupported model type"):
-                    bridge.to_provider()
+                    bridge.to_megatron_provider()
 
     def test_bridge_instance_creation(self):
         """Test CausalLMBridge instance creation."""
@@ -261,10 +261,10 @@ class TestCausalLMBridge:
 
         # Should have the expected methods
         assert hasattr(bridge, "from_pretrained")
-        assert hasattr(bridge, "to_provider")
+        assert hasattr(bridge, "to_megatron_provider")
         assert hasattr(bridge, "load_weights")
-        assert hasattr(bridge, "export_weights")
-        assert hasattr(bridge, "save_pretrained")
+        assert hasattr(bridge, "export_hf_weights")
+        assert hasattr(bridge, "save_hf_pretrained")
         assert bridge.hf_pretrained == mock_model
 
         # Test with PretrainedConfig
@@ -288,7 +288,7 @@ class TestCausalLMBridge:
 class TestCausalLMBridgeEdgeCases:
     """Test edge cases and additional functionality for CausalLMBridge."""
 
-    def test_from_config(self):
+    def test_from_hf_config(self):
         """Test creating bridge from config only."""
         # Create a mock config
         config = Mock(spec=PretrainedConfig)
@@ -296,17 +296,17 @@ class TestCausalLMBridgeEdgeCases:
 
         # Skip architecture validation for this test
         with patch.object(CausalLMBridge, "_validate_config"):
-            bridge = CausalLMBridge.from_config(config)
+            bridge = CausalLMBridge.from_hf_config(config)
             assert isinstance(bridge, CausalLMBridge)
             assert bridge.hf_pretrained == config
 
-    def test_from_config_invalid_architecture(self):
-        """Test from_config with unsupported architecture."""
+    def test_from_hf_config_invalid_architecture(self):
+        """Test from_hf_config with unsupported architecture."""
         config = Mock(spec=PretrainedConfig)
         config.architectures = ["BertForMaskedLM"]  # Not a CausalLM
 
         with pytest.raises(ValueError, match="Model architecture not supported by CausalLMBridge"):
-            CausalLMBridge.from_config(config)
+            CausalLMBridge.from_hf_config(config)
 
     def test_supports_method(self):
         """Test the supports class method."""
@@ -400,7 +400,7 @@ class TestCausalLMBridgeEdgeCases:
     @patch("torch.distributed.barrier")
     @patch("torch.distributed.is_available", return_value=True)
     @patch("torch.distributed.is_initialized", return_value=True)
-    def test_save_pretrained(self, mock_is_init, mock_is_avail, mock_barrier, mock_get_rank):
+    def test_save_hf_pretrained(self, mock_is_init, mock_is_avail, mock_barrier, mock_get_rank):
         """Test saving a model in HuggingFace format."""
         # Setup mocks
         mock_hf_model = Mock(spec=MockPreTrainedCausalLM)
@@ -416,35 +416,36 @@ class TestCausalLMBridgeEdgeCases:
         mock_megatron_model = [Mock()]
 
         with patch("megatron.hub.bridge.causal_bridge.PreTrainedCausalLM", MockPreTrainedCausalLM):
-            with patch.object(CausalLMBridge, "save_weights") as mock_save_weights:
+            with patch.object(CausalLMBridge, "save_hf_weights") as mock_save_hf_weights:
                 bridge = CausalLMBridge(mock_hf_model)
-                bridge.save_pretrained(mock_megatron_model, "./output_dir")
+                bridge.save_hf_pretrained(mock_megatron_model, "./output_dir")
 
                 # Check artifacts were saved on rank 0
                 mock_hf_model.save_artifacts.assert_called_once_with("./output_dir")
-                mock_save_weights.assert_called_once_with(mock_megatron_model, "./output_dir", True)
+                mock_save_hf_weights.assert_called_once_with(mock_megatron_model, "./output_dir", True)
 
     @patch("torch.distributed.get_rank", return_value=1)
     @patch("torch.distributed.is_initialized", return_value=True)
     @patch("torch.distributed.is_available", return_value=True)
     @patch("torch.distributed.barrier")
-    def test_save_pretrained_non_zero_rank(self, mock_barrier, mock_is_available, mock_is_initialized, mock_get_rank):
-        """Test save_pretrained on non-zero rank (should not save artifacts)."""
+    def test_save_hf_pretrained_non_zero_rank(self, mock_barrier, mock_is_available, mock_is_initialized,
+                                              mock_get_rank):
+        """Test save_hf_pretrained on non-zero rank (should not save artifacts)."""
         mock_hf_model = Mock(spec=MockPreTrainedCausalLM)
         mock_hf_model.save_artifacts = Mock()
 
         mock_megatron_model = [Mock()]
 
         with patch("megatron.hub.bridge.causal_bridge.PreTrainedCausalLM", MockPreTrainedCausalLM):
-            with patch.object(CausalLMBridge, "save_weights") as mock_save_weights:
+            with patch.object(CausalLMBridge, "save_hf_weights") as mock_save_hf_weights:
                 bridge = CausalLMBridge(mock_hf_model)
-                bridge.save_pretrained(mock_megatron_model, "./output_dir")
+                bridge.save_hf_pretrained(mock_megatron_model, "./output_dir")
 
                 # Artifacts should NOT be saved on non-zero rank
                 mock_hf_model.save_artifacts.assert_not_called()
-                mock_save_weights.assert_called_once_with(mock_megatron_model, "./output_dir", True)
+                mock_save_hf_weights.assert_called_once_with(mock_megatron_model, "./output_dir", True)
 
-    def test_export_weights(self):
+    def test_export_hf_weights(self):
         """Test exporting weights from Megatron to HF format."""
         mock_hf_model = Mock(spec=MockPreTrainedCausalLM)
         mock_hf_model.config = Mock()
@@ -469,7 +470,7 @@ class TestCausalLMBridgeEdgeCases:
 
                     # Mock _get_causal_lm_architecture to avoid accessing transformers
                     with patch.object(bridge, "_get_causal_lm_architecture", return_value=mock_arch_class):
-                        weights = list(bridge.export_weights(mock_megatron_model, order="safetensors", cpu=True))
+                        weights = list(bridge.export_hf_weights(mock_megatron_model, order="safetensors", cpu=True))
 
                         assert len(weights) == 2
                         assert weights[0][0] == "weight1"

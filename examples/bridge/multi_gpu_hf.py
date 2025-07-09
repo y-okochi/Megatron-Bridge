@@ -24,7 +24,7 @@ The process is as follows:
 4. The model provider is used to instantiate the Megatron-LM model.
 5. The weights of the converted Megatron-LM model are verified against the original
     Hugging Face model.
-6. Finally, the `save_pretrained` method is used to save the Megatron-LM
+6. Finally, the `save_hf_pretrained` method is used to save the Megatron-LM
     model back into the Hugging Face format. A new directory, named after the
     model, will be created for the converted model files. By default, this
     directory is created in the current working directory, but a different
@@ -45,7 +45,6 @@ from rich.table import Table
 from megatron.hub import CausalLMBridge
 from megatron.hub.common.decorators import torchrun_main
 
-
 HF_MODEL_ID = "meta-llama/Llama-3.1-8B"
 console = Console()
 
@@ -64,9 +63,9 @@ def main(hf_model_id: str = HF_MODEL_ID, output_dir: str = None) -> None:
     else:
         save_path = model_name
 
-    bridge = CausalLMBridge.from_pretrained(hf_model_id)
+    bridge = CausalLMBridge.from_hf_pretrained(hf_model_id)
 
-    model_provider = bridge.to_provider()
+    model_provider = bridge.to_megatron_provider()
     model_provider.tensor_model_parallel_size = int(os.environ.get("WORLD_SIZE", "1"))
     model_provider.initialize_model_parallel(seed=0)
 
@@ -107,7 +106,7 @@ def main(hf_model_id: str = HF_MODEL_ID, output_dir: str = None) -> None:
         console.print(table)
         console.print(f"Saving HF-ckpt in {save_path}...")
 
-    bridge.save_pretrained(megatron_model, save_path)
+    bridge.save_hf_pretrained(megatron_model, save_path)
 
 
 if __name__ == "__main__":

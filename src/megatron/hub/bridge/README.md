@@ -10,7 +10,7 @@ The bridge framework provides seamless bidirectional conversion between HuggingF
 from megatron.hub import CausalLMBridge
 
 # Load Llama from HuggingFace Hub and convert to Megatron
-bridge = CausalLMBridge.from_pretrained("meta-llama/Llama-3.2-1B")
+bridge = CausalLMBridge.from_hf_pretrained("meta-llama/Llama-3.2-1B")
 provider = bridge.to_megatron()
 
 # The provider is lazy - configure parallelism before creating models
@@ -24,7 +24,7 @@ model = provider(wrap_with_ddp=False)
 
 ```python
 # Export a trained Megatron model to HuggingFace format
-bridge.save_pretrained(model, "./my-fine-tuned-llama")
+bridge.save_hf_pretrained(model, "./my-fine-tuned-llama")
 
 # Or stream weights for memory efficiency
 for name, weight in bridge.export_to_hf(model):
@@ -37,7 +37,7 @@ for name, weight in bridge.export_to_hf(model):
 from megatron.hub import AutoBridge
 
 # Automatically detect model architecture and create appropriate bridge
-bridge = AutoBridge.from_pretrained("any-huggingface/model")
+bridge = AutoBridge.from_hf_pretrained("any-huggingface/model")
 ```
 
 ## Architecture Overview
@@ -299,7 +299,7 @@ import logging
 logging.getLogger("megatron.hub.bridge").setLevel(logging.DEBUG)
 
 # Inspect mappings
-bridge = CausalLMBridge.from_pretrained("model")
+bridge = CausalLMBridge.from_hf_pretrained("model")
 mapping_registry = bridge.mapping_registry()
 print(mapping_registry.get_all_mappings())
 

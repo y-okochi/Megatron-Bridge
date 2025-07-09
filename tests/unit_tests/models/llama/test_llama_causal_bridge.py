@@ -420,7 +420,7 @@ class TestCausalLMBridgeIntegration:
                     mock_bridge.provider_bridge.return_value = mock_provider
                     mock_get_bridge.return_value = mock_bridge
 
-                    _ = bridge.to_provider(load_weights=False)
+                    _ = bridge.to_megatron_provider(load_weights=False)
 
                     # Verify provider_bridge was called with correct model
                     mock_bridge.provider_bridge.assert_called_once_with(mock_model)
