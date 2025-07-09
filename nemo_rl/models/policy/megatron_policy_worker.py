@@ -54,9 +54,15 @@ from megatron.inference.text_generation.mcore_engine_server import (
     run_mcore_engine,
 )
 from megatron.training.utils import get_ltor_masks_and_position_ids
-from nemo.tron import fault_tolerance
-from nemo.tron.checkpointing import checkpoint_exists, load_checkpoint, save_checkpoint
-from nemo.tron.config import (
+from megatron.hub.training import fault_tolerance
+from megatron.hub.training.checkpointing import (
+    checkpoint_exists,
+    load_checkpoint,
+    save_checkpoint,
+    init_checkpointing_context,
+    maybe_finalize_async_save,
+)
+from megatron.hub.training.config import (
     CheckpointConfig,
     ConfigContainer,
     DistributedDataParallelConfig,
@@ -66,22 +72,21 @@ from nemo.tron.config import (
     TokenizerConfig,
     TrainingConfig,
 )
-from nemo.tron.init import initialize_megatron, set_jit_fusion_options
-from nemo.tron.model import get_model_from_config
-from nemo.tron.optim import setup_optimizer
-from nemo.tron.setup import (
+from megatron.hub.training.initialize import initialize_megatron, set_jit_fusion_options
+from megatron.hub.training.optim import setup_optimizer
+from megatron.hub.training.setup import (
     HAVE_FSDP2,
-    _init_checkpointing_context,
     _update_model_config_funcs,
 )
-from nemo.tron.state import GlobalState
-from nemo.tron.tokenizers.tokenizer import build_tokenizer
-from nemo.tron.utils.async_utils import maybe_finalize_async_save
-from nemo.tron.utils.common_utils import get_rank_safe
-from nemo.tron.utils.train_utils import (
+from megatron.hub.training.state import GlobalState
+from megatron.hub.training.tokenizers.tokenizer import build_tokenizer
+from megatron.hub.training.utils.train_utils import (
     logical_and_across_model_parallel_group,
     reduce_max_stat_across_model_parallel_group,
 )
+from megatron.hub.core.models.model_provider import get_model
+from megatron.hub.core.utils.common_utils import get_rank_safe
+
 from ray.util.queue import Queue
 from torch.distributed import get_process_group_ranks
 from transformers import PreTrainedTokenizerBase
@@ -160,7 +165,7 @@ def setup_megatron_model(
     torch.distributed.barrier()
 
     # Context used for persisting some state between checkpoint saves.
-    checkpointing_context = _init_checkpointing_context(cfg.checkpoint_config)
+    checkpointing_context = init_checkpointing_context(cfg.checkpoint_config)
 
     # Tokenizer
     build_tokenizer(
@@ -185,7 +190,7 @@ def setup_megatron_model(
         model_post_init_fns.append(freeze_moe_router)
 
     # Model, optimizer, and learning rate.
-    model = get_model_from_config(
+    model = get_model(
         cfg.model_config,
         cfg.ddp_config,
         use_torch_fsdp2=cfg.dist_config.use_torch_fsdp2,
@@ -583,7 +588,7 @@ class MegatronPolicyWorker:
 
         if init_reference_model:
             self.model = self.move_model(self.model, "cpu")
-            ref_ckpt_context = _init_checkpointing_context(ref_checkpoint_config)
+            ref_ckpt_context = init_checkpointing_context(ref_checkpoint_config)
 
             # Create a separate megatron config for the reference model with the correct checkpoint config
             ref_megatron_cfg = ConfigContainer(
@@ -602,7 +607,7 @@ class MegatronPolicyWorker:
             ref_state = GlobalState()
             ref_state.cfg = ref_megatron_cfg
 
-            reference_model = get_model_from_config(
+            reference_model = get_model(
                 self.megatron_cfg.model_config,
                 self.megatron_cfg.ddp_config,
                 use_torch_fsdp2=self.megatron_cfg.dist_config.use_torch_fsdp2,
