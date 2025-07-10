@@ -94,8 +94,8 @@ class CausalLMBridge(Generic[MegatronModelT]):
 
         # Access the dispatch registry to find all registered types
 
-        if hasattr(model_bridge.to_megatron, "_exact_types"):
-            for arch_type in model_bridge.to_megatron._exact_types.keys():
+        if hasattr(model_bridge.get_model_bridge, "_exact_types"):
+            for arch_type in model_bridge.get_model_bridge._exact_types.keys():
                 if hasattr(arch_type, "__name__"):
                     supported.append(arch_type.__name__)
 
