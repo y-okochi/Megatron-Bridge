@@ -20,8 +20,10 @@ from typing_extensions import Unpack
 
 import torch.distributed
 import transformers
+from megatron.core.optimizer import OptimizerConfig
 from megatron.core.transformer.module import MegatronModule
 from megatron.core.transformer.transformer_config import MLATransformerConfig, TransformerConfig
+from megatron.core.utils import get_model_config
 from transformers import AutoConfig
 from transformers.configuration_utils import PretrainedConfig
 
@@ -420,6 +422,83 @@ class CausalLMBridge(Generic[MegatronModelT]):
 
         if torch.distributed.is_available() and torch.distributed.is_initialized():
             torch.distributed.barrier()
+
+    @overload
+    def save_megatron_model(self, model: list[MegatronModelT], path: str | Path) -> None:
+        ...
+
+    def save_megatron_model(self, model, path: str | Path, ckpt_format: str = "torch_dist") -> None:
+        """
+        Save a Megatron model in native Megatron checkpoint format.
+
+        This method saves the model in Megatron's native checkpoint format, which
+        can be loaded directly by Megatron for training or inference. The checkpoint
+        includes the model configuration and weights, and optionally optimizer state.
+
+        Args:
+            model: Megatron model instance or list of instances
+            path: Directory path where the checkpoint will be saved
+            ckpt_format: Checkpoint format to use ("torch_dist" or other supported formats)
+
+        Example:
+            >>> # Save model checkpoint after training
+            >>> bridge.save_megatron_model(megatron_model, "./megatron_checkpoint")
+
+            >>> # Save with optimizer state
+            >>> bridge.save_megatron_model(
+            ...     megatron_model, 
+            ...     "./megatron_checkpoint_with_optim",
+            ... )
+
+            >>> # Save with custom checkpoint format
+            >>> bridge.save_megatron_model(
+            ...     megatron_model,
+            ...     "./megatron_checkpoint",
+            ...     ckpt_format="zarr"
+            ... )
+
+        Note:
+            - This method is collective and must be called by all ranks
+            - The saved checkpoint can be loaded with Megatron's checkpoint loading utilities
+            - The checkpoint format follows Megatron's standard structure for compatibility
+        """
+        try:
+            from megatron.hub.training.checkpointing import save_checkpoint
+            from megatron.hub.training.config import ConfigContainer, LoggerConfig, CheckpointConfig
+            from megatron.hub.training.state import GlobalState
+        except ImportError:
+            raise ImportError("megatron.hub.training is not installed.")
+        # Get model config from the first model instance
+        model_config = get_model_config(model[0])
+
+        # Create global state for checkpointing
+        state = GlobalState()
+        state.cfg = ConfigContainer(
+            model=model_config,
+            train=None,
+            optimizer=OptimizerConfig(use_distributed_optimizer=False),
+            ddp=None,
+            scheduler=None,
+            dataset=None,
+            logger=LoggerConfig(),
+            tokenizer=None,
+            checkpoint=CheckpointConfig(
+                async_save=False,
+                save=str(path),
+                save_optim=False,
+                ckpt_format=ckpt_format
+            ),
+            dist=None,
+        )
+
+        # Save the checkpoint
+        save_checkpoint(
+            state=state,
+            model=model,
+            optimizer=None,
+            opt_param_scheduler=None,
+            num_floating_point_operations_so_far=0,
+        )
 
     def push_to_hub(self, path: str | Path) -> None: ...
 
