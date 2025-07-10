@@ -95,8 +95,8 @@ class CausalLMBridge(Generic[MegatronModelT]):
         supported = []
 
         # Access the dispatch registry to find all registered types
-        if hasattr(model_bridge.to_megatron, "_exact_types"):
-            for arch_type in model_bridge.to_megatron._exact_types.keys():
+        if hasattr(model_bridge.hf_to_megatron, "_exact_types"):
+            for arch_type in model_bridge.hf_to_megatron._exact_types.keys():
                 if hasattr(arch_type, "__name__"):
                     supported.append(arch_type.__name__)
 
@@ -229,7 +229,7 @@ class CausalLMBridge(Generic[MegatronModelT]):
     ) -> Iterable[model_bridge.HFWeightTuple]:
         return self.export_hf_weights(model=model, order=order, cpu=cpu, show_progress=show_progress, mode=mode)
 
-    def load_weights(self, model: list[MegatronModelT], hf_path: str | Path | None = None) -> None:
+    def load_hf_weights(self, model: list[MegatronModelT], hf_path: str | Path | None = None) -> None:
         """
         Load HuggingFace weights into a Megatron model.
 
@@ -252,10 +252,10 @@ class CausalLMBridge(Generic[MegatronModelT]):
             >>> # Load weights from bridge's pretrained model
             >>> bridge = CausalLMBridge.from_hf_pretrained("gpt2")
             >>> megatron_model = create_megatron_model()  # Your model creation
-            >>> bridge.load_weights(megatron_model)
+            >>> bridge.load_hf_weights(megatron_model)
 
             >>> # Load weights from a different checkpoint
-            >>> bridge.load_weights(megatron_model, "./finetuned_model")
+            >>> bridge.load_hf_weights(megatron_model, "./finetuned_model")
         """
         if hf_path is None:
             if not isinstance(self.hf_pretrained, PreTrainedCausalLM):
@@ -263,7 +263,7 @@ class CausalLMBridge(Generic[MegatronModelT]):
             pre_trained = self.hf_pretrained
         else:
             pre_trained = PreTrainedCausalLM.from_pretrained(hf_path)
-        self._model_bridge.load_weights(model, pre_trained)
+        self._model_bridge.load_hf_weights(model, pre_trained)
 
         return model
 
