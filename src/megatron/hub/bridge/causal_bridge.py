@@ -444,12 +444,6 @@ class CausalLMBridge(Generic[MegatronModelT]):
             >>> # Save model checkpoint after training
             >>> bridge.save_megatron_model(megatron_model, "./megatron_checkpoint")
 
-            >>> # Save with optimizer state
-            >>> bridge.save_megatron_model(
-            ...     megatron_model, 
-            ...     "./megatron_checkpoint_with_optim",
-            ... )
-
             >>> # Save with custom checkpoint format
             >>> bridge.save_megatron_model(
             ...     megatron_model,
