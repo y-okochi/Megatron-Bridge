@@ -43,7 +43,6 @@ from megatron.hub.bridge.param_mapping import MegatronParamMapping
 from megatron.hub.common.decorators import dispatch
 from megatron.hub.core.models.model_provider import ModelProviderProtocol
 
-
 MappingT = TypeVar("MappingT", bound=MegatronParamMapping)
 HFPreTrained = TypeVar("HFPreTrained")
 ModelProviderTarget = TypeVar("ModelProviderTarget", bound=ModelProviderProtocol)
@@ -214,7 +213,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
             # The bridge is typically not instantiated directly
             # Instead, use CausalLMBridge or AutoBridge which handle this
             bridge = CausalLMBridge.from_hf_pretrained("meta-llama/Llama-3-8B")
-            provider = bridge.to_megatron()
+            provider = bridge.to_megatron_provider()
 
     Note:
         This class uses generic type parameters to ensure type safety:

@@ -93,8 +93,9 @@ class CausalLMBridge(Generic[MegatronModelT]):
         supported = []
 
         # Access the dispatch registry to find all registered types
-        if hasattr(model_bridge.hf_to_megatron, "_exact_types"):
-            for arch_type in model_bridge.hf_to_megatron._exact_types.keys():
+
+        if hasattr(model_bridge.to_megatron, "_exact_types"):
+            for arch_type in model_bridge.to_megatron._exact_types.keys():
                 if hasattr(arch_type, "__name__"):
                     supported.append(arch_type.__name__)
 
@@ -486,12 +487,12 @@ class CausalLMBridge(Generic[MegatronModelT]):
 
     @property
     def transformer_config(self) -> TransformerConfig:
-        _model_provider = self.to_megatron(load_weights=False)
+        _model_provider = self.to_megatron_provider(load_weights=False)
         return self._create_config_from_provider(_model_provider, TransformerConfig)
 
     @property
     def mla_transformer_config(self) -> MLATransformerConfig:
-        _model_provider = self.to_megatron(load_weights=False)
+        _model_provider = self.to_megatron_provider(load_weights=False)
         return self._create_config_from_provider(_model_provider, MLATransformerConfig)
 
     @property

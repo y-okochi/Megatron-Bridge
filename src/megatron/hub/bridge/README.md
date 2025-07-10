@@ -11,7 +11,7 @@ from megatron.hub import CausalLMBridge
 
 # Load Llama from HuggingFace Hub and convert to Megatron
 bridge = CausalLMBridge.from_hf_pretrained("meta-llama/Llama-3.2-1B")
-provider = bridge.to_megatron()
+provider = bridge.to_megatron_provider()
 
 # The provider is lazy - configure parallelism before creating models
 provider.tensor_model_parallel_size = 8

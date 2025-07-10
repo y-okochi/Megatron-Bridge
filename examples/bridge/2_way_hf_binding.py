@@ -19,7 +19,7 @@ conversion between a Hugging Face model and a Megatron-LM model.
 The process is as follows:
 1. A CausalLMBridge is initialized from a pretrained Hugging Face model
     (e.g., "meta-llama/Llama-3.2-1B"). This downloads the model from the Hub and loads it.
-2. The bridge's `to_megatron` method is called to get a Megatron-LM compatible model provider.
+2. The bridge's `to_megatron_model` method is called to get a Megatron-LM compatible model provider.
 3. The model provider is used to instantiate the Megatron-LM model.
 4. Finally, the `save_hf_pretrained` method is used to save the Megatron-LM
     model back into the Hugging Face format. A new directory, named after the
@@ -35,7 +35,6 @@ from rich.console import Console
 
 from megatron.hub import CausalLMBridge
 from megatron.hub.bridge.utils import weights_verification_table
-
 
 console = Console()
 HF_MODEL_ID = "meta-llama/Llama-3.2-1B"
