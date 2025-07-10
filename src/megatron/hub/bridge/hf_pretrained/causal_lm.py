@@ -29,6 +29,7 @@ from transformers.generation.utils import GenerateOutput
 
 from megatron.hub.bridge.hf_pretrained.base import PreTrainedBase
 
+
 # Python 3.12+ supports PEP 692 (TypedDict Unpack)
 if sys.version_info >= (3, 12):
     from typing import TypedDict, Unpack

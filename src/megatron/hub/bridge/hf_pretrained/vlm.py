@@ -31,6 +31,7 @@ from transformers.generation.utils import GenerateOutput
 
 from megatron.hub.bridge.hf_pretrained.base import PreTrainedBase
 
+
 # Type variable for generic model type
 VLMType = TypeVar("VLMType", bound=PreTrainedModel)
 

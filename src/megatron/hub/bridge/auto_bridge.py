@@ -19,6 +19,7 @@ from transformers import AutoConfig
 
 from megatron.hub.bridge.causal_bridge import CausalLMBridge
 
+
 _BRIDGES: List[Type["BridgeProtocol"]] = [
     CausalLMBridge,
 ]

@@ -36,6 +36,7 @@ from rich.console import Console
 from megatron.hub import CausalLMBridge
 from megatron.hub.bridge.utils import weights_verification_table
 
+
 console = Console()
 HF_MODEL_ID = "meta-llama/Llama-3.2-1B"
 

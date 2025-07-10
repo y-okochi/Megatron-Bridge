@@ -18,6 +18,7 @@ from transformers import AutoTokenizer
 
 from megatron.hub import CausalLMBridge
 
+
 HF_MODEL_ID = "meta-llama/Llama-3.2-1B"
 bridge = CausalLMBridge.from_hf_pretrained(HF_MODEL_ID)
 tokenizer = AutoTokenizer.from_hf_pretrained(HF_MODEL_ID, trust_remote_code=True)
