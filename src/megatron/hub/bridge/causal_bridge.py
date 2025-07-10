@@ -16,7 +16,6 @@ import dataclasses
 from functools import partial
 from pathlib import Path
 from typing import Any, Generic, Iterable, Literal, Type, TypeVar, Union, overload
-from typing_extensions import Unpack
 
 import torch.distributed
 import transformers
@@ -26,6 +25,7 @@ from megatron.core.transformer.transformer_config import MLATransformerConfig, T
 from megatron.core.utils import get_model_config
 from transformers import AutoConfig
 from transformers.configuration_utils import PretrainedConfig
+from typing_extensions import Unpack
 
 from megatron.hub.bridge import model_bridge
 from megatron.hub.bridge.hf_pretrained.causal_lm import PreTrainedCausalLM
@@ -33,6 +33,7 @@ from megatron.hub.bridge.model_bridge import WeightDistributionMode
 from megatron.hub.common.model_provider_mixin import GetModelKwargs, ModelProviderMixin
 from megatron.hub.common.state import SafeTensorsStateSource
 from megatron.hub.models.gpt_provider import GPTModelProvider
+
 
 MegatronModelT = TypeVar("ModelT", bound=MegatronModule)
 DataclassT = TypeVar("DataclassT")
@@ -327,8 +328,7 @@ class CausalLMBridge(Generic[MegatronModelT]):
         )
 
     @overload
-    def save_hf_pretrained(self, model: list[MegatronModelT], path: str | Path) -> None:
-        ...
+    def save_hf_pretrained(self, model: list[MegatronModelT], path: str | Path) -> None: ...
 
     def save_hf_pretrained(self, model, path: str | Path, show_progress: bool = True) -> None:
         """
@@ -367,8 +367,7 @@ class CausalLMBridge(Generic[MegatronModelT]):
         self.save_hf_weights(model, path, show_progress)
 
     @overload
-    def save_hf_weights(self, model: list[MegatronModelT], path: str | Path, show_progress: bool = True) -> None:
-        ...
+    def save_hf_weights(self, model: list[MegatronModelT], path: str | Path, show_progress: bool = True) -> None: ...
 
     def save_hf_weights(self, model, path: str | Path, show_progress: bool = True) -> None:
         """

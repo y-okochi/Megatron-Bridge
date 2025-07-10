@@ -85,7 +85,7 @@ class TestCausalLMBridge:
             mock_pretrained_cls.from_hf_pretrained.return_value = mock_model
 
             with patch("megatron.hub.bridge.causal_bridge.AutoConfig") as mock_autoconfig:
-                mock_AutoConfig.from_pretrained.return_value = mock_config
+                mock_autoconfig.from_pretrained.return_value = mock_config
 
                 # Skip architecture validation for this test
                 with patch.object(CausalLMBridge, "_validate_config"):
@@ -428,8 +428,9 @@ class TestCausalLMBridgeEdgeCases:
     @patch("torch.distributed.is_initialized", return_value=True)
     @patch("torch.distributed.is_available", return_value=True)
     @patch("torch.distributed.barrier")
-    def test_save_hf_pretrained_non_zero_rank(self, mock_barrier, mock_is_available, mock_is_initialized,
-                                              mock_get_rank):
+    def test_save_hf_pretrained_non_zero_rank(
+        self, mock_barrier, mock_is_available, mock_is_initialized, mock_get_rank
+    ):
         """Test save_hf_pretrained on non-zero rank (should not save artifacts)."""
         mock_hf_model = Mock(spec=MockPreTrainedCausalLM)
         mock_hf_model.save_artifacts = Mock()
