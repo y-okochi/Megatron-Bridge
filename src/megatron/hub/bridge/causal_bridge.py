@@ -16,6 +16,7 @@ import dataclasses
 from functools import partial
 from pathlib import Path
 from typing import Any, Generic, Iterable, Literal, Type, TypeVar, Union, overload
+from typing_extensions import Unpack
 
 import torch.distributed
 import transformers
@@ -23,7 +24,6 @@ from megatron.core.transformer.module import MegatronModule
 from megatron.core.transformer.transformer_config import MLATransformerConfig, TransformerConfig
 from transformers import AutoConfig
 from transformers.configuration_utils import PretrainedConfig
-from typing_extensions import Unpack
 
 from megatron.hub.bridge import model_bridge
 from megatron.hub.bridge.hf_pretrained.causal_lm import PreTrainedCausalLM
@@ -31,7 +31,6 @@ from megatron.hub.bridge.model_bridge import WeightDistributionMode
 from megatron.hub.common.model_provider_mixin import GetModelKwargs, ModelProviderMixin
 from megatron.hub.common.state import SafeTensorsStateSource
 from megatron.hub.models.gpt_provider import GPTModelProvider
-
 
 MegatronModelT = TypeVar("ModelT", bound=MegatronModule)
 DataclassT = TypeVar("DataclassT")
@@ -228,7 +227,7 @@ class CausalLMBridge(Generic[MegatronModelT]):
     ) -> Iterable[model_bridge.HFWeightTuple]:
         return self.export_hf_weights(model=model, order=order, cpu=cpu, show_progress=show_progress, mode=mode)
 
-    def load_weights(self, model: list[MegatronModelT], hf_path: str | Path | None = None) -> None:
+    def load_hf_weights(self, model: list[MegatronModelT], hf_path: str | Path | None = None) -> None:
         """
         Load HuggingFace weights into a Megatron model.
 
@@ -251,10 +250,10 @@ class CausalLMBridge(Generic[MegatronModelT]):
             >>> # Load weights from bridge's pretrained model
             >>> bridge = CausalLMBridge.from_hf_pretrained("gpt2")
             >>> megatron_model = create_megatron_model()  # Your model creation
-            >>> bridge.load_weights(megatron_model)
+            >>> bridge.load_hf_weights(megatron_model)
 
             >>> # Load weights from a different checkpoint
-            >>> bridge.load_weights(megatron_model, "./finetuned_model")
+            >>> bridge.load_hf_weights(megatron_model, "./finetuned_model")
         """
         if hf_path is None:
             if not isinstance(self.hf_pretrained, PreTrainedCausalLM):
@@ -262,7 +261,7 @@ class CausalLMBridge(Generic[MegatronModelT]):
             pre_trained = self.hf_pretrained
         else:
             pre_trained = PreTrainedCausalLM.from_pretrained(hf_path)
-        self._model_bridge.load_weights(model, pre_trained)
+        self._model_bridge.load_hf_weights(model, pre_trained)
 
         return model
 

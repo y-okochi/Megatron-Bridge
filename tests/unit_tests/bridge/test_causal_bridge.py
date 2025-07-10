@@ -262,7 +262,7 @@ class TestCausalLMBridge:
         # Should have the expected methods
         assert hasattr(bridge, "from_pretrained")
         assert hasattr(bridge, "to_megatron_provider")
-        assert hasattr(bridge, "load_weights")
+        assert hasattr(bridge, "load_hf_weights")
         assert hasattr(bridge, "export_hf_weights")
         assert hasattr(bridge, "save_hf_pretrained")
         assert bridge.hf_pretrained == mock_model
@@ -342,7 +342,7 @@ class TestCausalLMBridgeEdgeCases:
             assert isinstance(supported, list)
             # The list might be empty if no models are registered in test environment
 
-    def test_load_weights(self):
+    def test_load_hf_weights(self):
         """Test loading weights into a Megatron model."""
         # Setup mocks
         mock_hf_model = Mock(spec=MockPreTrainedCausalLM)
@@ -352,17 +352,17 @@ class TestCausalLMBridgeEdgeCases:
         mock_megatron_model = [Mock()]  # List of model instances
 
         mock_model_bridge = Mock()
-        mock_model_bridge.load_weights = Mock(return_value=mock_megatron_model)
+        mock_model_bridge.load_hf_weights = Mock(return_value=mock_megatron_model)
 
         with patch("megatron.hub.bridge.causal_bridge.PreTrainedCausalLM", MockPreTrainedCausalLM):
             with patch.object(CausalLMBridge, "_model_bridge", mock_model_bridge):
                 bridge = CausalLMBridge(mock_hf_model)
-                result = bridge.load_weights(mock_megatron_model)
+                result = bridge.load_hf_weights(mock_megatron_model)
 
                 assert result == mock_megatron_model
-                mock_model_bridge.load_weights.assert_called_once_with(mock_megatron_model, mock_hf_model)
+                mock_model_bridge.load_hf_weights.assert_called_once_with(mock_megatron_model, mock_hf_model)
 
-    def test_load_weights_from_path(self):
+    def test_load_hf_weights_from_path(self):
         """Test loading weights from a different path."""
         # Setup mocks
         mock_hf_model = Mock(spec=MockPreTrainedCausalLM)
@@ -372,7 +372,7 @@ class TestCausalLMBridgeEdgeCases:
         mock_megatron_model = [Mock()]
 
         mock_model_bridge = Mock()
-        mock_model_bridge.load_weights = Mock(return_value=mock_megatron_model)
+        mock_model_bridge.load_hf_weights = Mock(return_value=mock_megatron_model)
 
         with patch.object(CausalLMBridge, "_model_bridge", mock_model_bridge):
             with patch("megatron.hub.bridge.causal_bridge.PreTrainedCausalLM", MockPreTrainedCausalLM) as mock_cls:
@@ -382,19 +382,19 @@ class TestCausalLMBridgeEdgeCases:
                 mock_pretrained.from_pretrained.return_value = mock_loaded_model
 
                 bridge = CausalLMBridge(mock_hf_model)
-                result = bridge.load_weights(mock_megatron_model, "./custom_model")
+                result = bridge.load_hf_weights(mock_megatron_model, "./custom_model")
 
                 assert result == mock_megatron_model
                 mock_pretrained.from_pretrained.assert_called_once_with("./custom_model")
-                mock_model_bridge.load_weights.assert_called_once_with(mock_megatron_model, mock_loaded_model)
+                mock_model_bridge.load_hf_weights.assert_called_once_with(mock_megatron_model, mock_loaded_model)
 
-    def test_load_weights_no_path_config_only(self):
-        """Test load_weights fails when bridge has config only and no path provided."""
+    def test_load_hf_weights_no_path_config_only(self):
+        """Test load_hf_weights fails when bridge has config only and no path provided."""
         mock_config = Mock(spec=PretrainedConfig)
         bridge = CausalLMBridge(mock_config)
 
         with pytest.raises(ValueError, match="hf_path is required when hf_pretrained is not a PreTrainedCausalLM"):
-            bridge.load_weights([Mock()])
+            bridge.load_hf_weights([Mock()])
 
     @patch("torch.distributed.get_rank", return_value=0)
     @patch("torch.distributed.barrier")
