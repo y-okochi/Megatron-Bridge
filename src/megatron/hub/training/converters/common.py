@@ -114,6 +114,7 @@ def temporary_distributed_context(backend: str = "gloo") -> Generator[None, None
     parallel_state.initialize_model_parallel()
     if backend == "nccl":
         from megatron.core.tensor_parallel import model_parallel_cuda_manual_seed
+
         model_parallel_cuda_manual_seed(0)
     try:
         yield
@@ -128,7 +129,7 @@ def load_mcore_model(
         model_cfg: Any,
         return_state_dict: bool = False,
         use_cpu_init: bool = True,
-        skip_temp_dist_context: Optional[bool] = None
+        skip_temp_dist_context: Optional[bool] = None,
 ) -> Any | dict[str, torch.Tensor]:
     """Load a Megatron model from a distributed checkpoint.
 
@@ -144,8 +145,8 @@ def load_mcore_model(
         return_state_dict: If True, return the state dict instead of model instance. Default: False.
         use_cpu_init: If True, use CPU initialization context for the model and Gloo backend.
                      If False, use GPU initialization and NCCL backend. Default: True.
-        skip_temp_dist_context: If True, skip temporary distributed context setup. 
-                               If None, automatically skip if distributed is already initialized. 
+        skip_temp_dist_context: If True, skip temporary distributed context setup.
+                               If None, automatically skip if distributed is already initialized.
                                Default: None.
 
     Returns:

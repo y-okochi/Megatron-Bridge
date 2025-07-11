@@ -459,7 +459,7 @@ class CausalLMBridge(Generic[MegatronModelT]):
         """
         try:
             from megatron.hub.training.checkpointing import save_checkpoint
-            from megatron.hub.training.config import ConfigContainer, LoggerConfig, CheckpointConfig
+            from megatron.hub.training.config import CheckpointConfig, ConfigContainer, LoggerConfig
             from megatron.hub.training.state import GlobalState
         except ImportError:
             raise ImportError("megatron.hub.training is not installed.")
@@ -477,12 +477,7 @@ class CausalLMBridge(Generic[MegatronModelT]):
             dataset=None,
             logger=LoggerConfig(),
             tokenizer=None,
-            checkpoint=CheckpointConfig(
-                async_save=False,
-                save=str(path),
-                save_optim=False,
-                ckpt_format=ckpt_format
-            ),
+            checkpoint=CheckpointConfig(async_save=False, save=str(path), save_optim=False, ckpt_format=ckpt_format),
             dist=None,
         )
 
@@ -547,7 +542,9 @@ class CausalLMBridge(Generic[MegatronModelT]):
 
         # Load the state dict
         model = load_mcore_model(
-            checkpoint_path, model_cfg=model_config, use_cpu_init=True,
+            checkpoint_path,
+            model_cfg=model_config,
+            use_cpu_init=True,
         )
         return model if isinstance(model, list) else [model]
 
