@@ -35,7 +35,6 @@ from megatron.core.enums import ModelType
 from megatron.core.transformer.module import Float16Module, MegatronModule
 from megatron.core.utils import get_model_config
 
-
 try:
     from megatron.core.fp8_utils import correct_amax_history_if_needed
 except ImportError:
@@ -170,19 +169,10 @@ def _create_model(
         else:
             pre_process = parallel_state.is_pipeline_first_stage()
             post_process = parallel_state.is_pipeline_last_stage()
-            if model_type == ModelType.encoder_and_decoder:
-                if parallel_state.get_pipeline_model_parallel_world_size() > 1:
-                    rank = parallel_state.get_pipeline_model_parallel_rank()
-                    first_decoder_rank = parallel_state.get_pipeline_model_parallel_decoder_start()
-                    world_size = parallel_state.get_pipeline_model_parallel_world_size()
-                    pre_process = rank == 0 or rank == first_decoder_rank
-                    post_process = (rank == (first_decoder_rank - 1)) or (rank == (world_size - 1))
-                model = model_provider()
-            else:
-                model = model_provider(
-                    pre_process=pre_process,
-                    post_process=post_process,
-                )
+            model = model_provider(
+                pre_process=pre_process,
+                post_process=post_process,
+            )
             model.model_type = model_type
         return model
 
