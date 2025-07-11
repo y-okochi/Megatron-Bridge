@@ -476,7 +476,7 @@ class BaseExporter(ABC):
         from transformers.modeling_utils import no_init_weights
 
         with no_init_weights(True):
-            return AutoModelForCausalLM.from_hf_config(self.hf_config, torch_dtype=dtype)
+            return AutoModelForCausalLM.from_config(self.hf_config, torch_dtype=dtype)
 
     def init_tron_model(self) -> tuple[dict[str, torch.Tensor], GPTModelProvider | T5ModelProvider]:
         """Load the megatron hub model state dict and config from a distributed checkpoint.
@@ -539,17 +539,17 @@ class BaseExporter(ABC):
         if self.hf_config.tie_word_embeddings:
             state_dict = target.state_dict()
             state_dict.pop("lm_head.weight")
-            target.save_hf_pretrained(self.output_path, state_dict=state_dict)
+            target.save_pretrained(self.output_path, state_dict=state_dict)
         else:
-            target.save_hf_pretrained(self.output_path)
+            target.save_pretrained(self.output_path)
 
         try:
-            self.tokenizer.save_hf_pretrained(self.output_path)
+            self.tokenizer.save_pretrained(self.output_path)
         except Exception:
             logger.warning("Failed to save tokenizer")
 
         if self.tron_config.generation_config is not None:
-            self.tron_config.generation_config.save_hf_pretrained(self.output_path)
+            self.tron_config.generation_config.save_pretrained(self.output_path)
 
         print(f"Converted {self.input_path} to {self.output_path}.")
         return self.output_path
