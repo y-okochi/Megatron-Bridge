@@ -37,7 +37,7 @@ for name, weight in bridge.export_to_hf(model):
 from megatron.hub import AutoBridge
 
 # Automatically detect model architecture and create appropriate bridge
-bridge = AutoBridge.from_hf_pretrained("any-huggingface/model")
+bridge = AutoBridge.from_hf_pretrained("any-supported-huggingface/model")
 ```
 
 ## Architecture Overview

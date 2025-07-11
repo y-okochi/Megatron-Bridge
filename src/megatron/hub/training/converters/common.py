@@ -264,7 +264,7 @@ class BaseImporter(ABC):
         (self.output_path / HF_ASSETS_DIR).mkdir(parents=True, exist_ok=True)
         self._hf_config = None
         self._tron_config = None
-        self.hf_config.save_hf_pretrained(str(self.output_path / HF_ASSETS_DIR))
+        self.hf_config.save_pretrained(str(self.output_path / HF_ASSETS_DIR))
 
     @property
     def tokenizer(self) -> "_HuggingFaceTokenizer":
