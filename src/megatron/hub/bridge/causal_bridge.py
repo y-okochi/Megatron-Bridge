@@ -16,6 +16,7 @@ import dataclasses
 from functools import partial
 from pathlib import Path
 from typing import Any, Generic, Iterable, Literal, Type, TypeVar, Union, overload
+from typing_extensions import Unpack
 
 import torch.distributed
 import transformers
@@ -23,7 +24,6 @@ from megatron.core.transformer.module import MegatronModule
 from megatron.core.transformer.transformer_config import MLATransformerConfig, TransformerConfig
 from transformers import AutoConfig
 from transformers.configuration_utils import PretrainedConfig
-from typing_extensions import Unpack
 
 from megatron.hub.bridge import model_bridge
 from megatron.hub.bridge.hf_pretrained.causal_lm import PreTrainedCausalLM
@@ -31,7 +31,6 @@ from megatron.hub.bridge.model_bridge import WeightDistributionMode
 from megatron.hub.common.model_provider_mixin import GetModelKwargs, ModelProviderMixin
 from megatron.hub.common.state import SafeTensorsStateSource
 from megatron.hub.models.gpt_provider import GPTModelProvider
-
 
 MegatronModelT = TypeVar("ModelT", bound=MegatronModule)
 DataclassT = TypeVar("DataclassT")
@@ -454,7 +453,7 @@ class CausalLMBridge(Generic[MegatronModelT]):
 
         Example:
             >>> # Create provider and model with loaded weights
-            >>> bridge = CausalLMBridge.from_pretrained("meta-llama/Llama-3-8B")
+            >>> bridge = CausalLMBridge.from_hf_pretrained("meta-llama/Llama-3-8B")
             >>> provider = bridge.to_megatron_provider()
             >>> model = provider.get_model()
 
