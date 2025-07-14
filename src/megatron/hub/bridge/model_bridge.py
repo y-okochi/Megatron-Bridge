@@ -214,7 +214,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
             # The bridge is typically not instantiated directly
             # Instead, use CausalLMBridge or AutoBridge which handle this
             bridge = CausalLMBridge.from_hf_pretrained("meta-llama/Llama-3-8B")
-            provider = bridge.to_megatron()
+            provider = bridge.to_megatron_provider()
 
     Note:
         This class uses generic type parameters to ensure type safety:
