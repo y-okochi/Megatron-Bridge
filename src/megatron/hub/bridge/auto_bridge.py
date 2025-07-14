@@ -19,7 +19,6 @@ from transformers import AutoConfig
 
 from megatron.hub.bridge.causal_bridge import CausalLMBridge
 
-
 _BRIDGES: List[Type["BridgeProtocol"]] = [
     CausalLMBridge,
 ]
@@ -278,7 +277,7 @@ class BridgeProtocol(Protocol):
         ...
 
     @classmethod
-    def from_pretrained(cls, path: Union[str, Path], **kwargs) -> "BridgeProtocol":
+    def from_hf_pretrained(cls, path: Union[str, Path], **kwargs) -> "BridgeProtocol":
         """
         Load a pretrained model using this bridge.
 

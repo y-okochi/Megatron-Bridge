@@ -124,7 +124,7 @@ class TestCausalLMBridge:
                     with patch("megatron.hub.bridge.causal_bridge.PreTrainedCausalLM", MockPreTrainedCausalLM):
                         # Call from_pretrained with Path
                         model_path = Path("/path/to/model")
-                        result = CausalLMBridge.from_pretrained(model_path, device_map="auto")
+                        result = CausalLMBridge.from_hf_pretrained(model_path, device_map="auto")
 
                     # Assertions
                     assert isinstance(result, CausalLMBridge)
@@ -152,7 +152,7 @@ class TestCausalLMBridge:
                     # Mock the PreTrainedCausalLM type check
                     with patch("megatron.hub.bridge.causal_bridge.PreTrainedCausalLM", MockPreTrainedCausalLM):
                         # Call with multiple kwargs
-                        result = CausalLMBridge.from_pretrained(
+                        result = CausalLMBridge.from_hf_pretrained(
                             "model-id",
                             torch_dtype=torch.bfloat16,
                             low_cpu_mem_usage=True,
@@ -282,7 +282,7 @@ class TestCausalLMBridge:
         # from_pretrained should be a classmethod
         import inspect
 
-        assert inspect.ismethod(CausalLMBridge.from_pretrained)
+        assert inspect.ismethod(CausalLMBridge.from_hf_pretrained)
 
 
 class TestCausalLMBridgeEdgeCases:

@@ -582,7 +582,7 @@ class CausalLMBridge(Generic[MegatronModelT]):
 
         Example:
             >>> # Create provider and model with loaded weights
-            >>> bridge = CausalLMBridge.from_pretrained("meta-llama/Llama-3-8B")
+            >>> bridge = CausalLMBridge.from_hf_pretrained("meta-llama/Llama-3-8B")
             >>> provider = bridge.to_megatron_provider()
             >>> model = provider.get_model()
 

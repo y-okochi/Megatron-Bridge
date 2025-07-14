@@ -101,7 +101,7 @@ class TestAutoBridge:
                 mock_from_pretrained.return_value = mock_bridge_instance
 
                 # Call with Path
-                result = AutoBridge.from_pretrained(model_path, device_map="auto")
+                result = AutoBridge.from_hf_pretrained(model_path, device_map="auto")
 
                 # Verify
                 mock_auto_config.from_pretrained.assert_called_once_with(model_path, trust_remote_code=False)
@@ -116,7 +116,7 @@ class TestAutoBridge:
 
             # Should raise ValueError with helpful message
             with pytest.raises(ValueError) as exc_info:
-                AutoBridge.from_pretrained("invalid/path")
+                AutoBridge.from_hf_pretrained("invalid/path")
 
             assert "Failed to load configuration" in str(exc_info.value)
             assert "Config not found" in str(exc_info.value)
@@ -150,7 +150,7 @@ class TestAutoBridge:
 
                 # Call - should try FailingBridge and raise its error
                 with pytest.raises(ValueError) as exc_info:
-                    AutoBridge.from_pretrained("gpt2")
+                    AutoBridge.from_hf_pretrained("gpt2")
 
                 # Verify the error message includes both the bridge name and original error
                 assert "Failed to load model with FailingBridge" in str(exc_info.value)
@@ -230,7 +230,7 @@ class TestAutoBridge:
                 mock_from_pretrained.return_value = mock_bridge_instance
 
                 # Since CausalLMBridge is first in _BRIDGES, it should be selected
-                result = AutoBridge.from_pretrained("gpt2")
+                result = AutoBridge.from_hf_pretrained("gpt2")
 
                 assert isinstance(result, Mock)  # Our mocked instance
                 mock_from_pretrained.assert_called_once()
@@ -244,7 +244,7 @@ class TestAutoBridge:
                 mock_from_pretrained.return_value = mock_bridge_instance
 
                 # Call with various kwargs
-                AutoBridge.from_pretrained(
+                AutoBridge.from_hf_pretrained(
                     "gpt2", trust_remote_code=True, device_map="balanced", torch_dtype="bfloat16", custom_param="test"
                 )
 

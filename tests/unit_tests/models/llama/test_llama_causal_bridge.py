@@ -363,7 +363,7 @@ class TestCausalLMBridgeIntegration:
     @patch("megatron.hub.bridge.causal_bridge.PreTrainedCausalLM.from_pretrained")
     @patch("megatron.hub.bridge.causal_bridge.AutoConfig.from_pretrained")
     def test_from_pretrained_with_temp_dir(self, mock_autoconfig, mock_pretrained, llama_configs):
-        """Test CausalLMBridge.from_pretrained with temporary directory."""
+        """Test CausalLMBridge.from_hf_pretrained with temporary directory."""
         with tempfile.TemporaryDirectory() as temp_dir:
             # Test with Llama 3.2 1B config
             config_dict = llama_configs["llama-3.2-1b"]
@@ -380,7 +380,7 @@ class TestCausalLMBridgeIntegration:
             mock_pretrained.return_value = mock_model
 
             # Create bridge from the temp directory
-            bridge = CausalLMBridge.from_pretrained(temp_dir)
+            bridge = CausalLMBridge.from_hf_pretrained(temp_dir)
 
             # Verify
             assert isinstance(bridge, CausalLMBridge)
@@ -391,7 +391,7 @@ class TestCausalLMBridgeIntegration:
     @patch("megatron.hub.bridge.causal_bridge.PreTrainedCausalLM.from_pretrained")
     @patch("megatron.hub.bridge.causal_bridge.AutoConfig.from_pretrained")
     def test_from_pretrained_multiple_models(self, mock_autoconfig, mock_pretrained, llama_configs):
-        """Test CausalLMBridge.from_pretrained with different Llama model configs."""
+        """Test CausalLMBridge.from_hf_pretrained with different Llama model configs."""
         for model_name, config_dict in llama_configs.items():
             with tempfile.TemporaryDirectory() as temp_dir:
                 self.create_mock_model_files(config_dict, temp_dir)
@@ -407,7 +407,7 @@ class TestCausalLMBridgeIntegration:
                 mock_pretrained.return_value = mock_model
 
                 # Create bridge
-                bridge = CausalLMBridge.from_pretrained(temp_dir, torch_dtype=torch.float16)
+                bridge = CausalLMBridge.from_hf_pretrained(temp_dir, torch_dtype=torch.float16)
 
                 # Verify
                 assert isinstance(bridge, CausalLMBridge)
@@ -432,7 +432,7 @@ class TestCausalLMBridgeIntegration:
     @patch("megatron.hub.bridge.causal_bridge.PreTrainedCausalLM.from_pretrained")
     @patch("megatron.hub.bridge.causal_bridge.AutoConfig.from_pretrained")
     def test_from_pretrained_with_kwargs(self, mock_autoconfig, mock_pretrained, llama_configs):
-        """Test CausalLMBridge.from_pretrained with various kwargs."""
+        """Test CausalLMBridge.from_hf_pretrained with various kwargs."""
         with tempfile.TemporaryDirectory() as temp_dir:
             config_dict = llama_configs["llama-3-8b"]
             self.create_mock_model_files(config_dict, temp_dir)
@@ -454,7 +454,7 @@ class TestCausalLMBridgeIntegration:
                 "attn_implementation": "flash_attention_2",
             }
 
-            _ = CausalLMBridge.from_pretrained(temp_dir, **kwargs)
+            _ = CausalLMBridge.from_hf_pretrained(temp_dir, **kwargs)
 
             # Verify kwargs were passed through
             mock_pretrained.assert_called_once_with(temp_dir, **kwargs)
