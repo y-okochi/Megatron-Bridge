@@ -446,13 +446,6 @@ class CausalLMBridge(Generic[MegatronModelT]):
             >>> # Save model checkpoint after conversion
             >>> bridge.save_megatron_model(megatron_model, "./megatron_checkpoint")
 
-            >>> # Save with custom checkpoint format
-            >>> bridge.save_megatron_model(
-            ...     megatron_model,
-            ...     "./megatron_checkpoint",
-            ...     ckpt_format="zarr"
-            ... )
-
         Note:
             - This method is collective and must be called by all ranks
             - The saved checkpoint can be loaded with Megatron's checkpoint loading utilities
