@@ -31,7 +31,6 @@ from transformers.generation.utils import GenerateOutput
 
 from megatron.hub.bridge.hf_pretrained.base import PreTrainedBase
 
-
 # Type variable for generic model type
 VLMType = TypeVar("VLMType", bound=PreTrainedModel)
 
@@ -497,7 +496,7 @@ class PreTrainedVLM(PreTrainedBase, Generic[VLMType]):
                     inputs[key] = value.to(self.device)
         return inputs
 
-    def save_hf_pretrained(self, save_directory: Union[str, Path]):
+    def save_pretrained(self, save_directory: Union[str, Path]):
         """
         Save the model and all components to a directory.
 
@@ -509,7 +508,7 @@ class PreTrainedVLM(PreTrainedBase, Generic[VLMType]):
 
         # Save model
         if hasattr(self, "_model") and self._model is not None:
-            self._model.save_hf_pretrained(save_path)
+            self._model.save_pretrained(save_path)
 
         # Save artifacts through base class
         self.save_artifacts(save_path)
