@@ -471,7 +471,7 @@ class TestPreTrainedCausalLMMethods:
 class TestPreTrainedCausalLMSaveLoad:
     """Test save and load functionality."""
 
-    def test_save_hf_pretrained_all_components(
+    def test_save_pretrained_all_components(
         self, tmp_path, mock_model, mock_tokenizer, mock_config, mock_generation_config
     ):
         """Test saving all components."""
@@ -482,18 +482,18 @@ class TestPreTrainedCausalLMSaveLoad:
         lm._generation_config = mock_generation_config
 
         save_dir = tmp_path / "saved_model"
-        lm.save_hf_pretrained(save_dir)
+        lm.save_pretrained(save_dir)
 
         # Check directory was created
         assert save_dir.exists()
 
         # Check all components were saved
-        mock_model.save_hf_pretrained.assert_called_once_with(save_dir)
-        mock_tokenizer.save_hf_pretrained.assert_called_once_with(save_dir)
-        mock_config.save_hf_pretrained.assert_called_once_with(save_dir)
-        mock_generation_config.save_hf_pretrained.assert_called_once_with(save_dir)
+        mock_model.save_pretrained.assert_called_once_with(save_dir)
+        mock_tokenizer.save_pretrained.assert_called_once_with(save_dir)
+        mock_config.save_pretrained.assert_called_once_with(save_dir)
+        mock_generation_config.save_pretrained.assert_called_once_with(save_dir)
 
-    def test_save_hf_pretrained_partial_components(self, tmp_path, mock_model, mock_tokenizer):
+    def test_save_pretrained_partial_components(self, tmp_path, mock_model, mock_tokenizer):
         """Test saving only loaded components."""
         lm = PreTrainedCausalLM()
         lm._model = mock_model
@@ -501,28 +501,28 @@ class TestPreTrainedCausalLMSaveLoad:
         # config and generation_config remain None
 
         save_dir = tmp_path / "saved_model"
-        lm.save_hf_pretrained(save_dir)
+        lm.save_pretrained(save_dir)
 
         # Only loaded components should be saved
-        mock_model.save_hf_pretrained.assert_called_once()
-        mock_tokenizer.save_hf_pretrained.assert_called_once()
+        mock_model.save_pretrained.assert_called_once()
+        mock_tokenizer.save_pretrained.assert_called_once()
 
-    def test_save_hf_pretrained_no_components(self, tmp_path):
+    def test_save_pretrained_no_components(self, tmp_path):
         """Test saving with no loaded components."""
         lm = PreTrainedCausalLM()
 
         save_dir = tmp_path / "saved_model"
-        lm.save_hf_pretrained(save_dir)
+        lm.save_pretrained(save_dir)
 
         # Directory should still be created
         assert save_dir.exists()
 
-    def test_save_hf_pretrained_creates_parent_dirs(self, tmp_path):
-        """Test save_hf_pretrained creates parent directories."""
+    def test_save_pretrained_creates_parent_dirs(self, tmp_path):
+        """Test save_pretrained creates parent directories."""
         lm = PreTrainedCausalLM()
 
         save_dir = tmp_path / "deep" / "nested" / "model"
-        lm.save_hf_pretrained(save_dir)
+        lm.save_pretrained(save_dir)
 
         assert save_dir.exists()
 
@@ -791,7 +791,7 @@ def mock_config():
     config.num_hidden_layers = 12
     config.hidden_size = 768
     config.num_attention_heads = 12
-    config.save_hf_pretrained = Mock()
+    config.save_pretrained = Mock()
     return config
 
 
@@ -814,7 +814,7 @@ def mock_model():
     model.to = Mock(return_value=model)
     model.half = Mock(return_value=model)
     model.float = Mock(return_value=model)
-    model.save_hf_pretrained = Mock()
+    model.save_pretrained = Mock()
     model.generation_config = None
     return model
 
@@ -823,5 +823,5 @@ def mock_model():
 def mock_generation_config():
     """Mock GenerationConfig for testing."""
     config = Mock()
-    config.save_hf_pretrained = Mock()
+    config.save_pretrained = Mock()
     return config

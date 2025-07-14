@@ -426,7 +426,7 @@ class TestPreTrainedVLMGenerationMethods:
 class TestPreTrainedVLMSaveLoad:
     """Test save and load functionality."""
 
-    def test_save_hf_pretrained_all_components(self, tmp_path, mock_model, mock_processor, mock_config):
+    def test_save_pretrained_all_components(self, tmp_path, mock_model, mock_processor, mock_config):
         """Test saving all components."""
         vlm = PreTrainedVLM()
         vlm._model = mock_model
@@ -435,20 +435,20 @@ class TestPreTrainedVLMSaveLoad:
         vlm._tokenizer = mock_processor.tokenizer
 
         # Mock save methods
-        mock_model.save_hf_pretrained = Mock()
-        mock_processor.save_hf_pretrained = Mock()
-        mock_processor.tokenizer.save_hf_pretrained = Mock()
-        mock_config.save_hf_pretrained = Mock()
+        mock_model.save_pretrained = Mock()
+        mock_processor.save_pretrained = Mock()
+        mock_processor.tokenizer.save_pretrained = Mock()
+        mock_config.save_pretrained = Mock()
 
         # Save
-        vlm.save_hf_pretrained(tmp_path)
+        vlm.save_pretrained(tmp_path)
 
         # Check all components saved
-        mock_model.save_hf_pretrained.assert_called_once()
-        mock_config.save_hf_pretrained.assert_called_once()
-        mock_processor.save_hf_pretrained.assert_called_once()
+        mock_model.save_pretrained.assert_called_once()
+        mock_config.save_pretrained.assert_called_once()
+        mock_processor.save_pretrained.assert_called_once()
 
-    def test_save_hf_pretrained_skip_processor_components(self, tmp_path, mock_model, mock_processor, mock_config):
+    def test_save_pretrained_skip_processor_components(self, tmp_path, mock_model, mock_processor, mock_config):
         """Test saving skips processor sub-components when processor exists."""
         vlm = PreTrainedVLM()
         vlm._model = mock_model
@@ -460,9 +460,9 @@ class TestPreTrainedVLMSaveLoad:
         vlm._image_processor = mock_processor.image_processor
 
         # Mock save methods
-        mock_model.save_hf_pretrained = Mock()
-        mock_processor.save_hf_pretrained = Mock()
-        mock_config.save_hf_pretrained = Mock()
+        mock_model.save_pretrained = Mock()
+        mock_processor.save_pretrained = Mock()
+        mock_config.save_pretrained = Mock()
 
         # Save - should not try to save tokenizer/image_processor separately
         # This should work without errors

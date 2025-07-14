@@ -60,7 +60,7 @@ class PreTrainedBase(ABC):
 
     def save_artifacts(self, save_directory: Union[str, Path]):
         """
-        Saves all loaded, generic artifacts that have a `save_hf_pretrained` method
+        Saves all loaded, generic artifacts that have a `save_pretrained` method
         to the specified directory. Note: This does not save the `model` attribute.
         """
         save_path = Path(save_directory)

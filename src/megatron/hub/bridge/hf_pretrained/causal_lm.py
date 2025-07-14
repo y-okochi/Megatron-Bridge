@@ -29,7 +29,6 @@ from transformers.generation.utils import GenerateOutput
 
 from megatron.hub.bridge.hf_pretrained.base import PreTrainedBase
 
-
 # Python 3.12+ supports PEP 692 (TypedDict Unpack)
 if sys.version_info >= (3, 12):
     from typing import TypedDict, Unpack
@@ -503,7 +502,7 @@ class PreTrainedCausalLM(PreTrainedBase, Generic[CausalLMType]):
             self._model = self._model.float()
         return self
 
-    def save_hf_pretrained(self, save_directory: Union[str, Path]):
+    def save_pretrained(self, save_directory: Union[str, Path]):
         """
         Save all components (model, tokenizer, config, generation_config) to a directory.
 
@@ -520,7 +519,7 @@ class PreTrainedCausalLM(PreTrainedBase, Generic[CausalLMType]):
 
         # Save model if loaded
         if hasattr(self, "_model") and self._model is not None:
-            self._model.save_hf_pretrained(save_path)
+            self._model.save_pretrained(save_path)
 
         # Use the base class save_artifacts to save config and all artifacts
         self.save_artifacts(save_path)
