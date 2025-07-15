@@ -25,6 +25,7 @@ from megatron.hub.bridge.param_mapping import (
     GatedMLPMapping,
     QKVMapping,
     TPAwareMapping,
+    DirectMapping,
 )
 from megatron.hub.models.llama.llama_provider import Llama31ModelProvider, LlamaModelProvider
 
@@ -75,7 +76,7 @@ class LlamaCausalBridge(MegatronModelBridge):
         )
 
         provider.gradient_accumulation_fusion = False
-        provider.variable_seq_lengths = True
+        provider.variable_seq_lengths = False
 
         return provider
 
@@ -95,15 +96,15 @@ class LlamaCausalBridge(MegatronModelBridge):
             # ------------------------------------------------------------------
             # LayerNorm (replicated across TP ranks)
             # ------------------------------------------------------------------
-            TPAwareMapping(
+            DirectMapping(
                 megatron_param="decoder.final_layernorm.weight",
                 hf_param="model.norm.weight",
             ),
-            TPAwareMapping(
+            DirectMapping(
                 megatron_param="decoder.layers.*.self_attention.linear_qkv.layer_norm_weight",
                 hf_param="model.layers.*.input_layernorm.weight",
             ),
-            TPAwareMapping(
+            DirectMapping(
                 megatron_param="decoder.layers.*.mlp.linear_fc1.layer_norm_weight",
                 hf_param="model.layers.*.post_attention_layernorm.weight",
             ),

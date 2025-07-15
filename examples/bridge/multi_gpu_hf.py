@@ -45,7 +45,6 @@ from rich.table import Table
 from megatron.hub import CausalLMBridge
 from megatron.hub.common.decorators import torchrun_main
 
-
 HF_MODEL_ID = "meta-llama/Llama-3.1-8B"
 console = Console()
 
@@ -66,8 +65,8 @@ def main(hf_model_id: str = HF_MODEL_ID, output_dir: str = None) -> None:
 
     bridge = CausalLMBridge.from_hf_pretrained(hf_model_id)
 
-    model_provider = bridge.to_megatron_provider()
-    model_provider.tensor_model_parallel_size = int(os.environ.get("WORLD_SIZE", "1"))
+    model_provider = bridge.to_megatron_provider(load_weights=True)
+    model_provider.pipeline_model_parallel_size = 2
     model_provider.initialize_model_parallel(seed=0)
 
     # Now we can check for rank

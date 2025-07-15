@@ -22,7 +22,6 @@ import torch.nn as nn
 from megatron.core import mpu
 from megatron.core.transformer.transformer_config import TransformerConfig
 
-
 WeightType = TypeVar("WeightType", torch.Tensor, Dict[str, torch.Tensor])
 
 
@@ -257,31 +256,35 @@ class MegatronParamMapping(ABC, Generic[WeightType]):
         if self.pp_size == 1:
             return obj
 
-        # Gather objects from all PP ranks
-        obj_output = [None] * self.pp_size
-        torch.distributed.all_gather_object(object_list=obj_output, obj=obj, group=self.pp_group)
+        # ------------------------------------------------------------------
+        # 1. Gather presence flags from all PP ranks to find the source rank
+        # ------------------------------------------------------------------
+        has_obj = obj is not None
+        obj_flags = [None] * self.pp_size
+        torch.distributed.all_gather_object(obj_flags, has_obj, group=self.pp_group)
 
-        # Find source rank and validate
-        src_rank = None
-        target_obj = None
-        for rank, item in enumerate(obj_output):
-            if item is not None:
-                if target_obj is not None:
-                    raise ValueError("Object exists on multiple PP ranks")
-                target_obj = item
+        # ------------------------------------------------------------------
+        # 2. Identify the owning rank (the only rank with True flag)
+        # ------------------------------------------------------------------
+        src_rank = None  # Rank *inside* the PP group
+        for rank, flag in enumerate(obj_flags):
+            if flag:
                 src_rank = rank
 
-        if target_obj is None:
+        if src_rank is None:
             raise ValueError("Object must exist on at least one PP rank")
 
-        # Get global rank for broadcast
-        global_rank = torch.distributed.get_global_rank(group=self.pp_group, group_rank=src_rank)
+        # ------------------------------------------------------------------
+        # 3. Broadcast the object from the source rank to all ranks
+        # ------------------------------------------------------------------
+        if src_rank is None:
+            raise ValueError("Could not determine source rank")
 
-        # Broadcast to all ranks
-        obj_output = [None]
-        torch.distributed.broadcast_object_list(object_list=obj_output, src=global_rank, group=self.pp_group)
+        # Use broadcast_object_list which is more robust than all_gather_object
+        obj_list = [obj]
+        torch.distributed.broadcast_object_list(obj_list, src=src_rank, group=self.pp_group)
 
-        return obj_output[0]
+        return obj_list[0]
 
     def broadcast_tensor_to_tp_ranks(self, tensor: torch.Tensor, src_rank: int = 0) -> torch.Tensor:
         """Broadcast a tensor to all TP ranks.
@@ -508,6 +511,31 @@ class ColumnParallelMapping(MegatronParamMapping[torch.Tensor]):
         along their only dimension following the same pattern.
     """
 
+    def _get_target_param_and_shape(self, megatron_module: nn.Module) -> tuple[torch.Tensor, tuple]:
+        """Get the target parameter and its shape based on the parameter name."""
+        param_name_lower = self.megatron_param.lower()
+
+        # Define parameter mapping: (param_name, expected_ndim)
+        param_configs = [
+            ("bias", 1),
+            ("weight", 2),
+        ]
+
+        for param_name, expected_ndim in param_configs:
+            if param_name in param_name_lower:
+                if hasattr(megatron_module, param_name):
+                    target_param = getattr(megatron_module, param_name)
+                    if isinstance(target_param, torch.Tensor) and target_param.ndim == expected_ndim:
+                        return target_param, target_param.shape
+                    else:
+                        raise ValueError(
+                            f"Parameter {param_name} exists but has wrong type or dimensions (expected ndim == {expected_ndim}, got {target_param.ndim if isinstance(target_param, torch.Tensor) else 'not a tensor'})")
+                else:
+                    raise ValueError(
+                        f"Parameter name suggests {param_name} but module {megatron_module} has no {param_name}")
+
+        raise ValueError(f"Could not determine parameter type for {self.megatron_param}")
+
     def hf_to_megatron(
         self,
         hf_weights: torch.Tensor,
@@ -517,36 +545,7 @@ class ColumnParallelMapping(MegatronParamMapping[torch.Tensor]):
         if self.tp_size == 1:
             return hf_weights
 
-        # Determine if we're dealing with a weight or bias based on input tensor dimensionality
-        # and the megatron parameter name pattern
-        if self.tp_rank == 0 and hf_weights is not None and hf_weights.ndim == 1:
-            # This is a bias tensor (1D)
-            if hasattr(megatron_module, "bias") and megatron_module.bias is not None:
-                target_param = megatron_module.bias
-                output_shape = target_param.shape
-            else:
-                raise ValueError(f"Input is 1D (bias) but module {megatron_module} has no bias")
-        elif self.tp_rank != 0:
-            # Non-rank-0 doesn't have hf_weights, so we need to determine from the parameter name
-            if "bias" in self.megatron_param.lower():
-                if hasattr(megatron_module, "bias") and megatron_module.bias is not None:
-                    target_param = megatron_module.bias
-                    output_shape = target_param.shape
-                else:
-                    raise ValueError("Parameter name suggests bias but module has no bias")
-            else:
-                if hasattr(megatron_module, "weight"):
-                    target_param = megatron_module.weight
-                    output_shape = target_param.shape
-                else:
-                    raise ValueError(f"Module {megatron_module} has no weight")
-        else:
-            # This is a weight tensor (2D or higher) on rank 0
-            if hasattr(megatron_module, "weight"):
-                target_param = megatron_module.weight
-                output_shape = target_param.shape
-            else:
-                raise ValueError(f"Module {megatron_module} has no weight")
+        target_param, output_shape = self._get_target_param_and_shape(megatron_module)
 
         # On rank 0, check for divisibility and split
         if self.tp_rank == 0:
