@@ -24,9 +24,9 @@ from megatron.core.optimizer_param_scheduler import OptimizerParamScheduler
 from megatron.core.rerun_state_machine import RerunDataIterator
 from megatron.core.transformer import MegatronModule
 
+from megatron.hub.core.utils.common_utils import print_rank_0
 from megatron.hub.data.loaders import setup_data_iterators
 from megatron.hub.models import GPTModelProvider, T5ModelProvider
-from megatron.hub.training.tokenizers.tokenizer import build_tokenizer
 from megatron.hub.training import fault_tolerance
 from megatron.hub.training.checkpointing import (
     _load_checkpoint_from_path,
@@ -39,9 +39,8 @@ from megatron.hub.training.config import ConfigContainer
 from megatron.hub.training.initialize import initialize_megatron, set_jit_fusion_options
 from megatron.hub.training.optim import setup_optimizer
 from megatron.hub.training.state import GlobalState
-from megatron.hub.core.utils.common_utils import print_rank_0
+from megatron.hub.training.tokenizers.tokenizer import build_tokenizer
 from megatron.hub.training.utils.log_utils import append_to_progress_log, barrier_and_log, setup_logging
-
 
 try:
     from megatron.core.distributed import TorchFullyShardedDataParallel  # noqa: F401 pylint: disable=unused-import
@@ -288,8 +287,9 @@ def _update_model_config_funcs(
         model_config.param_sync_func = [model_chunk.start_param_sync for model_chunk in model]
         if len(model) == 1:
             model_config.param_sync_func = model_config.param_sync_func[0]
-    model_config.finalize_model_grads_func = finalize_model_grads
-    model_config.grad_scale_func = optimizer.scale_loss
+    if optimizer is not None:
+        model_config.finalize_model_grads_func = finalize_model_grads
+        model_config.grad_scale_func = optimizer.scale_loss
 
 
 def _create_peft_pre_wrap_hook(cfg: ConfigContainer, state: GlobalState) -> Callable[[list[MegatronModule]], list[MegatronModule]]:

@@ -282,7 +282,7 @@ class CausalLMBridge(Generic[MegatronModelT]):
     def export_hf_weights(
         self,
         model,
-        order: Literal["megatron", "hf", "safetensors"] = "megatron",
+            order: Literal["megatron", "hf", "safetensors"] = "safetensors",
         cpu: bool = False,
         show_progress: bool = True,
         mode: Union[str, WeightDistributionMode] = WeightDistributionMode.CONSOLIDATE,
