@@ -254,7 +254,7 @@ class TestCausalLMBridge:
 
         # Test with invalid type
         with pytest.raises(
-                ValueError, match="hf_pretrained must be a PreTrainedCausalLM or PretrainedConfig instance"
+            ValueError, match="hf_pretrained must be a PreTrainedCausalLM or PretrainedConfig instance"
         ):
             CausalLMBridge("invalid")
 
@@ -338,9 +338,7 @@ class TestCausalLMBridgeEdgeCases:
             result = bridge.load_hf_weights(mock_megatron_model)
 
             assert result == mock_megatron_model
-            mock_model_bridge.load_weights_hf_to_megatron.assert_called_once_with(
-                mock_megatron_model, mock_hf_model
-            )
+            mock_model_bridge.load_weights_hf_to_megatron.assert_called_once_with(mock_megatron_model, mock_hf_model)
 
     def test_load_hf_weights_from_path(self):
         """Test loading weights from a different path."""
@@ -438,7 +436,7 @@ class TestCausalLMBridgeEdgeCases:
 
         # Mock the export process
         with patch(
-                "megatron.hub.bridge.causal_bridge.model_bridge.stream_weights_megatron_to_hf"
+            "megatron.hub.bridge.causal_bridge.model_bridge.stream_weights_megatron_to_hf"
         ) as mock_bridge_state:
             mock_weight_iter = [("weight1", torch.randn(10, 10)), ("weight2", torch.randn(5, 5))]
             mock_bridge_state.return_value = iter(mock_weight_iter)
@@ -507,9 +505,7 @@ class TestCausalLMBridgeEdgeCases:
             # Configure mock to raise AttributeError when accessing CustomForCausalLM
             del mock_transformers.CustomForCausalLM
 
-            with pytest.raises(
-                    ValueError, match="Architecture class 'CustomForCausalLM' not found in transformers"
-            ):
+            with pytest.raises(ValueError, match="Architecture class 'CustomForCausalLM' not found in transformers"):
                 bridge._get_causal_lm_architecture()
 
     def test_repr(self):
