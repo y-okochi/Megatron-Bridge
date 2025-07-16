@@ -34,12 +34,10 @@ class TokenizerConfig:
     additional_args: Optional[dict] = None
     """Tokenizer additional arguments."""
 
-
     # Multimodal tokenizer arguments
     tokenizer_prompt_format: Optional[str] = None
     special_tokens: Optional[list[str]] = None
     image_tag_type: Optional[str] = None
-
 
     # Metadata arguments
     write_metadata: Optional[bool] = True
