@@ -351,8 +351,9 @@ class TestCausalLMBridgeEdgeCases:
                 result = bridge.load_hf_weights(mock_megatron_model)
 
                 assert result == mock_megatron_model
-                mock_model_bridge.load_weights_hf_to_megatron.assert_called_once_with(mock_megatron_model,
-                                                                                      mock_hf_model)
+                mock_model_bridge.load_weights_hf_to_megatron.assert_called_once_with(
+                    mock_megatron_model, mock_hf_model
+                )
 
     def test_load_hf_weights_from_path(self):
         """Test loading weights from a different path."""
@@ -377,8 +378,9 @@ class TestCausalLMBridgeEdgeCases:
 
                 assert result == mock_megatron_model
                 mock_cls.from_pretrained.assert_called_once_with("./custom_model")
-                mock_model_bridge.load_weights_hf_to_megatron.assert_called_once_with(mock_megatron_model,
-                                                                                      mock_loaded_model)
+                mock_model_bridge.load_weights_hf_to_megatron.assert_called_once_with(
+                    mock_megatron_model, mock_loaded_model
+                )
 
     def test_load_hf_weights_no_path_config_only(self):
         """Test load_hf_weights fails when bridge has config only and no path provided."""
