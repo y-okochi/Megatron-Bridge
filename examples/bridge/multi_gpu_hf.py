@@ -50,7 +50,7 @@ console = Console()
 
 
 @torchrun_main
-def main(hf_model_id: str = HF_MODEL_ID, output_dir: str = None) -> None:
+def main(hf_model_id: str = HF_MODEL_ID, output_dir: str = None, tp: int = 1, pp: int = 1) -> None:
     """Perform round-trip conversion between HuggingFace and Megatron-LM models on multiple GPUs."""
     if os.environ.get("WORLD_SIZE") is None:
         console.print("This script must be launched with torchrun. Please run:")
@@ -66,7 +66,8 @@ def main(hf_model_id: str = HF_MODEL_ID, output_dir: str = None) -> None:
     bridge = CausalLMBridge.from_hf_pretrained(hf_model_id)
 
     model_provider = bridge.to_megatron_provider(load_weights=True)
-    model_provider.pipeline_model_parallel_size = 2
+    model_provider.tensor_model_parallel_size = tp
+    model_provider.pipeline_model_parallel_size = pp
     model_provider.initialize_model_parallel(seed=0)
 
     # Now we can check for rank
@@ -120,6 +121,8 @@ if __name__ == "__main__":
         default=None,
         help="The directory where the converted model directory will be created. Defaults to the current working directory.",
     )
+    parser.add_argument('--tp', type=int, default=1, help='Tensor parallelism size')
+    parser.add_argument('--pp', type=int, default=1, help='Pipeline parallelism size')
 
     args = parser.parse_args()
-    main(args.hf_model_id, args.output_dir)
+    main(args.hf_model_id, args.output_dir, args.tp, args.pp)
