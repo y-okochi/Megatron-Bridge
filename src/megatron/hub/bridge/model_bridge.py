@@ -12,22 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-Model bridge for HuggingFace ↔ Megatron conversions.
-
-This module provides high-level orchestration for converting models between
-HuggingFace and Megatron formats, with comprehensive error handling, parameter
-validation, and support for distributed training scenarios.
-
-Recent improvements:
-- Enhanced parameter validation across all public methods
-- Removed deprecated methods that used obsolete API
-- Improved error messages with better context
-- Added comprehensive docstrings and type annotations
-- Fixed potential runtime bugs (undefined variables, type mismatches)
-"""
 
 import abc
+import logging
 from collections import defaultdict
 from dataclasses import dataclass
 from enum import Enum
@@ -59,6 +46,8 @@ from megatron.hub.bridge.utils import get_transformer_layer_offset
 from megatron.hub.common.decorators import dispatch
 from megatron.hub.core.models.model_provider import ModelProviderProtocol
 from megatron.hub.core.utils.common_utils import unwrap_model
+
+logger = logging.getLogger(__name__)
 
 MappingT = TypeVar("MappingT", bound=MegatronParamMapping)
 HFPreTrained = TypeVar("HFPreTrained")
@@ -853,19 +842,22 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
                 local_name = self._unwrap_name(local_name)
                 global_name = _adjust_layer_number_to_global(local_name, layer_offset)
                 mapping = mapping_registry.megatron_to_hf_lookup(global_name)
+
                 if not mapping:
-                    print(f"WARNING: No megatron to hf mapping found for {global_name}")
+                    logger.warning(f"WARNING: No megatron to hf mapping found for {global_name}")
                     continue
 
                 # ensure src weights exist
                 if isinstance(mapping.hf_param, str):
                     if mapping.hf_param not in hf_state_dict:
-                        raise ValueError(f"Can't find {mapping.hf_param} in hf_state_dict")
+                        logger.warning(f"Can't find {mapping.hf_param} in hf_state_dict")
+                        continue
                 else:
                     missing_params = [hf_param for hf_param in mapping.hf_param.values() if
                                       hf_param not in hf_state_dict]
                     if missing_params:
-                        raise ValueError(f"Can't find the following HF parameters in hf_state_dict: {missing_params}")
+                        logger.warning(f"Can't find the following HF parameters in hf_state_dict: {missing_params}")
+                        continue
 
                 owner_module = unwrap_model(model)
                 for part in local_name.split(".")[:-1]:
@@ -952,7 +944,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         for hf_key in hf_keys:
             mapping = mapping_registry.hf_to_megatron_lookup(hf_key)
             if not mapping:
-                print(f"WARNING: No hf to megatron mapping found for {hf_key}")
+                logger.warning(f"WARNING: No hf to megatron mapping found for {hf_key}")
                 continue
 
             global_name = mapping.megatron_param if hasattr(mapping, "megatron_param") else None
