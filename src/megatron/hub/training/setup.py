@@ -27,7 +27,7 @@ from megatron.core.transformer import MegatronModule
 
 from megatron.hub.data.loaders import setup_data_iterators
 from megatron.hub.models import GPTModelProvider, T5ModelProvider
-from megatron.hub.training.tokenizers.tokenizer import build_tokenizer
+from megatron.hub.training.tokenizers import build_tokenizer
 from megatron.hub.training import fault_tolerance
 from megatron.hub.training.checkpointing import (
     _load_checkpoint_from_path,

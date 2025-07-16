@@ -13,54 +13,59 @@
 # limitations under the License.
 
 from dataclasses import dataclass
-from typing import Literal, Optional
+from typing import Literal, Optional, Union
 
+from megatron.core.tokenizers import MegatronTokenizerBase
 
 @dataclass
 class TokenizerConfig:
     """Configuration settings for the tokenizer."""
 
-    vocab_size: Optional[int] = None
-    """Size of vocab before EOD or padding."""
+    tokenizer_path: str = None
+    """Path to tokenizer model."""
 
-    vocab_file: Optional[str] = None
-    """Path to the vocab file."""
+    metadata: Optional[Union[str|dict]] = None
+    """Tokenizer metadata."""
 
-    merge_file: Optional[str] = None
-    """Path to the BPE merge file."""
+    multimodal_tokenizer: Optional[bool] = False
+    """Whether to use multimodal tokenizer."""
 
-    vocab_extra_ids: int = 0
-    """Number of additional vocabulary tokens. They are used for span masking in the T5 model"""
+    additional_args: Optional[dict] = None
+    """Tokenizer additional arguments."""
 
-    tokenizer_type: Optional[
-        Literal[
-            "BertWordPieceLowerCase",
-            "BertWordPieceCase",
-            "GPT2BPETokenizer",
-            "SentencePieceTokenizer",
-            "GPTSentencePieceTokenizer",
-            "HuggingFaceTokenizer",
-            "Llama2Tokenizer",
-            "TikTokenizer",
-            "MultimodalTokenizer",
-            "NullTokenizer",
-        ]
-    ] = None
-    """What type of tokenizer to use."""
 
-    tokenizer_model: Optional[str] = None
-    """Sentencepiece tokenizer model."""
-
-    tiktoken_pattern: Optional[str] = None
-    """Which tiktoken pattern to use. Options: [v1, v2]"""
-
-    tiktoken_num_special_tokens: int = 1000
-    """Number of special tokens in tiktoken tokenizer"""
-
-    tiktoken_special_tokens: Optional[list[str]] = None
-    """List of tiktoken special tokens, needs to have ["<unk>", "<s>", "</s>"]"""
-
+    # Multimodal tokenizer arguments
     tokenizer_prompt_format: Optional[str] = None
     special_tokens: Optional[list[str]] = None
     image_tag_type: Optional[str] = None
-    padded_vocab_size: Optional[int] = None
+
+
+    # Metadata arguments
+    write_metadata: Optional[bool] = True
+    """Creates tokenizer metadata file."""
+
+    tokenizer_library: Optional[
+        Literal[
+            "huggingface",
+            "sentencepiece",
+            "tiktoken",
+            "megatron",
+            "null",
+            "byte-level",
+        ]
+    ] = None
+
+    model_type: Optional[str] = None
+    """Type of LLM model to be used with tokenizer."""
+
+    tokenizer_class: Optional[MegatronTokenizerBase] = None
+    """Pre-defined tokenizer class."""
+
+    chat_template: Optional[str] = None
+    """Tokenizer chat template."""
+
+    overwrite_metadata: Optional[bool] = False
+    """If overwrite metadata file."""
+
+    metadata_path: Optional[str] = None
+    """Path to save metadata file."""

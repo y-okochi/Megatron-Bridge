@@ -16,12 +16,13 @@
 
 from typing import Any, Optional
 
+from megatron.core.tokenziers import MegatronTokenizerBase
+
 from megatron.hub.data.builders.hf_dataset import ProcessExampleOutput
-from megatron.hub.training.tokenizers.tokenizer import MegatronTokenizer
 
 
 def process_squad_example(
-    example: dict[str, Any], tokenizer: Optional[MegatronTokenizer] = None
+    example: dict[str, Any], tokenizer: Optional[MegatronTokenizerBase] = None
 ) -> ProcessExampleOutput:
     """Process a single Squad example into the required format.
 

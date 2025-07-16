@@ -24,12 +24,13 @@ from typing import Any, Callable, Optional, Protocol, TypedDict, Union, cast
 from datasets import Dataset, DatasetDict, load_dataset
 from tqdm import tqdm
 
+from megatron.core.tokenizers import MegatronTokenizerBase
+
 from megatron.hub.core.utils.common_utils import print_rank_0
 from megatron.hub.data.builders.finetuning_dataset import FinetuningDatasetBuilder
 from megatron.hub.data.datasets.packed_sequence import PackedSequenceSpecs
 from megatron.hub.data.datasets.sft import get_dataset_root
 from megatron.hub.training.config import FinetuningDatasetConfig
-from megatron.hub.training.tokenizers.tokenizer import MegatronTokenizer
 
 
 logger = logging.getLogger(__name__)
@@ -47,7 +48,7 @@ class ProcessExampleFn(Protocol):
     """Protocol defining the signature for a function that processes a single dataset example."""
 
     def __call__(
-        self, example: dict[str, Any], tokenizer: Optional[MegatronTokenizer] = None
+        self, example: dict[str, Any], tokenizer: Optional[MegatronTokenizerBase] = None
     ) -> ProcessExampleOutput: ...
 
 
@@ -93,7 +94,7 @@ def preprocess_and_split_data(
     dset: DatasetDict,
     dataset_name: str,
     dataset_root: Path,
-    tokenizer: MegatronTokenizer,
+    tokenizer: MegatronTokenizerBase,
     process_example_fn: ProcessExampleFn,
     split_val_from_train: bool = True,
     val_proportion: Optional[float] = None,
