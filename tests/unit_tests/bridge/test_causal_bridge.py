@@ -79,26 +79,23 @@ class TestCausalLMBridge:
         mock_config.architectures = ["GPT2LMHeadModel"]  # Use a real architecture
         mock_model.config = mock_config
 
-        with patch("megatron.hub.bridge.causal_bridge.PreTrainedCausalLM", MockPreTrainedCausalLM) as mock_cls:
-            mock_pretrained_cls = Mock()
-            mock_cls.from_hf_pretrained = mock_pretrained_cls.from_hf_pretrained
-            mock_pretrained_cls.from_hf_pretrained.return_value = mock_model
+        with patch("megatron.hub.bridge.causal_bridge.PreTrainedCausalLM") as mock_cls:
+            # Set up the from_pretrained class method properly
+            mock_cls.from_pretrained = Mock(return_value=mock_model)
 
             with patch("megatron.hub.bridge.causal_bridge.AutoConfig") as mock_autoconfig:
                 mock_autoconfig.from_pretrained.return_value = mock_config
 
                 # Skip architecture validation for this test
                 with patch.object(CausalLMBridge, "_validate_config"):
-                    # Mock the PreTrainedCausalLM type check
-                    with patch("megatron.hub.bridge.causal_bridge.PreTrainedCausalLM", MockPreTrainedCausalLM):
-                        # Call from_hf_pretrained
-                        model_id = "gpt2"
-                        result = CausalLMBridge.from_hf_pretrained(model_id, trust_remote_code=True)
+                    # Call from_hf_pretrained
+                    model_id = "gpt2"
+                    result = CausalLMBridge.from_hf_pretrained(model_id, trust_remote_code=True)
 
-                    # Assertions
-                    assert isinstance(result, CausalLMBridge)
-                    assert result.hf_pretrained == mock_model
-                    mock_pretrained_cls.from_hf_pretrained.assert_called_once_with(model_id, trust_remote_code=True)
+                # Assertions
+                assert isinstance(result, CausalLMBridge)
+                assert result.hf_pretrained == mock_model
+                mock_cls.from_pretrained.assert_called_once_with(model_id, trust_remote_code=True)
 
     def test_from_pretrained_with_path(self):
         """Test from_pretrained with Path object."""
@@ -110,26 +107,23 @@ class TestCausalLMBridge:
         mock_config.architectures = ["GPT2LMHeadModel"]
         mock_model.config = mock_config
 
-        with patch("megatron.hub.bridge.causal_bridge.PreTrainedCausalLM", MockPreTrainedCausalLM) as mock_cls:
-            mock_pretrained_cls = Mock()
-            mock_cls.from_pretrained = mock_pretrained_cls.from_pretrained
-            mock_pretrained_cls.from_pretrained.return_value = mock_model
+        with patch("megatron.hub.bridge.causal_bridge.PreTrainedCausalLM") as mock_cls:
+            # Set up the from_pretrained class method properly
+            mock_cls.from_pretrained = Mock(return_value=mock_model)
 
             with patch("megatron.hub.bridge.causal_bridge.AutoConfig") as mock_autoconfig:
                 mock_autoconfig.from_pretrained.return_value = mock_config
 
                 # Skip architecture validation for this test
                 with patch.object(CausalLMBridge, "_validate_config"):
-                    # Mock the PreTrainedCausalLM type check
-                    with patch("megatron.hub.bridge.causal_bridge.PreTrainedCausalLM", MockPreTrainedCausalLM):
-                        # Call from_pretrained with Path
-                        model_path = Path("/path/to/model")
-                        result = CausalLMBridge.from_hf_pretrained(model_path, device_map="auto")
+                    # Call from_hf_pretrained with Path
+                    model_path = Path("/path/to/model")
+                    result = CausalLMBridge.from_hf_pretrained(model_path, device_map="auto")
 
-                    # Assertions
-                    assert isinstance(result, CausalLMBridge)
-                    assert result.hf_pretrained == mock_model
-                    mock_pretrained_cls.from_pretrained.assert_called_once_with(model_path, device_map="auto")
+                # Assertions
+                assert isinstance(result, CausalLMBridge)
+                assert result.hf_pretrained == mock_model
+                mock_cls.from_pretrained.assert_called_once_with(model_path, device_map="auto")
 
     def test_from_pretrained_with_additional_kwargs(self):
         """Test from_pretrained with various kwargs."""
@@ -139,35 +133,32 @@ class TestCausalLMBridge:
         mock_config.architectures = ["GPT2LMHeadModel"]
         mock_model.config = mock_config
 
-        with patch("megatron.hub.bridge.causal_bridge.PreTrainedCausalLM", MockPreTrainedCausalLM) as mock_cls:
-            mock_pretrained_cls = Mock()
-            mock_cls.from_pretrained = mock_pretrained_cls.from_pretrained
-            mock_pretrained_cls.from_pretrained.return_value = mock_model
+        with patch("megatron.hub.bridge.causal_bridge.PreTrainedCausalLM") as mock_cls:
+            # Set up the from_pretrained class method properly
+            mock_cls.from_pretrained = Mock(return_value=mock_model)
 
             with patch("megatron.hub.bridge.causal_bridge.AutoConfig") as mock_autoconfig:
                 mock_autoconfig.from_pretrained.return_value = mock_config
 
                 # Skip architecture validation for this test
                 with patch.object(CausalLMBridge, "_validate_config"):
-                    # Mock the PreTrainedCausalLM type check
-                    with patch("megatron.hub.bridge.causal_bridge.PreTrainedCausalLM", MockPreTrainedCausalLM):
-                        # Call with multiple kwargs
-                        result = CausalLMBridge.from_hf_pretrained(
-                            "model-id",
-                            torch_dtype=torch.bfloat16,
-                            low_cpu_mem_usage=True,
-                            attn_implementation="flash_attention_2",
-                        )
-
-                    # Assertions
-                    assert isinstance(result, CausalLMBridge)
-                    assert result.hf_pretrained == mock_model
-                    mock_pretrained_cls.from_pretrained.assert_called_once_with(
+                    # Call with multiple kwargs
+                    result = CausalLMBridge.from_hf_pretrained(
                         "model-id",
                         torch_dtype=torch.bfloat16,
                         low_cpu_mem_usage=True,
                         attn_implementation="flash_attention_2",
                     )
+
+                # Assertions
+                assert isinstance(result, CausalLMBridge)
+                assert result.hf_pretrained == mock_model
+                mock_cls.from_pretrained.assert_called_once_with(
+                    "model-id",
+                    torch_dtype=torch.bfloat16,
+                    low_cpu_mem_usage=True,
+                    attn_implementation="flash_attention_2",
+                )
 
     def test_to_megatron_provider_basic(self, llama_config):
         """Test basic to_megatron_provider conversion."""
@@ -260,7 +251,7 @@ class TestCausalLMBridge:
             bridge = CausalLMBridge(mock_model)
 
         # Should have the expected methods
-        assert hasattr(bridge, "from_pretrained")
+        assert hasattr(bridge, "from_hf_pretrained")
         assert hasattr(bridge, "to_megatron_provider")
         assert hasattr(bridge, "load_hf_weights")
         assert hasattr(bridge, "export_hf_weights")
@@ -279,7 +270,7 @@ class TestCausalLMBridge:
             ):
                 CausalLMBridge("invalid")
 
-        # from_pretrained should be a classmethod
+        # from_hf_pretrained should be a classmethod
         import inspect
 
         assert inspect.ismethod(CausalLMBridge.from_hf_pretrained)
@@ -352,7 +343,7 @@ class TestCausalLMBridgeEdgeCases:
         mock_megatron_model = [Mock()]  # List of model instances
 
         mock_model_bridge = Mock()
-        mock_model_bridge.load_hf_weights = Mock(return_value=mock_megatron_model)
+        mock_model_bridge.load_weights_hf_to_megatron = Mock()
 
         with patch("megatron.hub.bridge.causal_bridge.PreTrainedCausalLM", MockPreTrainedCausalLM):
             with patch.object(CausalLMBridge, "_model_bridge", mock_model_bridge):
@@ -360,7 +351,8 @@ class TestCausalLMBridgeEdgeCases:
                 result = bridge.load_hf_weights(mock_megatron_model)
 
                 assert result == mock_megatron_model
-                mock_model_bridge.load_hf_weights.assert_called_once_with(mock_megatron_model, mock_hf_model)
+                mock_model_bridge.load_weights_hf_to_megatron.assert_called_once_with(mock_megatron_model,
+                                                                                      mock_hf_model)
 
     def test_load_hf_weights_from_path(self):
         """Test loading weights from a different path."""
@@ -372,21 +364,21 @@ class TestCausalLMBridgeEdgeCases:
         mock_megatron_model = [Mock()]
 
         mock_model_bridge = Mock()
-        mock_model_bridge.load_hf_weights = Mock(return_value=mock_megatron_model)
+        mock_model_bridge.load_weights_hf_to_megatron = Mock()
 
         with patch.object(CausalLMBridge, "_model_bridge", mock_model_bridge):
-            with patch("megatron.hub.bridge.causal_bridge.PreTrainedCausalLM", MockPreTrainedCausalLM) as mock_cls:
-                mock_pretrained = Mock()
-                mock_cls.from_pretrained = mock_pretrained.from_pretrained
+            with patch("megatron.hub.bridge.causal_bridge.PreTrainedCausalLM") as mock_cls:
+                # Set up the from_pretrained class method properly
                 mock_loaded_model = Mock(spec=MockPreTrainedCausalLM)
-                mock_pretrained.from_pretrained.return_value = mock_loaded_model
+                mock_cls.from_pretrained = Mock(return_value=mock_loaded_model)
 
                 bridge = CausalLMBridge(mock_hf_model)
                 result = bridge.load_hf_weights(mock_megatron_model, "./custom_model")
 
                 assert result == mock_megatron_model
-                mock_pretrained.from_pretrained.assert_called_once_with("./custom_model")
-                mock_model_bridge.load_hf_weights.assert_called_once_with(mock_megatron_model, mock_loaded_model)
+                mock_cls.from_pretrained.assert_called_once_with("./custom_model")
+                mock_model_bridge.load_weights_hf_to_megatron.assert_called_once_with(mock_megatron_model,
+                                                                                      mock_loaded_model)
 
     def test_load_hf_weights_no_path_config_only(self):
         """Test load_hf_weights fails when bridge has config only and no path provided."""

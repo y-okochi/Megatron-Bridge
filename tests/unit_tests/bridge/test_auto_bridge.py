@@ -61,7 +61,7 @@ class TestAutoBridge:
         with patch("megatron.hub.bridge.auto_bridge.AutoConfig") as mock_auto_config:
             with patch.object(CausalLMBridge, "from_hf_pretrained") as mock_from_hf_pretrained:
                 # Setup mocks
-                mock_auto_config.from_hf_pretrained.return_value = llama_config
+                mock_auto_config.from_pretrained.return_value = llama_config
                 mock_bridge_instance = Mock(spec=CausalLMBridge)
                 mock_from_hf_pretrained.return_value = mock_bridge_instance
 
@@ -69,7 +69,7 @@ class TestAutoBridge:
                 result = AutoBridge.from_hf_pretrained("meta-llama/Llama-3-8B", trust_remote_code=True)
 
                 # Verify
-                mock_auto_config.from_hf_pretrained.assert_called_once_with(
+                mock_auto_config.from_pretrained.assert_called_once_with(
                     "meta-llama/Llama-3-8B", trust_remote_code=True
                 )
                 mock_from_hf_pretrained.assert_called_once_with("meta-llama/Llama-3-8B", trust_remote_code=True)
@@ -79,7 +79,7 @@ class TestAutoBridge:
         """Test AutoBridge raises ValueError for unsupported models."""
         with patch("megatron.hub.bridge.auto_bridge.AutoConfig") as mock_auto_config:
             # Setup mocks
-            mock_auto_config.from_hf_pretrained.return_value = bert_config
+            mock_auto_config.from_pretrained.return_value = bert_config
 
             # Should raise ValueError
             with pytest.raises(ValueError) as exc_info:
@@ -94,18 +94,18 @@ class TestAutoBridge:
         model_path = Path("/path/to/gpt2/model")
 
         with patch("megatron.hub.bridge.auto_bridge.AutoConfig") as mock_auto_config:
-            with patch.object(CausalLMBridge, "from_pretrained") as mock_from_pretrained:
+            with patch.object(CausalLMBridge, "from_hf_pretrained") as mock_from_hf_pretrained:
                 # Setup mocks
                 mock_auto_config.from_pretrained.return_value = gpt2_config
                 mock_bridge_instance = Mock(spec=CausalLMBridge)
-                mock_from_pretrained.return_value = mock_bridge_instance
+                mock_from_hf_pretrained.return_value = mock_bridge_instance
 
                 # Call with Path
                 result = AutoBridge.from_hf_pretrained(model_path, device_map="auto")
 
                 # Verify
                 mock_auto_config.from_pretrained.assert_called_once_with(model_path, trust_remote_code=False)
-                mock_from_pretrained.assert_called_once_with(model_path, device_map="auto")
+                mock_from_hf_pretrained.assert_called_once_with(model_path, device_map="auto")
                 assert result == mock_bridge_instance
 
     def test_from_pretrained_config_load_failure(self):
@@ -132,6 +132,10 @@ class TestAutoBridge:
 
             @classmethod
             def from_pretrained(cls, path, **kwargs):
+                raise RuntimeError("Loading failed")
+
+            @classmethod
+            def from_hf_pretrained(cls, path, **kwargs):
                 raise RuntimeError("Loading failed")
 
             @classmethod
@@ -224,24 +228,24 @@ class TestAutoBridge:
         config.model_type = "gpt2"
 
         with patch("megatron.hub.bridge.auto_bridge.AutoConfig") as mock_auto_config:
-            with patch.object(CausalLMBridge, "from_pretrained") as mock_from_pretrained:
+            with patch.object(CausalLMBridge, "from_hf_pretrained") as mock_from_hf_pretrained:
                 mock_auto_config.from_pretrained.return_value = config
                 mock_bridge_instance = Mock(spec=CausalLMBridge)
-                mock_from_pretrained.return_value = mock_bridge_instance
+                mock_from_hf_pretrained.return_value = mock_bridge_instance
 
                 # Since CausalLMBridge is first in _BRIDGES, it should be selected
                 result = AutoBridge.from_hf_pretrained("gpt2")
 
                 assert isinstance(result, Mock)  # Our mocked instance
-                mock_from_pretrained.assert_called_once()
+                mock_from_hf_pretrained.assert_called_once()
 
     def test_kwargs_passed_through(self, gpt2_config):
         """Test that all kwargs are properly passed to the selected bridge."""
         with patch("megatron.hub.bridge.auto_bridge.AutoConfig") as mock_auto_config:
-            with patch.object(CausalLMBridge, "from_pretrained") as mock_from_pretrained:
+            with patch.object(CausalLMBridge, "from_hf_pretrained") as mock_from_hf_pretrained:
                 mock_auto_config.from_pretrained.return_value = gpt2_config
                 mock_bridge_instance = Mock(spec=CausalLMBridge)
-                mock_from_pretrained.return_value = mock_bridge_instance
+                mock_from_hf_pretrained.return_value = mock_bridge_instance
 
                 # Call with various kwargs
                 AutoBridge.from_hf_pretrained(
@@ -249,6 +253,6 @@ class TestAutoBridge:
                 )
 
                 # Verify all kwargs were passed
-                mock_from_pretrained.assert_called_once_with(
+                mock_from_hf_pretrained.assert_called_once_with(
                     "gpt2", trust_remote_code=True, device_map="balanced", torch_dtype="bfloat16", custom_param="test"
                 )
