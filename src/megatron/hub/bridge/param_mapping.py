@@ -1043,9 +1043,15 @@ class GatedMLPMapping(MegatronParamMapping[Dict[str, torch.Tensor]]):
     **Responsibilities handled by this mapping**
     1.  **Concatenate / split** – convert between `[G; U]` (Megatron) and the
         separate `{G, U}` matrices (external).
-    2.  **Tensor-parallel distribution** – delegated to an internal
-        :class:`TPAwareMapping`, allowing the correct sharding scheme to be
-        selected dynamically.
+    2.  **Tensor-parallel distribution** – correctly splits gate and up 
+        projections separately before concatenating corresponding shards,
+        ensuring each TP rank gets the proper [gate_shard; up_shard] format.
+    
+    **TP Distribution Strategy**
+    For tensor parallelism, this mapping:
+    - Splits gate and up matrices separately along output dimension (dim 0)
+    - Concatenates corresponding shards: [gate_shard_i; up_shard_i] for rank i
+    - This ensures each rank's concatenated tensor matches the expected shape
     """
 
     def __init__(self, megatron_param: str, gate: str, up: str):
@@ -1057,42 +1063,126 @@ class GatedMLPMapping(MegatronParamMapping[Dict[str, torch.Tensor]]):
             up (str): Up projection weight name pattern.
         """
         super().__init__(megatron_param, {"gate": gate, "up": up})
-        self._tp_mapping = TPAwareMapping(megatron_param, megatron_param)
+
+    def _get_target_param_and_shape(self, megatron_module: nn.Module) -> tuple[torch.Tensor, tuple]:
+        """Get the target parameter and its shape based on the parameter name."""
+        param_name_lower = self.megatron_param.lower()
+
+        # Define parameter mapping: (param_name, expected_ndim)
+        param_configs = [
+            ("bias", 1),
+            ("weight", 2),
+        ]
+
+        for param_name, expected_ndim in param_configs:
+            if param_name in param_name_lower:
+                if hasattr(megatron_module, param_name):
+                    target_param = getattr(megatron_module, param_name)
+                    if isinstance(target_param, torch.Tensor) and target_param.ndim == expected_ndim:
+                        return target_param, target_param.shape
+                    else:
+                        raise ValueError(
+                            f"Parameter {param_name} exists but has wrong type or dimensions (expected ndim == {expected_ndim}, got {target_param.ndim if isinstance(target_param, torch.Tensor) else 'not a tensor'})")
+                else:
+                    raise ValueError(
+                        f"Parameter name suggests {param_name} but module {megatron_module} has no {param_name}")
+
+        raise ValueError(f"Could not determine parameter type for {self.megatron_param}")
 
     def hf_to_megatron(
         self,
         hf_weights: Dict[str, torch.Tensor],
         megatron_module: nn.Module,
     ) -> torch.Tensor:
-        """Merge gate and up projections and distribute."""
-        config = self._get_config(megatron_module)
+        """Split gate and up separately, then concatenate corresponding shards."""
+        # For single TP, just concatenate and return
+        if self.tp_size == 1:
+            return torch.cat([hf_weights["gate"], hf_weights["up"]], dim=0)
 
-        merged = merge_gated_mlp_weights(config, hf_weights["gate"], hf_weights["up"]) if self.tp_rank == 0 else None
+        # Get target parameter info from megatron module
+        target_param, output_shape = self._get_target_param_and_shape(megatron_module)
 
-        return self._tp_mapping.hf_to_megatron(merged, megatron_module)
+        # On rank 0, split gate and up separately, then concatenate corresponding pieces
+        if self.tp_rank == 0:
+            gate = hf_weights["gate"]
+            up = hf_weights["up"]
+
+            # Verify shapes match
+            assert gate.shape == up.shape, "Gate and up weights must have the same shape"
+
+            # Check divisibility for TP splitting
+            gate_output_size = gate.shape[0]
+            if gate_output_size % self.tp_size != 0:
+                raise ValueError(
+                    f"Cannot evenly split gate dimension 0 size {gate_output_size} across {self.tp_size} TP ranks")
+
+            # Split gate and up separately along output dimension (dim 0)
+            # This works for both bias (1D) and weight (2D) tensors
+            gate_splits = torch.chunk(gate, self.tp_size, dim=0)
+            up_splits = torch.chunk(up, self.tp_size, dim=0)
+
+            # Concatenate corresponding pieces: [gate_shard_i; up_shard_i] for each rank i
+            splits = [torch.cat([gate_splits[i], up_splits[i]], dim=0) for i in range(self.tp_size)]
+        else:
+            splits = None
+
+        # Scatter the concatenated shards to each rank
+        return self.scatter_to_tp_ranks(
+            splits,
+            output_shape,
+            target_param.dtype,
+            target_param.device,
+        )
 
     def megatron_to_hf(
         self,
         megatron_weights: Optional[torch.Tensor],
         megatron_module: Optional[nn.Module],
     ) -> Dict[str, torch.Tensor]:
-        """Gather MLP shards and split into gate and up."""
-        # Ensure all PP ranks participate in config broadcast.
-        if megatron_module is None:
-            config = self.broadcast_obj_from_pp_rank(None)
-        else:
-            cfg_local = self._get_config(megatron_module)
-            config = self.broadcast_obj_from_pp_rank(cfg_local)
+        """Gather concatenated shards and split into gate and up."""
+        # Handle cross-PP broadcast first
+        megatron_weights = self.broadcast_from_pp_rank(megatron_weights)
 
-        packed_dict = self._tp_mapping.megatron_to_hf(megatron_weights, megatron_module)
-
-        if not packed_dict:
+        if megatron_weights is None:
             return {}
 
-        packed_mlp = next(iter(packed_dict.values()))
-        gate, up = split_gated_mlp_weights(config, packed_mlp)
+        # Handle TP gathering
+        if self.tp_size == 1:
+            # No TP, just split the concatenated tensor
+            fused_mlp = megatron_weights
+        else:
+            # Gather shards from all TP ranks
+            gathered_shards = self.gather_from_tp_ranks(megatron_weights)
 
-        return {self.hf_param["gate"]: gate, self.hf_param["up"]: up}
+            if self.tp_rank == 0:
+                # Split each shard back into gate and up parts
+                gate_parts = []
+                up_parts = []
+                for shard in gathered_shards:
+                    # Each shard is [gate_shard; up_shard] concatenated along dim 0
+                    # This works for both bias (1D) and weight (2D) tensors
+                    gate_shard, up_shard = torch.chunk(shard, 2, dim=0)
+                    gate_parts.append(gate_shard)
+                    up_parts.append(up_shard)
+
+                # Concatenate all gate parts and all up parts separately
+                full_gate = torch.cat(gate_parts, dim=0)
+                full_up = torch.cat(up_parts, dim=0)
+
+                # Concatenate gate and up to get the full tensor
+                fused_mlp = torch.cat([full_gate, full_up], dim=0)
+            else:
+                return {}
+
+        # Only rank 0 returns the split weights/biases
+        if self.tp_rank == 0:
+            # Split the concatenated tensor in half along dim 0
+            # This works for both bias (1D) and weight (2D) tensors
+            gate, up = torch.chunk(fused_mlp, 2, dim=0)
+
+            return {self.hf_param["gate"]: gate, self.hf_param["up"]: up}
+        else:
+            return {}
 
     def resolve(self, captures: Tuple[str, ...]) -> "MegatronParamMapping":
         """Return a new *resolved* GatedMLPMapping instance."""
@@ -1499,34 +1589,6 @@ def split_qkv_weights(
         v = v.reshape(-1, hidden_size)
 
     return q, k, v
-
-
-def merge_gated_mlp_weights(provider: TransformerConfig, gate: torch.Tensor, up: torch.Tensor) -> torch.Tensor:
-    """Merge gate and up projections into Megatron's concatenated format.
-
-    Args:
-        provider (TransformerConfig): Model configuration provider.
-        gate (torch.Tensor): Gate projection weights.
-        up (torch.Tensor): Up projection weights.
-
-    Returns:
-        torch.Tensor: Concatenated [gate; up] weights.
-    """
-    return torch.cat([gate, up], dim=0)
-
-
-def split_gated_mlp_weights(provider: TransformerConfig, merged: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-    """Split Megatron's concatenated MLP weights into gate and up projections.
-
-    Args:
-        provider (TransformerConfig): Model configuration provider.
-        merged (torch.Tensor): Concatenated [gate; up] weights.
-
-    Returns:
-        Tuple[torch.Tensor, torch.Tensor]: Tuple of (gate, up) weight matrices.
-    """
-    gate, up = torch.chunk(merged, 2, dim=0)
-    return gate, up
 
 
 def gather_tp_qkv(provider: TransformerConfig, tensors: List[torch.Tensor]) -> torch.Tensor:
