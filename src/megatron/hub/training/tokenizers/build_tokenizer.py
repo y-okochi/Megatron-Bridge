@@ -10,7 +10,8 @@ from megatron.hub.training.tokenizers.multimodal_tokenizer import MultimodalToke
 
 
 def build_tokenizer(
-    tokenizer_config: TokenizerConfig, make_vocab_size_divisible_by: int, tensor_model_parallel_size: int, **kwargs
+    tokenizer_config: TokenizerConfig,
+    **kwargs,
 ):
     """Initialize tokenizer based on the provided configuration.
 
@@ -22,9 +23,6 @@ def build_tokenizer(
         tokenizer_config (TokenizerConfig): Configuration object specifying the tokenizer
                                             type, paths to vocab/model files, and other
                                             tokenizer-specific settings.
-        make_vocab_size_divisible_by (int): Ensures the vocabulary size is a multiple of this value.
-        tensor_model_parallel_size (int): The tensor model parallel size, used for further
-                                          adjusting vocabulary size for distributed training.
         **kwargs: Additional keyword arguments that might be specific to certain tokenizers
                   (e.g., passed to HuggingFace AutoTokenizer).
 
