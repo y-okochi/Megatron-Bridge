@@ -65,7 +65,7 @@ def build_tokenizer(
                 overwrite=tokenizer_config.overwrite_metadata,
                 metadata_path=tokenizer_config.metadata_path,
             )
-        
+
         tokenizer = MegatronTokenizer.from_pretrained(
             tokenizer_path=tokenizer_config.tokenizer_path,
             metadata_path=tokenizer_config.metadata,

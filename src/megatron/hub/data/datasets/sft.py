@@ -24,7 +24,6 @@ import datasets
 import numpy as np
 import torch
 from datasets import load_dataset
-
 from megatron.core.tokenizers import MegatronTokenizerBase
 from torch.utils.data import Dataset
 

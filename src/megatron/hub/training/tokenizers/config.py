@@ -17,6 +17,7 @@ from typing import Literal, Optional, Union
 
 from megatron.core.tokenizers import MegatronTokenizerBase
 
+
 @dataclass
 class TokenizerConfig:
     """Configuration settings for the tokenizer."""

@@ -22,7 +22,6 @@ from pathlib import Path
 from typing import Any, Callable, Optional, Protocol, TypedDict, Union, cast
 
 from datasets import Dataset, DatasetDict, load_dataset
-
 from megatron.core.tokenizers import MegatronTokenizerBase
 from tqdm import tqdm
 

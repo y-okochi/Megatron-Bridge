@@ -25,7 +25,6 @@ from typing import Any, Callable, List, Optional, Type
 
 import numpy as np
 import torch
-
 from megatron.core.tokenziers import MegatronTokenizerBase
 from torch.utils.data import Dataset
 
