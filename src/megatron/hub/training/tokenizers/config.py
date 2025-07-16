@@ -24,7 +24,7 @@ class TokenizerConfig:
     tokenizer_path: str = None
     """Path to tokenizer model."""
 
-    metadata: Optional[Union[str|dict]] = None
+    metadata: Optional[Union[str | dict]] = None
     """Tokenizer metadata."""
 
     multimodal_tokenizer: Optional[bool] = False

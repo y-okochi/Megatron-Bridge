@@ -25,9 +25,9 @@ from typing import Any, Callable, List, Optional, Type
 
 import numpy as np
 import torch
-from torch.utils.data import Dataset
 
 from megatron.core.tokenziers import MegatronTokenizerBase
+from torch.utils.data import Dataset
 
 from megatron.hub.core.utils.common_utils import get_rank_safe
 

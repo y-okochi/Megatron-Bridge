@@ -2,12 +2,6 @@
 
 """Megatron tokenizers."""
 
-import base64
-import json
-import math
-from pathlib import Path
-from typing import Dict, List, Optional
-
 from megatron.core.tokenizer import MegatronTokenizer
 
 from megatron.hub.core.utils.common_utils import get_rank_safe

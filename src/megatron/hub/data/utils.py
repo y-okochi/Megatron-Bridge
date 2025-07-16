@@ -16,10 +16,10 @@ from dataclasses import fields
 from typing import Any, Callable, Dict, Type, Union
 
 from megatron.core import mpu
-from megatron.core.tokenizers import MegatronTokenizerBase
 from megatron.core.datasets.blended_megatron_dataset_builder import BlendedMegatronDatasetBuilder
 from megatron.core.datasets.blended_megatron_dataset_config import BlendedMegatronDatasetConfig
 from megatron.core.datasets.gpt_dataset import GPTDataset, MockGPTDataset
+from megatron.core.tokenizers import MegatronTokenizerBase
 
 from megatron.hub.core.utils.common_utils import print_rank_0
 from megatron.hub.data.builders.finetuning_dataset import FinetuningDatasetBuilder

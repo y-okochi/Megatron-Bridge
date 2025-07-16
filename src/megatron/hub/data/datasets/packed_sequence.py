@@ -18,7 +18,6 @@ from pathlib import Path
 from typing import Optional
 
 import numpy as np
-
 from megatron.core.tokenizers import MegatronTokenizerBase
 
 from megatron.hub.data.datasets.packing_utils import create_hist, create_packing_strategy, fill_packing_strategy

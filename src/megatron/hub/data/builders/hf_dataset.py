@@ -22,9 +22,9 @@ from pathlib import Path
 from typing import Any, Callable, Optional, Protocol, TypedDict, Union, cast
 
 from datasets import Dataset, DatasetDict, load_dataset
-from tqdm import tqdm
 
 from megatron.core.tokenizers import MegatronTokenizerBase
+from tqdm import tqdm
 
 from megatron.hub.core.utils.common_utils import print_rank_0
 from megatron.hub.data.builders.finetuning_dataset import FinetuningDatasetBuilder

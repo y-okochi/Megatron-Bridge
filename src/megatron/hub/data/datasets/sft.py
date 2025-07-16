@@ -24,9 +24,9 @@ import datasets
 import numpy as np
 import torch
 from datasets import load_dataset
-from torch.utils.data import Dataset
 
 from megatron.core.tokenizers import MegatronTokenizerBase
+from torch.utils.data import Dataset
 
 from megatron.hub.data.datasets.utils import (
     _get_samples_mapping,
