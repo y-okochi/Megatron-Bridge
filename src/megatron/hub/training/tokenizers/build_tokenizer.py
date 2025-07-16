@@ -2,7 +2,7 @@
 
 """Megatron tokenizers."""
 
-from megatron.core.tokenizer import MegatronTokenizer
+from megatron.core.tokenizers import MegatronTokenizer
 
 from megatron.hub.core.utils.common_utils import get_rank_safe
 from megatron.hub.training.tokenizers.config import TokenizerConfig
