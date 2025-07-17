@@ -581,8 +581,6 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
                 module = None
                 if task.pp_rank == mpu.get_pipeline_model_parallel_rank():
                     module, weight = self._get_param_and_module_from_vp(megatron_model, task.vp_stage, task.param_name)
-                else:
-                    continue
 
                 kv_pairs = task.megatron_to_hf(weight, module)
 
@@ -601,7 +599,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
                     # In this mode, we need to modify the behavior to skip gathering
                     # This would require changes to the param mappings themselves
                     # For now, we'll yield whatever shard this rank has
-                    if weight is not None:
+                    if task.pp_rank == mpu.get_pipeline_model_parallel_rank() and weight is not None:
                         # Return the local shard without gathering
                         yield HFWeightTuple(
                             task.param_name + f"_rank{mpu.get_tensor_model_parallel_rank()}",
