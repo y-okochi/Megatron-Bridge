@@ -72,9 +72,9 @@ class WeightDistributionMode(Enum):
 class MegatronWeightTuple(NamedTuple):
     """Tuple representing a Megatron model weight with its metadata."""
 
-    vp_stage: int
     param_name: str
     weight: torch.Tensor
+    vp_stage: int
 
 
 class HFWeightTuple(NamedTuple):
@@ -360,7 +360,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         if not isinstance(megatron_model, list):
             megatron_model = [megatron_model]
 
-        load_plan = list(self._build_plan_hf_to_megatron(hf_pretrained, megatron_model))
+        hf_to_megatron_plans = list(self._build_plan_hf_to_megatron(hf_pretrained, megatron_model))
 
         hf_state_dict: Mapping[str, torch.Tensor] = hf_pretrained.state if hasattr(hf_pretrained, "state") else {}
 
@@ -377,10 +377,10 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
             disable=not is_main_rank,
         ) as progress:
             task_id = progress.add_task(
-                f"Loading from {hf_pretrained.model_name_or_path}", total=len(load_plan), bridge=bridge_name
+                f"Loading from {hf_pretrained.model_name_or_path}", total=len(hf_to_megatron_plans), bridge=bridge_name
             )
 
-            for task in load_plan:
+            for task in hf_to_megatron_plans:
                 # 1) Fetch source tensor(s) from HF state dict
                 if isinstance(task.mapping.hf_param, str):
                     hf_weights = hf_state_dict[task.mapping.hf_param]
@@ -460,8 +460,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
             shard = task.hf_to_megatron(src_weights, task.megatron_module)
             if shard is not None:
                 # Assert that vp_stage is not None for HF->Megatron tasks
-                assert task.vp_stage is not None, "vp_stage is required for HF->Megatron conversion"
-                yield MegatronWeightTuple(task.vp_stage, task.param_name, shard)
+                yield MegatronWeightTuple(task.param_name, shard, task.vp_stage)
 
     def stream_weights_megatron_to_hf(
         self,
@@ -540,7 +539,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
             else:
                 raise ValueError(f"Invalid mode: {mode}. Must be one of: replicate, consolidate, distribute")
 
-        save_plan = list(self._build_plan_megatron_to_hf(megatron_model, hf_pretrained, order))
+        megatron_to_hf_plans = list(self._build_plan_megatron_to_hf(megatron_model, hf_pretrained, order))
 
         is_main_rank = not torch.distributed.is_initialized() or torch.distributed.get_rank() == 0
         bridge_name = self.__class__.__name__
@@ -554,9 +553,9 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
             TextColumn("{task.fields[bridge]}"),
             disable=not (is_main_rank and show_progress),
         ) as progress:
-            task_id = progress.add_task("Converting to HuggingFace", total=len(save_plan), bridge=bridge_name)
+            task_id = progress.add_task("Converting to HuggingFace", total=len(megatron_to_hf_plans), bridge=bridge_name)
 
-            for task in save_plan:
+            for task in megatron_to_hf_plans:
                 # Owns param? fetch weight & module; otherwise None (bridge will broadcast)
                 weight = None
                 module = None
