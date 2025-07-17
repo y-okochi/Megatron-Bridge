@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal, Optional, Union
 
 from megatron.core.tokenizers import MegatronTokenizerBase
@@ -25,13 +25,13 @@ class TokenizerConfig:
     tokenizer_path: str = None
     """Path to tokenizer model."""
 
-    metadata: Optional[Union[str | dict]] = None
+    metadata_path: Optional[Union[str | dict]] = None
     """Tokenizer metadata."""
 
     multimodal_tokenizer: Optional[bool] = False
     """Whether to use multimodal tokenizer."""
 
-    additional_args: Optional[dict] = None
+    additional_args: Optional[dict] = field(default_factory=dict)
     """Tokenizer additional arguments."""
 
     # Multimodal tokenizer arguments
@@ -40,7 +40,7 @@ class TokenizerConfig:
     image_tag_type: Optional[str] = None
 
     # Metadata arguments
-    write_metadata: Optional[bool] = True
+    write_metadata: Optional[bool] = False
     """Creates tokenizer metadata file."""
 
     tokenizer_library: Optional[
@@ -66,5 +66,5 @@ class TokenizerConfig:
     overwrite_metadata: Optional[bool] = False
     """If overwrite metadata file."""
 
-    metadata_path: Optional[str] = None
-    """Path to save metadata file."""
+    # metadata_path: Optional[str] = None
+    # """Path to save metadata file."""

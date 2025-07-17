@@ -2,6 +2,8 @@
 
 """Megatron tokenizers."""
 
+import math
+
 from megatron.core.tokenizers import MegatronTokenizer
 
 from megatron.hub.core.utils.common_utils import get_rank_safe
@@ -10,8 +12,7 @@ from megatron.hub.training.tokenizers.multimodal_tokenizer import MultimodalToke
 
 
 def build_tokenizer(
-    tokenizer_config: TokenizerConfig,
-    **kwargs,
+    tokenizer_config: TokenizerConfig, make_vocab_size_divisible_by: int, tensor_model_parallel_size: int, **kwargs
 ):
     """Initialize tokenizer based on the provided configuration.
 
@@ -34,7 +35,7 @@ def build_tokenizer(
         ImportError: If a required library (e.g., transformers for MultimodalTokenizer) is not installed.
     """
     if get_rank_safe() == 0:
-        print("> building {} tokenizer ...".format(tokenizer_config.tokenizer_type), flush=True)
+        print("> building {} tokenizer ...".format(tokenizer_config.tokenizer_library), flush=True)
 
     if tokenizer_config.multimodal_tokenizer:
         try:
@@ -66,8 +67,36 @@ def build_tokenizer(
 
         tokenizer = MegatronTokenizer.from_pretrained(
             tokenizer_path=tokenizer_config.tokenizer_path,
-            metadata_path=tokenizer_config.metadata,
+            metadata_path=tokenizer_config.metadata_path,
             **tokenizer_config.additional_args,
+        )
+    
+    # Add vocab size (if not already set from a checkpoint).
+    if getattr(tokenizer_config, "padded_vocab_size", None) is None:
+        tokenizer_config.padded_vocab_size = _vocab_size_with_padding(
+            tokenizer.vocab_size, make_vocab_size_divisible_by, tensor_model_parallel_size
         )
 
     return tokenizer
+
+
+def _vocab_size_with_padding(
+    orig_vocab_size: int,
+    make_vocab_size_divisible_by: int,
+    tensor_model_parallel_size: int,
+    logging_enabled: bool = True,
+):
+    """Pad vocab size so it is divisible by model parallel size and
+    still having GPU friendly size."""
+
+    after = orig_vocab_size
+    multiple = make_vocab_size_divisible_by * tensor_model_parallel_size
+    after = int(math.ceil(after / multiple) * multiple)
+    if get_rank_safe() == 0 and logging_enabled:
+        print(
+            " > padded vocab (size: {}) with {} dummy tokens (new size: {})".format(
+                orig_vocab_size, after - orig_vocab_size, after
+            ),
+            flush=True,
+        )
+    return after
