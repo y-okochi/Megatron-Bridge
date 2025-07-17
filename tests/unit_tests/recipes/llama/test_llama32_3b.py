@@ -21,6 +21,7 @@ import torch
 
 from megatron.hub.models.llama import Llama32ModelProvider3B
 from megatron.hub.recipes.llama.llama32_3b import model_config, pretrain_config
+from megatron.hub.recipes.utils.tokenizer_utils import DEFAULT_NULL_TOKENIZER_VOCAB_SIZE
 from megatron.hub.training.comm_overlap import CommOverlapConfig
 from megatron.hub.training.config import ConfigContainer
 
@@ -283,6 +284,7 @@ class TestPretrainConfig:
         config = pretrain_config()
 
         assert config.tokenizer.tokenizer_type == "NullTokenizer"
+        assert config.tokenizer.vocab_size == DEFAULT_NULL_TOKENIZER_VOCAB_SIZE
 
     def test_pretrain_config_rng_configuration(self):
         """Test RNG configuration."""
@@ -358,7 +360,7 @@ class TestPretrainConfig:
         # Check model defaults for Llama3.2 3B (mid-size model)
         assert config.model.tensor_model_parallel_size == 1  # Default for 3B
         assert config.model.pipeline_model_parallel_size == 1  # Default for 3B
-        assert config.model.pipeline_dtype == torch.bfloat16  # Default for mid-size model
+        assert config.model.pipeline_dtype is None  # Default for mid-size model
         assert config.model.sequence_parallel is False  # Default for 3B
         assert config.model.context_parallel_size == 1  # Default for 3B
         assert config.model.virtual_pipeline_model_parallel_size is None  # Default
@@ -369,18 +371,7 @@ class TestPretrainConfig:
     @pytest.mark.parametrize("precision", ["fp16_mixed", "bf16_with_fp8_mixed"])
     def test_precision_recipes(self, precision):
         cfg = pretrain_config(precision_config=precision)
-        if precision == "fp16_mixed":
-            assert cfg.model.fp16 is True
-            assert getattr(cfg.model, "bf16", False) is False
-            assert cfg.optimizer.fp16 is True
-            assert cfg.optimizer.bf16 is False
-            assert cfg.ddp.grad_reduce_in_fp32 is False
-        else:
-            assert cfg.model.bf16 is True
-            assert cfg.model.fp8 == "hybrid"
-            assert cfg.optimizer.bf16 is True
-            assert cfg.optimizer.fp16 is False
-            assert cfg.ddp.grad_reduce_in_fp32 is True
+        assert cfg.mixed_precision == precision
 
     def test_pretrain_config_manual_gc(self):
         """Test manual garbage collection configuration."""

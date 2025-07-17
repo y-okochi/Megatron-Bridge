@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import os
-from typing import List, Optional
+from typing import List, Optional, Union
 
 import torch
 from megatron.core.distributed import DistributedDataParallelConfig
@@ -21,6 +21,7 @@ from megatron.core.distributed import DistributedDataParallelConfig
 from megatron.hub.models.llama import Llama2ModelProvider7B
 from megatron.hub.recipes.utils.dataset_utils import get_blend_fields_from_data_paths
 from megatron.hub.recipes.utils.optimizer_utils import distributed_fused_adam_with_cosine_annealing
+from megatron.hub.recipes.utils.tokenizer_utils import DEFAULT_NULL_TOKENIZER_VOCAB_SIZE
 from megatron.hub.training.comm_overlap import CommOverlapConfig
 from megatron.hub.training.config import (
     CheckpointConfig,
@@ -31,7 +32,7 @@ from megatron.hub.training.config import (
     TokenizerConfig,
     TrainingConfig,
 )
-from megatron.hub.training.mixed_precision import MixedPrecisionConfig, get_mixed_precision_config
+from megatron.hub.training.mixed_precision import MixedPrecisionConfig
 
 
 def model_config(
@@ -93,8 +94,8 @@ def pretrain_config(
     min_lr: float = 3e-5,
     lr_warmup_iters: int = 2000,
     # Precision recipe
-    precision_config: str | MixedPrecisionConfig = "bf16_mixed",
-    comm_overlap_config: CommOverlapConfig | None = None,
+    precision_config: Optional[Union[MixedPrecisionConfig, str]] = "bf16_mixed",
+    comm_overlap_config: Optional[CommOverlapConfig] = None,
 ) -> ConfigContainer:
     """
     Create a pre-training configuration for Llama2 7B model.
@@ -122,8 +123,8 @@ def pretrain_config(
         lr (float): Learning rate.
         min_lr (float): Minimum learning rate for cosine decay.
         lr_warmup_iters (int): Number of warmup iterations for the learning rate.
-        precision_config (str | MixedPrecisionConfig): Precision configuration for the model.
-        comm_overlap_config (CommOverlapConfig | None): Communication overlap configuration for the model.
+        precision_config (Optional[Union[MixedPrecisionConfig, str]]): Precision configuration for the model.
+        comm_overlap_config (Optional[CommOverlapConfig]): Communication overlap configuration for the model.
 
     Returns:
         ConfigContainer: Configuration for pre-training.
@@ -199,7 +200,7 @@ def pretrain_config(
             log_interval=10,
             tensorboard_dir=tensorboard_dir,
         ),
-        tokenizer=TokenizerConfig(tokenizer_type="NullTokenizer"),
+        tokenizer=TokenizerConfig(tokenizer_type="NullTokenizer", vocab_size=DEFAULT_NULL_TOKENIZER_VOCAB_SIZE),
         checkpoint=CheckpointConfig(
             save_interval=2000,
             save=checkpoint_dir,
@@ -209,12 +210,8 @@ def pretrain_config(
         ),
         rng=RNGConfig(seed=1234),
         comm_overlap=comm_overlap_config,
+        mixed_precision=precision_config,
     )
-
-    # Apply precision configuration
-    if isinstance(precision_config, str):
-        precision_config = get_mixed_precision_config(precision_config)
-    precision_config.setup(cfg.model, cfg.optimizer, cfg.ddp)
 
     if cfg.comm_overlap is None:
         cfg.comm_overlap = CommOverlapConfig(

@@ -20,6 +20,7 @@ import torch
 
 from megatron.hub.models.llama import Llama3ModelProvider70B
 from megatron.hub.recipes.llama.llama3_70b_16k import SEQUENCE_LENGTH_16K, model_config, pretrain_config
+from megatron.hub.recipes.utils.tokenizer_utils import DEFAULT_NULL_TOKENIZER_VOCAB_SIZE
 from megatron.hub.training.config import ConfigContainer
 
 
@@ -256,6 +257,7 @@ class TestPretrainConfig:
         config = pretrain_config()
 
         assert config.tokenizer.tokenizer_type == "NullTokenizer"
+        assert config.tokenizer.vocab_size == DEFAULT_NULL_TOKENIZER_VOCAB_SIZE
 
     def test_pretrain_config_rng_configuration(self):
         """Test RNG configuration."""
@@ -313,15 +315,4 @@ class TestPretrainConfig:
     @pytest.mark.parametrize("precision", ["fp16_mixed", "bf16_with_fp8_mixed"])
     def test_precision_recipes(self, precision):
         cfg = pretrain_config(precision_config=precision)
-        if precision == "fp16_mixed":
-            assert cfg.model.fp16 is True
-            assert getattr(cfg.model, "bf16", False) is False
-            assert cfg.optimizer.fp16 is True
-            assert cfg.optimizer.bf16 is False
-            assert cfg.ddp.grad_reduce_in_fp32 is False
-        else:
-            assert cfg.model.bf16 is True
-            assert cfg.model.fp8 == "hybrid"
-            assert cfg.optimizer.bf16 is True
-            assert cfg.optimizer.fp16 is False
-            assert cfg.ddp.grad_reduce_in_fp32 is True
+        assert cfg.mixed_precision == precision

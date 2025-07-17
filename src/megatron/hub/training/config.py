@@ -28,6 +28,7 @@ from megatron.hub.data.datasets.packed_sequence import PackedSequenceSpecs
 from megatron.hub.models import GPTModelProvider, T5ModelProvider
 from megatron.hub.peft.base import PEFT
 from megatron.hub.training.comm_overlap import CommOverlapConfig
+from megatron.hub.training.mixed_precision import MixedPrecisionConfig
 from megatron.hub.training.tokenizers.config import TokenizerConfig
 from megatron.hub.training.utils.config_utils import _ConfigContainerBase as Container
 
@@ -355,6 +356,12 @@ class CheckpointConfig:
     load_optim: bool = True
     """Do not load optimizer when loading checkpoint."""
 
+    load_main_params_from_ckpt: bool = False
+    """Load main parameters from checkpoint. When loading a model from a checkpoint without loading
+    the optimizer, the model parameters are updated but for fp16 optimizer with main parameters,
+    the main parameters need to also be updated.
+    """
+
     load_rng: bool = True
     """Do not load rng state when loading checkpoint."""
 
@@ -445,6 +452,10 @@ class CheckpointConfig:
 
     replication_factor: int = 2
     """Number of machines storing the replica of a given rank's data."""
+
+    def __post_init__(self) -> None:
+        if self.load_main_params_from_ckpt:
+            assert not self.load_optim, "load_main_params_from_ckpt must be used with load_optim=False"
 
 
 @dataclass(kw_only=True)
@@ -697,6 +708,7 @@ class ConfigContainer(Container):
     profiling: Optional[ProfilingConfig] = None
     peft: Optional[PEFT] = None
     comm_overlap: Optional[CommOverlapConfig] = None
+    mixed_precision: Optional[Union[MixedPrecisionConfig, str]] = None
 
     def get_data_parallel_size(self, world_size: int) -> int:
         """Calculate the data parallel size based on the model configuration."""
@@ -784,3 +796,14 @@ class ConfigContainer(Container):
 
         if self.peft is not None:
             assert self.checkpoint.pretrained_checkpoint is not None, "PEFT requires a pretrained checkpoint path"
+
+        data_seq_length = (
+            self.dataset.seq_length
+            if isinstance(self.dataset, FinetuningDatasetConfig)
+            else self.dataset.sequence_length
+        )
+        assert self.model.seq_length == data_seq_length, (
+            f"Please ensure sequence length configuration in model config and "
+            f"dataset config match.\nSequence length in model config: {self.model.seq_length}, "
+            f"Sequence length in dataset config: {data_seq_length}"
+        )

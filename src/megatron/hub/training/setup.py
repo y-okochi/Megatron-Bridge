@@ -17,6 +17,7 @@ import time
 from functools import partial
 from typing import Any, Callable, NamedTuple, Optional
 
+from megatron.hub.training.mixed_precision import get_mixed_precision_config
 import torch
 from megatron.core.distributed import DistributedDataParallel, DistributedDataParallelConfig, finalize_model_grads
 from megatron.core.optimizer import MegatronOptimizer
@@ -108,6 +109,12 @@ def setup(
     # TODO: Freeze state.cfg
 
     cfg.validate()
+    # Apply mixed precision configuration if provided
+    if cfg.mixed_precision is not None:
+        if isinstance(cfg.mixed_precision, str):
+            cfg.mixed_precision = get_mixed_precision_config(cfg.mixed_precision)
+        cfg.mixed_precision.setup(cfg.model, cfg.optimizer, cfg.ddp)
+
     # Apply communication overlap configuration if provided at the very beginning
     if cfg.comm_overlap is not None:
         cfg.comm_overlap.setup(cfg.model, cfg.optimizer, cfg.ddp)
@@ -165,6 +172,12 @@ def setup(
     )
     if not cfg.model.vocab_size:
         cfg.model.vocab_size = tokenizer.vocab_size
+    assert cfg.model.vocab_size == tokenizer.vocab_size, (
+        f"Please ensure vocab sizes in model config and tokenizer match. To use "
+        f"tokenizer's vocab size, please ensure that vocab size in model config "
+        f"is None.\nVocab size from model config: {cfg.model.vocab_size}, Vocab "
+        f"size from tokenizer: {tokenizer.vocab_size}"
+    )
 
     cfg.dataset.tokenizer = tokenizer
     timers("tokenizer-setup").stop()

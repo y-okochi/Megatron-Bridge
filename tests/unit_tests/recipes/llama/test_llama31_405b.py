@@ -21,6 +21,7 @@ import torch
 
 from megatron.hub.models.llama import Llama31ModelProvider405B
 from megatron.hub.recipes.llama.llama31_405b import model_config, pretrain_config
+from megatron.hub.recipes.utils.tokenizer_utils import DEFAULT_NULL_TOKENIZER_VOCAB_SIZE
 from megatron.hub.training.comm_overlap import CommOverlapConfig, userbuffers_bf16_h100_h16384_tp8_cp2_mbs1_seqlen8192
 from megatron.hub.training.config import ConfigContainer
 
@@ -186,7 +187,7 @@ class TestPretrainConfig:
         assert config.model.pipeline_model_parallel_size == 16
         assert config.model.context_parallel_size == 8
         assert config.model.sequence_parallel is False
-        assert config.model.pipeline_dtype == torch.bfloat16
+        assert config.model.pipeline_dtype == torch.float32
         assert config.model.virtual_pipeline_model_parallel_size == 4
         assert config.model.account_for_embedding_in_pipeline_split is False
         assert config.model.account_for_loss_in_pipeline_split is False
@@ -349,6 +350,7 @@ class TestPretrainConfig:
         config = pretrain_config()
 
         assert config.tokenizer.tokenizer_type == "NullTokenizer"
+        assert config.tokenizer.vocab_size == DEFAULT_NULL_TOKENIZER_VOCAB_SIZE
 
     def test_pretrain_config_rng_configuration(self):
         """Test RNG configuration."""
@@ -445,15 +447,4 @@ class TestPretrainConfig:
     @pytest.mark.parametrize("precision", ["fp16_mixed", "bf16_with_fp8_mixed"])
     def test_precision_recipes(self, precision):
         cfg = pretrain_config(precision_config=precision)
-        if precision == "fp16_mixed":
-            assert cfg.model.fp16 is True
-            assert getattr(cfg.model, "bf16", False) is False
-            assert cfg.optimizer.fp16 is True
-            assert cfg.optimizer.bf16 is False
-            assert cfg.ddp.grad_reduce_in_fp32 is False
-        else:
-            assert cfg.model.bf16 is True
-            assert cfg.model.fp8 == "hybrid"
-            assert cfg.optimizer.bf16 is True
-            assert cfg.optimizer.fp16 is False
-            assert cfg.ddp.grad_reduce_in_fp32 is True
+        assert cfg.mixed_precision == precision
