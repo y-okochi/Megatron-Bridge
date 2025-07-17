@@ -153,7 +153,7 @@ def main(args) -> None:
                 next_token_ids = torch.argmax(output[:, -1], dim=-1, keepdim=True)
 
                 # Debug: print token information
-                if step < 5:  # Only for first few iterations
+                if step < 5 and parallel_state.get_tensor_model_parallel_rank() == 0:  # Only for first few iterations
                     print(f"Step {step}: output shape={output.shape}, var={output.var():.4f}")
                     logits = output[0, -1, :]
                     top5_vals, top5_ids = torch.topk(logits, 5)
