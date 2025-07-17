@@ -30,7 +30,6 @@ from megatron.bridge.models.gpt_full_te_layer_autocast_spec import (
     torch_dtype_from_precision,
 )
 
-
 # Test if Transformer Engine is available
 try:
     import transformer_engine.pytorch as te  # noqa: F401
@@ -398,7 +397,7 @@ class TestTETransformerLayerAutocast:
 
         with patch("megatron.bridge.models.gpt_full_te_layer_autocast_spec.AutocastTransformerLayer"):
             with patch(
-                    "megatron.bridge.models.gpt_full_te_layer_autocast_spec.make_sharded_tensors_for_checkpoint"
+                "megatron.bridge.models.gpt_full_te_layer_autocast_spec.make_sharded_tensors_for_checkpoint"
             ) as mock_make_sharded:
                 mock_make_sharded.return_value = {"test_key": "test_value"}
 

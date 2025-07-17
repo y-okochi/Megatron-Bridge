@@ -531,10 +531,12 @@ class ColumnParallelMapping(MegatronParamMapping[torch.Tensor]):
                         return target_param, target_param.shape
                     else:
                         raise ValueError(
-                            f"Parameter {param_name} exists but has wrong type or dimensions (expected ndim == {expected_ndim}, got {target_param.ndim if isinstance(target_param, torch.Tensor) else 'not a tensor'})")
+                            f"Parameter {param_name} exists but has wrong type or dimensions (expected ndim == {expected_ndim}, got {target_param.ndim if isinstance(target_param, torch.Tensor) else 'not a tensor'})"
+                        )
                 else:
                     raise ValueError(
-                        f"Parameter name suggests {param_name} but module {megatron_module} has no {param_name}")
+                        f"Parameter name suggests {param_name} but module {megatron_module} has no {param_name}"
+                    )
 
         raise ValueError(f"Could not determine parameter type for {self.megatron_param}")
 
@@ -1045,10 +1047,10 @@ class GatedMLPMapping(MegatronParamMapping[Dict[str, torch.Tensor]]):
     **Responsibilities handled by this mapping**
     1.  **Concatenate / split** – convert between `[G; U]` (Megatron) and the
         separate `{G, U}` matrices (external).
-    2.  **Tensor-parallel distribution** – correctly splits gate and up 
+    2.  **Tensor-parallel distribution** – correctly splits gate and up
         projections separately before concatenating corresponding shards,
         ensuring each TP rank gets the proper [gate_shard; up_shard] format.
-    
+
     **TP Distribution Strategy**
     For tensor parallelism, this mapping:
     - Splits gate and up matrices separately along output dimension (dim 0)
@@ -1084,10 +1086,12 @@ class GatedMLPMapping(MegatronParamMapping[Dict[str, torch.Tensor]]):
                         return target_param, target_param.shape
                     else:
                         raise ValueError(
-                            f"Parameter {param_name} exists but has wrong type or dimensions (expected ndim == {expected_ndim}, got {target_param.ndim if isinstance(target_param, torch.Tensor) else 'not a tensor'})")
+                            f"Parameter {param_name} exists but has wrong type or dimensions (expected ndim == {expected_ndim}, got {target_param.ndim if isinstance(target_param, torch.Tensor) else 'not a tensor'})"
+                        )
                 else:
                     raise ValueError(
-                        f"Parameter name suggests {param_name} but module {megatron_module} has no {param_name}")
+                        f"Parameter name suggests {param_name} but module {megatron_module} has no {param_name}"
+                    )
 
         raise ValueError(f"Could not determine parameter type for {self.megatron_param}")
 
@@ -1116,7 +1120,8 @@ class GatedMLPMapping(MegatronParamMapping[Dict[str, torch.Tensor]]):
             gate_output_size = gate.shape[0]
             if gate_output_size % self.tp_size != 0:
                 raise ValueError(
-                    f"Cannot evenly split gate dimension 0 size {gate_output_size} across {self.tp_size} TP ranks")
+                    f"Cannot evenly split gate dimension 0 size {gate_output_size} across {self.tp_size} TP ranks"
+                )
 
             # Split gate and up separately along output dimension (dim 0)
             # This works for both bias (1D) and weight (2D) tensors

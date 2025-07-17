@@ -23,10 +23,10 @@ from megatron.bridge.models.llama.llama_provider import Llama31ModelProvider, Ll
 from megatron.bridge.models.mapping_registry import MegatronMappingRegistry
 from megatron.bridge.models.model_bridge import MegatronModelBridge
 from megatron.bridge.models.param_mapping import (
+    DirectMapping,
     GatedMLPMapping,
     QKVMapping,
     TPAwareMapping,
-    DirectMapping,
 )
 
 

@@ -53,8 +53,13 @@ console = Console()
 
 
 @torchrun_main
-def main(hf_model_id: str = HF_MODEL_ID, output_dir: str = None, tp: int = 1, pp: int = 1,
-         megatron_save_path: str | None = None) -> None:
+def main(
+    hf_model_id: str = HF_MODEL_ID,
+    output_dir: str = None,
+    tp: int = 1,
+    pp: int = 1,
+    megatron_save_path: str | None = None,
+) -> None:
     """Perform round-trip conversion between HuggingFace and Megatron-LM models on multiple GPUs."""
     if os.environ.get("WORLD_SIZE") is None:
         console.print("This script must be launched with torchrun. Please run:")
@@ -131,8 +136,8 @@ if __name__ == "__main__":
         default=None,
         help="The directory where the converted model directory will be created. Defaults to the current working directory.",
     )
-    parser.add_argument('--tp', type=int, default=1, help='Tensor parallelism size')
-    parser.add_argument('--pp', type=int, default=1, help='Pipeline parallelism size')
+    parser.add_argument("--tp", type=int, default=1, help="Tensor parallelism size")
+    parser.add_argument("--pp", type=int, default=1, help="Pipeline parallelism size")
     parser.add_argument(
         "--megatron-save-path",
         type=str,

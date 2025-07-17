@@ -16,7 +16,7 @@
 Example:
   # Load from HuggingFace model:
   python examples/bridge/generate_from_hf.py --hf_model_path="meta-llama/Llama-3.2-1B" --prompt="Hello, how are you?"
-  
+
   # Load from Megatron checkpoint:
   python examples/bridge/generate_from_hf.py --hf_model_path="meta-llama/Llama-3.2-1B" --megatron_model_path="/path/to/megatron/checkpoint" --prompt="Hello, how are you?"
 """
@@ -207,9 +207,9 @@ if __name__ == "__main__":
         default=20,
         help="Maximum number of new tokens to generate.",
     )
-    parser.add_argument('--tp', type=int, default=1, help='Tensor parallelism size')
-    parser.add_argument('--pp', type=int, default=1, help='Pipeline parallelism size')
-    parser.add_argument('--megatron_model_path', type=str, default=None, help='Path to the Megatron model checkpoint')
+    parser.add_argument("--tp", type=int, default=1, help="Tensor parallelism size")
+    parser.add_argument("--pp", type=int, default=1, help="Pipeline parallelism size")
+    parser.add_argument("--megatron_model_path", type=str, default=None, help="Path to the Megatron model checkpoint")
     args = parser.parse_args()
 
     main(args)

@@ -125,11 +125,11 @@ def temporary_distributed_context(backend: str = "gloo") -> Generator[None, None
 
 
 def load_mcore_model(
-        dist_ckpt_folder: Path,
-        model_cfg: Any,
-        return_state_dict: bool = False,
-        use_cpu_init: bool = True,
-        skip_temp_dist_context: Optional[bool] = None,
+    dist_ckpt_folder: Path,
+    model_cfg: Any,
+    return_state_dict: bool = False,
+    use_cpu_init: bool = True,
+    skip_temp_dist_context: Optional[bool] = None,
 ) -> Any | dict[str, torch.Tensor]:
     """Load a Megatron model from a distributed checkpoint.
 

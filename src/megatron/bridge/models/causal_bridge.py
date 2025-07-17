@@ -16,6 +16,7 @@ import dataclasses
 from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Generic, Iterable, Literal, Type, TypeVar, Union, overload
+from typing_extensions import Unpack
 
 import torch.distributed
 import transformers
@@ -26,7 +27,6 @@ from megatron.core.transformer.transformer_config import MLATransformerConfig, T
 from megatron.core.utils import get_model_config
 from transformers import AutoConfig
 from transformers.configuration_utils import PretrainedConfig
-from typing_extensions import Unpack
 
 from megatron.bridge.models import model_bridge
 from megatron.bridge.models.gpt_provider import GPTModelProvider
@@ -223,8 +223,7 @@ class CausalLMBridge(Generic[MegatronModelT]):
         cpu: bool = False,
         show_progress: bool = True,
         mode: Union[str, WeightDistributionMode] = WeightDistributionMode.CONSOLIDATE,
-    ) -> Iterable["HFWeightTuple"]:
-        ...
+    ) -> Iterable["HFWeightTuple"]: ...
 
     def __call__(
         self,
@@ -282,13 +281,12 @@ class CausalLMBridge(Generic[MegatronModelT]):
         cpu: bool = False,
         show_progress: bool = True,
         mode: Union[str, WeightDistributionMode] = WeightDistributionMode.CONSOLIDATE,
-    ) -> Iterable["HFWeightTuple"]:
-        ...
+    ) -> Iterable["HFWeightTuple"]: ...
 
     def export_hf_weights(
         self,
         model,
-            order: Literal["megatron", "hf", "safetensors"] = "safetensors",
+        order: Literal["megatron", "hf", "safetensors"] = "safetensors",
         cpu: bool = False,
         show_progress: bool = True,
         mode: Union[str, WeightDistributionMode] = WeightDistributionMode.CONSOLIDATE,
@@ -430,8 +428,7 @@ class CausalLMBridge(Generic[MegatronModelT]):
             torch.distributed.barrier()
 
     @overload
-    def save_megatron_model(self, model: list[MegatronModelT], path: str | Path) -> None:
-        ...
+    def save_megatron_model(self, model: list[MegatronModelT], path: str | Path) -> None: ...
 
     def save_megatron_model(self, model, path: str | Path, ckpt_format: str = "torch_dist") -> None:
         """
@@ -724,7 +721,7 @@ class CausalLMBridge(Generic[MegatronModelT]):
                         f"2. Implement the required methods (provider_bridge, mapping_registry)\n"
                         f"3. Register it with @MegatronModelBridge.register_bridge decorator\n\n"
                         f"Example implementation:\n"
-                          f"  from megatron.bridge.models.model_bridge import MegatronModelBridge\n"
+                        f"  from megatron.bridge.models.model_bridge import MegatronModelBridge\n"
                         f"  from transformers import {architecture}\n"
                         f"  from megatron.core.models.gpt import GPTModel\n\n"
                         f"  @MegatronModelBridge.register_bridge(source={architecture}, target=GPTModel)\n"

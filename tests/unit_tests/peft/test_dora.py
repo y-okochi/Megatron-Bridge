@@ -352,8 +352,7 @@ class TestDoRA:
 
         # Should match with wildcard
         with patch(
-                "megatron.bridge.peft.dora.get_adapter_attributes_from_linear",
-                return_value=(False, 10, 10, False, True)
+            "megatron.bridge.peft.dora.get_adapter_attributes_from_linear", return_value=(False, 10, 10, False, True)
         ):
             with patch("megatron.bridge.peft.dora_layers.DoRALinear._get_weight_norm", return_value=torch.randn(10)):
                 result = dora.transform(test_module, name="linear_qkv", prefix="layer.0.attention")

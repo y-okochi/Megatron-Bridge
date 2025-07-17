@@ -663,7 +663,7 @@ class TestCheckpointUtils:
                     else:
                         # Multi-process, rank 0 reads and broadcasts
                         with patch(
-                                "megatron.bridge.training.utils.checkpoint_utils.torch.distributed.broadcast_object_list"
+                            "megatron.bridge.training.utils.checkpoint_utils.torch.distributed.broadcast_object_list"
                         ) as mock_broadcast:
                             result = read_run_config("config.yaml")
                             assert result == config_data
@@ -671,7 +671,7 @@ class TestCheckpointUtils:
             else:
                 # Non-rank 0 receives from broadcast
                 with patch(
-                        "megatron.bridge.training.utils.checkpoint_utils.torch.distributed.broadcast_object_list"
+                    "megatron.bridge.training.utils.checkpoint_utils.torch.distributed.broadcast_object_list"
                 ) as mock_broadcast:
 
                     def broadcast_side_effect(obj_list, src):

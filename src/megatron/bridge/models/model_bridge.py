@@ -171,9 +171,7 @@ def _adjust_layer_number_to_global(name: str, layer_offset: int) -> str:
     if "layers." not in name:
         return name
 
-    local_layer_number = int(
-        name.split("layers.")[1].split(".")[0]
-    )
+    local_layer_number = int(name.split("layers.")[1].split(".")[0])
     global_layer_number = local_layer_number + layer_offset
     name = name.replace(
         f"layers.{local_layer_number}.",
@@ -754,17 +752,14 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
             embd_group_ranks = torch.distributed.get_process_group_ranks(embd_group)
             if embd_group is not None and torch.distributed.get_rank() in embd_group_ranks:
                 # Get embeddings and output weights from rank 0
-                if hasattr(unwrapped_model, 'embedding') and hasattr(unwrapped_model.embedding, 'word_embeddings'):
+                if hasattr(unwrapped_model, "embedding") and hasattr(unwrapped_model.embedding, "word_embeddings"):
                     embd_weights = unwrapped_model.embedding.word_embeddings.weight.data
                 else:
-                    assert hasattr(unwrapped_model, 'output_layer'), "Output layer not found"
-                    embd_weights = torch.empty_like(
-                        unwrapped_model.output_layer.weight.data
-                    )
+                    assert hasattr(unwrapped_model, "output_layer"), "Output layer not found"
+                    embd_weights = torch.empty_like(unwrapped_model.output_layer.weight.data)
                 torch.distributed.broadcast(embd_weights, src=embd_group_ranks[0], group=embd_group)
-                if hasattr(unwrapped_model, 'output_layer'):
+                if hasattr(unwrapped_model, "output_layer"):
                     unwrapped_model.output_layer.weight.data.copy_(embd_weights)
-
 
     def _collect_all_params_info(self, models: List[MegatronModule]) -> List[Tuple[int, Optional[int], str]]:
         """Collect all parameter names across PP/VP stages.
@@ -793,13 +788,13 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
 
         # All-gather across PP ranks
         gathered_param_infos = [None] * mpu.get_pipeline_model_parallel_world_size()
-        torch.distributed.all_gather_object(gathered_param_infos, local_param_infos,
-                                            group=mpu.get_pipeline_model_parallel_group())
+        torch.distributed.all_gather_object(
+            gathered_param_infos, local_param_infos, group=mpu.get_pipeline_model_parallel_group()
+        )
 
         # Flatten
         all_param_infos = sum(gathered_param_infos, [])
         return all_param_infos
-
 
     def _get_param_and_module_from_vp(
         self, models: List[MegatronModule], vp_stage: Optional[int], param_name: str
@@ -846,7 +841,6 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
 
         return module, param
 
-
     def _build_plan_hf_to_megatron(
         self, hf_pretrained: HFPreTrained, megatron_model: List[MegatronModel]
     ) -> Iterable[WeightConversionTask]:
@@ -864,9 +858,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         model_config = unwrap_model(megatron_model)[0].config
         for vp_stage, model in enumerate(megatron_model):
             layer_offset = get_transformer_layer_offset(
-                model_config,
-                pipeline_rank=mpu.get_pipeline_model_parallel_rank(),
-                vp_stage=vp_stage
+                model_config, pipeline_rank=mpu.get_pipeline_model_parallel_rank(), vp_stage=vp_stage
             )
             for local_name, param in model.named_parameters():
                 if "_extra_state" in local_name:
@@ -886,8 +878,9 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
                         logger.warning(f"WARNING: Can't find {mapping.hf_param} in hf_state_dict")
                         continue
                 else:
-                    missing_params = [hf_param for hf_param in mapping.hf_param.values() if
-                                      hf_param not in hf_state_dict]
+                    missing_params = [
+                        hf_param for hf_param in mapping.hf_param.values() if hf_param not in hf_state_dict
+                    ]
                     if missing_params:
                         logger.warning(
                             f"WARNING: Can't find the following HF parameters in hf_state_dict: {missing_params}"
@@ -972,11 +965,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
 
         param_locations = defaultdict(list)
         for pp_rank, vp_stage, local_name in self._collect_all_params_info(megatron_model):
-            layer_offset = get_transformer_layer_offset(
-                model_config,
-                pipeline_rank=pp_rank,
-                vp_stage=vp_stage
-            )
+            layer_offset = get_transformer_layer_offset(model_config, pipeline_rank=pp_rank, vp_stage=vp_stage)
             local_name = self._unwrap_name(local_name)
             global_name = _adjust_layer_number_to_global(local_name, layer_offset)
             param_locations[global_name].append((pp_rank, vp_stage, local_name))

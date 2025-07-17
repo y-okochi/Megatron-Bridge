@@ -53,8 +53,9 @@ def ddp_config():
 @patch("megatron.bridge.models.model_provider_mixin.get_model")
 @patch("megatron.bridge.models.model_provider_mixin.parallel_state")
 @patch("megatron.bridge.models.model_provider_mixin.torch.distributed")
-def test_provide_distributed_model_with_hooks_as_args(mock_dist, mock_parallel_state, mock_get_model, provider,
-                                                      ddp_config):
+def test_provide_distributed_model_with_hooks_as_args(
+    mock_dist, mock_parallel_state, mock_get_model, provider, ddp_config
+):
     """Test that provide_distributed_model calls hooks passed as arguments."""
     mock_parallel_state.is_initialized.return_value = True
     mock_dist.is_initialized.return_value = True
@@ -76,8 +77,9 @@ def test_provide_distributed_model_with_hooks_as_args(mock_dist, mock_parallel_s
 @patch("megatron.bridge.models.model_provider_mixin.get_model")
 @patch("megatron.bridge.models.model_provider_mixin.parallel_state")
 @patch("megatron.bridge.models.model_provider_mixin.torch.distributed")
-def test_provide_distributed_model_with_registered_hooks(mock_dist, mock_parallel_state, mock_get_model, provider,
-                                                         ddp_config):
+def test_provide_distributed_model_with_registered_hooks(
+    mock_dist, mock_parallel_state, mock_get_model, provider, ddp_config
+):
     """Test that provide_distributed_model uses hooks registered on the instance."""
     mock_parallel_state.is_initialized.return_value = True
     mock_dist.is_initialized.return_value = True

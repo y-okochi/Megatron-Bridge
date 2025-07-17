@@ -226,7 +226,7 @@ class TestCanonicalLoRA:
             return (False, 512, 512, False, True)  # default
 
         with patch(
-                "megatron.bridge.peft.canonical_lora.get_adapter_attributes_from_linear", side_effect=mock_get_attrs
+            "megatron.bridge.peft.canonical_lora.get_adapter_attributes_from_linear", side_effect=mock_get_attrs
         ):
             # Mock ParallelLinearAdapter
             with patch("megatron.bridge.peft.canonical_lora.ParallelLinearAdapter") as mock_adapter:
