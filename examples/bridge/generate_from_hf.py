@@ -15,10 +15,10 @@
 """
 Example:
   # Load from HuggingFace model:
-  python examples/bridge/generate_from_hf.py --hf_model_path="Llama-3.2-1B" --prompt="Hello, how are you?"
+  python examples/bridge/generate_from_hf.py --hf_model_path="meta-llama/Llama-3.2-1B" --prompt="Hello, how are you?"
   
   # Load from Megatron checkpoint:
-  python examples/bridge/generate_from_hf.py --hf_model_path="Llama-3.2-1B" --megatron_model_path="/path/to/megatron/checkpoint" --prompt="Hello, how are you?"
+  python examples/bridge/generate_from_hf.py --hf_model_path="meta-llama/Llama-3.2-1B" --megatron_model_path="/path/to/megatron/checkpoint" --prompt="Hello, how are you?"
 """
 
 import argparse
@@ -192,7 +192,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--hf_model_path",
         type=str,
-        default="Llama-3.2-1B",
+        default="meta-llama/Llama-3.2-1B",
         help="Path to the HuggingFace model.",
     )
     parser.add_argument(
