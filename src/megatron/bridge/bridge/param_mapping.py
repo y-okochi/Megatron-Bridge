@@ -282,7 +282,9 @@ class MegatronParamMapping(ABC, Generic[WeightType]):
 
         # Use broadcast_object_list which is more robust than all_gather_object
         obj_list = [obj]
-        torch.distributed.broadcast_object_list(obj_list, src=src_rank, group=self.pp_group)
+        pp_ranks = torch.distributed.get_process_group_ranks(self.pp_group)
+        global_src = pp_ranks[src_rank]
+        torch.distributed.broadcast_object_list(obj_list, src=global_src, group=self.pp_group)
 
         return obj_list[0]
 
