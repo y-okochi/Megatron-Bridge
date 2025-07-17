@@ -41,7 +41,7 @@ def initialize_megatron(
     skip_mpu_initialization: bool = False,
     get_embedding_ranks: Optional[Callable[[list[int], Optional[int]], list[int]]] = None,
     get_position_embedding_ranks: Optional[Callable[[list[int], Optional[int]], list[int]]] = None,
-        external_gpu_device_mapping: bool = False,
+    external_gpu_device_mapping: bool = False,
 ) -> Optional[Callable[[], None]]:
     """Initialize Megatron core components and distributed setup.
 
@@ -121,7 +121,7 @@ def torch_dist_init(
     get_embedding_ranks: Optional[Callable[[list[int], Optional[int]], list[int]]],
     get_position_embedding_ranks: Optional[Callable[[list[int], Optional[int]], list[int]]],
     skip_mpu_initialization: bool,
-        external_gpu_device_mapping: bool,
+    external_gpu_device_mapping: bool,
 ) -> Optional[Callable[[], None]]:
     """Initialize torch.distributed and dependent components.
 
@@ -331,7 +331,7 @@ def _initialize_distributed(
     num_distributed_optimizer_instances: int,
     get_embedding_ranks: Optional[Callable[[list[int], Optional[int]], list[int]]],
     get_position_embedding_ranks: Optional[Callable[[list[int], Optional[int]], list[int]]],
-        external_gpu_device_mapping: bool,
+    external_gpu_device_mapping: bool,
 ) -> None:
     """Initialize torch.distributed and core model parallel."""
 
