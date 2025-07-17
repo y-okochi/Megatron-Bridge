@@ -44,8 +44,8 @@ from megatron.bridge.models.decorators.dispatch import dispatch
 from megatron.bridge.models.mapping_registry import MegatronMappingRegistry
 from megatron.bridge.models.model_provider import ModelProviderProtocol
 from megatron.bridge.models.param_mapping import MegatronParamMapping
-from megatron.bridge.bridge.utils import get_transformer_layer_offset
-from megatron.bridge.core.utils.common_utils import unwrap_model
+from megatron.bridge.models.utils import get_transformer_layer_offset
+from megatron.bridge.utils.common_utils import unwrap_model
 
 logger = logging.getLogger(__name__)
 
