@@ -34,9 +34,10 @@ class TokenizerConfig:
     additional_args: Optional[dict] = field(default_factory=dict)
     """Tokenizer additional arguments."""
 
+    special_tokens: Optional[list[str]] = field(default_factory=list)
+
     # Multimodal tokenizer arguments
     tokenizer_prompt_format: Optional[str] = None
-    special_tokens: Optional[list[str]] = None
     image_tag_type: Optional[str] = None
 
     # Metadata arguments
