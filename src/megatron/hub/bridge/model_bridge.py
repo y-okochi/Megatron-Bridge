@@ -359,20 +359,8 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
             ValueError: If hf_pretrained doesn't have state attribute or if weight shapes don't match.
             AttributeError: If required HF weights are missing.
         """
-        if hf_pretrained is None:
-            raise ValueError("hf_pretrained cannot be None")
-
-        if megatron_model is None:
-            raise ValueError("megatron_model cannot be None")
-
         if not isinstance(megatron_model, list):
             megatron_model = [megatron_model]
-
-        if not megatron_model:
-            raise ValueError("megatron_model list cannot be empty")
-        if torch.distributed.get_rank() == 0:
-            breakpoint()
-        torch.distributed.barrier()
 
         load_plan = list(self._build_plan_hf_to_megatron(hf_pretrained, megatron_model))
 
