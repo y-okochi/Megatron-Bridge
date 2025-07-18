@@ -180,3 +180,40 @@ class Qwen25ModelProvider72B(Qwen2ModelProvider72B):
     """
 
     seq_length: int = 131072
+
+
+@dataclass
+class Qwen3MoeModelProvider(Qwen2ModelProvider):
+    """Base configuration for Qwen3 MoE models.
+
+    Qwen3 MoE models use mixture of experts architecture with QK layernorm.
+    """
+
+    qk_layernorm: bool = True  # Qwen3 MoE uses QK layernorm
+    num_moe_experts: int = None  # Number of experts
+    moe_router_topk: int = None  # Number of experts activated per token (num_experts_per_tok in HF)
+    moe_ffn_hidden_size: int = None  # Expert FFN hidden size (moe_intermediate_size in HF)
+    moe_aux_loss_coeff: float = 0.001  # Auxiliary loss coefficient for load balancing
+    moe_grouped_gemm: bool = True  # Use grouped GEMM for efficiency
+    moe_router_load_balancing_type: str = "aux_loss"  # Load balancing type
+    moe_token_dispatcher_type: str = "alltoall"  # Token dispatcher type
+
+
+@dataclass
+class Qwen3MoeModelProvider235B(Qwen3MoeModelProvider):
+    """
+    Config for Qwen3 235B-A22B MoE: https://huggingface.co/Qwen/Qwen3-235B-A22B
+
+    This is a 235B total parameter model with 22B active parameters per token.
+    """
+
+    num_layers: int = 94
+    hidden_size: int = 4096
+    num_attention_heads: int = 64
+    num_query_groups: int = 4
+    ffn_hidden_size: int = 12288  # Standard FFN for non-expert layers
+    moe_ffn_hidden_size: int = 1536  # Expert FFN hidden size
+    num_moe_experts: int = 128
+    moe_router_topk: int = 8  # 8 experts activated per token
+    vocab_size: int = 152064
+    seq_length: int = 8192

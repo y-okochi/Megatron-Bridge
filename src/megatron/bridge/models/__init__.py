@@ -49,6 +49,10 @@ from megatron.bridge.models.param_mapping import (
     RowParallelMapping,
     TPAwareMapping,
 )
+from megatron.bridge.models.qwen import (
+    Qwen3MoeModelProvider,
+    Qwen3MoeModelProvider235B,
+)
 from megatron.bridge.models.t5_provider import T5ModelProvider
 
 
@@ -87,4 +91,6 @@ __all__ = [
     "Llama4ModelProvider",
     "Llama4Experts16ModelProvider",
     "Llama4Experts128ModelProvider",
+    "Qwen3MoeModelProvider",
+    "Qwen3MoeModelProvider235B",
 ]
