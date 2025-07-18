@@ -38,20 +38,6 @@ from megatron.bridge.models.llama import (
     Llama32ModelProvider3B,
     LlamaModelProvider,
 )
-from megatron.bridge.models.qwen import (
-    Qwen2ModelProvider,
-    Qwen2ModelProvider500M,
-    Qwen2ModelProvider1P5B,
-    Qwen2ModelProvider7B,
-    Qwen2ModelProvider72B,
-    Qwen25ModelProvider500M,
-    Qwen25ModelProvider1P5B,
-    Qwen25ModelProvider3B,
-    Qwen25ModelProvider7B,
-    Qwen25ModelProvider14B,
-    Qwen25ModelProvider32B,
-    Qwen25ModelProvider72B,
-)
 from megatron.bridge.models.mapping_registry import MegatronMappingRegistry
 from megatron.bridge.models.model_bridge import MegatronModelBridge, WeightDistributionMode
 from megatron.bridge.models.param_mapping import (
@@ -62,6 +48,20 @@ from megatron.bridge.models.param_mapping import (
     ReplicatedMapping,
     RowParallelMapping,
     TPAwareMapping,
+)
+from megatron.bridge.models.qwen import (
+    Qwen2ModelProvider,
+    Qwen2ModelProvider1P5B,
+    Qwen2ModelProvider7B,
+    Qwen2ModelProvider72B,
+    Qwen2ModelProvider500M,
+    Qwen25ModelProvider1P5B,
+    Qwen25ModelProvider3B,
+    Qwen25ModelProvider7B,
+    Qwen25ModelProvider14B,
+    Qwen25ModelProvider32B,
+    Qwen25ModelProvider72B,
+    Qwen25ModelProvider500M,
 )
 from megatron.bridge.models.t5_provider import T5ModelProvider
 
