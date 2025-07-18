@@ -836,7 +836,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
             layer_offset = get_transformer_layer_offset(
                 model_config, pipeline_rank=pp_rank, vp_stage=vp_stage
             )
-            for local_name, local_weight in model.named_parameters():
+            for local_name, _ in model.named_parameters():
                 if "_extra_state" in local_name:
                     continue
 
@@ -863,7 +863,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
                         )
                         continue
 
-                local_module = self._get_param_and_module_from_vp(
+                local_module, local_weight = self._get_param_and_module_from_vp(
                     megatron_model, mapping.hf_param, local_name
                 )
 
