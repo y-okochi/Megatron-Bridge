@@ -26,6 +26,7 @@ from megatron.bridge.models.qwen.qwen2_provider import (
     Qwen25ModelProvider72B,
     Qwen25ModelProvider500M,
 )
+from megatron.bridge.models.qwen.qwen2_causal_bridge import Qwen2CausalBridge  # noqa: F401
 
 
 __all__ = [
