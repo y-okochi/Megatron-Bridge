@@ -757,8 +757,6 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
             This method uses all_gather to collect parameter information from
             all pipeline parallel ranks to build a complete view of the model.
         """
-        if not models:
-            raise ValueError("models list cannot be empty")
 
         pp_rank = mpu.get_pipeline_model_parallel_rank()
 
@@ -796,11 +794,6 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         Raises:
             ValueError: If vp_stage is out of range or parameter doesn't exist
         """
-        if not models:
-            raise ValueError("models list cannot be empty")
-
-        if not param_name:
-            raise ValueError("param_name cannot be empty")
 
         if vp_stage is None:
             model = models[0]
