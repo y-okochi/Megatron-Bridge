@@ -71,7 +71,8 @@ class MegatronParamMapping(ABC, Generic[WeightType]):
 
     def __init__(self, megatron_param: str, hf_param: Union[str, Dict[str, str]]):
         """Initialize the weight mapping.
-
+        Note: `megatron_param` here is the global name of the parameter, not the local name.
+              They are directly converted from HF model's parameter name.
         Args:
             megatron_param (str): Megatron parameter name pattern (supports *
                 wildcards).
