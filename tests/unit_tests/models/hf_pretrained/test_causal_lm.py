@@ -494,7 +494,6 @@ class TestPreTrainedCausalLMSaveLoad:
         mock_generation_config.save_pretrained.assert_called_once_with(save_dir)
 
 
-
 class TestPreTrainedCausalLMDeviceManagement:
     """Test device management methods."""
 
