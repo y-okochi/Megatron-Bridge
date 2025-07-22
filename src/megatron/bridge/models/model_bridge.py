@@ -47,6 +47,7 @@ from megatron.bridge.models.param_mapping import MegatronParamMapping
 from megatron.bridge.models.utils import get_transformer_layer_offset
 from megatron.bridge.utils.common_utils import unwrap_model
 
+
 logger = logging.getLogger(__name__)
 
 MappingT = TypeVar("MappingT", bound=MegatronParamMapping)
