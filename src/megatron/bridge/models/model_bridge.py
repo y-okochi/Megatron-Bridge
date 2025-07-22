@@ -47,7 +47,6 @@ from megatron.bridge.models.param_mapping import MegatronParamMapping
 from megatron.bridge.models.utils import get_transformer_layer_offset
 from megatron.bridge.utils.common_utils import unwrap_model
 
-
 logger = logging.getLogger(__name__)
 
 MappingT = TypeVar("MappingT", bound=MegatronParamMapping)
@@ -73,9 +72,9 @@ class WeightDistributionMode(Enum):
 class MegatronWeightTuple(NamedTuple):
     """Tuple representing a Megatron model weight with its metadata."""
 
-    vp_stage: int
     param_name: str
     weight: torch.Tensor
+    vp_stage: int
 
 
 class HFWeightTuple(NamedTuple):
@@ -104,7 +103,7 @@ class WeightConversionTask(Generic[MappingT]):
         vp_stage (Optional[int]): Virtual-pipeline stage index (required for loads).
         megatron_module (Optional[torch.nn.Module]): Reference to the Megatron model or
             sub-module that owns the parameter (required for loads).
-        megatron_param (Optional[torch.Tensor]): The actual parameter tensor that will
+        param_weight (Optional[torch.Tensor]): The actual parameter tensor that will
             receive the converted weight (required for loads).
 
         # Fields for Megatron->HF saving:
@@ -116,7 +115,7 @@ class WeightConversionTask(Generic[MappingT]):
     pp_rank: Optional[int] = None
     vp_stage: Optional[int] = None
     megatron_module: Optional[torch.nn.Module] = None
-    megatron_param: Optional[torch.Tensor] = None
+    param_weight: Optional[torch.Tensor] = None
 
     def hf_to_megatron(
         self,
@@ -361,7 +360,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         if not isinstance(megatron_model, list):
             megatron_model = [megatron_model]
 
-        load_plan = list(self._build_plan_hf_to_megatron(hf_pretrained, megatron_model))
+        hf_to_megatron_plans = list(self._build_plan_hf_to_megatron(hf_pretrained, megatron_model))
 
         hf_state_dict: Mapping[str, torch.Tensor] = hf_pretrained.state if hasattr(hf_pretrained, "state") else {}
 
@@ -378,34 +377,34 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
             disable=not is_main_rank,
         ) as progress:
             task_id = progress.add_task(
-                f"Loading from {hf_pretrained.model_name_or_path}", total=len(load_plan), bridge=bridge_name
+                f"Loading from {hf_pretrained.model_name_or_path}", total=len(hf_to_megatron_plans), bridge=bridge_name
             )
 
-            for task in load_plan:
+            for task in hf_to_megatron_plans:
                 # 1) Fetch source tensor(s) from HF state dict
                 if isinstance(task.mapping.hf_param, str):
-                    hf_weights = hf_state_dict[task.mapping.hf_param]
+                    hf_weight = hf_state_dict[task.mapping.hf_param]
                 else:
-                    hf_weights = {k: hf_state_dict[v] for k, v in task.mapping.hf_param.items()}
+                    hf_weight = {k: hf_state_dict[v] for k, v in task.mapping.hf_param.items()}
 
                 # 2) Delegate conversion & distribution to the bridge
-                weight_local = task.hf_to_megatron(hf_weights, task.megatron_module)
+                local_weight = task.hf_to_megatron(hf_weight, task.megatron_module)
 
                 # 3) Copy into Megatron param if this rank received a shard
-                if weight_local is not None:
-                    # Assert that megatron_param is not None for HF->Megatron tasks
-                    assert task.megatron_param is not None, "megatron_param is required for HF->Megatron conversion"
+                if local_weight is not None:
+                    # Assert that param_weight is not None for HF->Megatron tasks
+                    assert task.param_weight is not None, "param_weight is required for HF->Megatron conversion"
 
                     # Check shape compatibility before copying
-                    if weight_local.shape != task.megatron_param.shape:
+                    if local_weight.shape != task.param_weight.shape:
                         raise ValueError(
                             f"Shape mismatch for {task.mapping.megatron_param}:\n"
-                            f"  Expected shape: {task.megatron_param.shape}\n"
-                            f"  Got shape: {weight_local.shape}\n"
+                            f"  Expected shape: {task.param_weight.shape}\n"
+                            f"  Got shape: {local_weight.shape}\n"
                             f"  Bridge type: {type(task.mapping).__name__}\n"
                             f"  HF mapping: {task.mapping.hf_param}"
                         )
-                    task.megatron_param.data.copy_(weight_local)
+                    task.param_weight.data.copy_(local_weight)
 
                 progress.update(task_id, advance=1)
 
@@ -454,15 +453,14 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         for task in self._build_plan_hf_to_megatron(hf_pretrained, megatron_model):
             hf_state_dict: Mapping[str, torch.Tensor] = hf_pretrained.state
             if isinstance(task.mapping.hf_param, str):
-                src_weights = hf_state_dict[task.mapping.hf_param]
+                hf_weight = hf_state_dict[task.mapping.hf_param]
             else:
-                src_weights = {k: hf_state_dict[v] for k, v in task.mapping.hf_param.items()}
+                hf_weight = {k: hf_state_dict[v] for k, v in task.mapping.hf_param.items()}
 
-            shard = task.hf_to_megatron(src_weights, task.megatron_module)
-            if shard is not None:
+            local_weight = task.hf_to_megatron(hf_weight, task.megatron_module)
+            if local_weight is not None:
                 # Assert that vp_stage is not None for HF->Megatron tasks
-                assert task.vp_stage is not None, "vp_stage is required for HF->Megatron conversion"
-                yield MegatronWeightTuple(task.vp_stage, task.param_name, shard)
+                yield MegatronWeightTuple(task.param_name, local_weight, task.vp_stage)
 
     def stream_weights_megatron_to_hf(
         self,
@@ -541,7 +539,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
             else:
                 raise ValueError(f"Invalid mode: {mode}. Must be one of: replicate, consolidate, distribute")
 
-        save_plan = list(self._build_plan_megatron_to_hf(megatron_model, hf_pretrained, order))
+        megatron_to_hf_plans = list(self._build_plan_megatron_to_hf(megatron_model, hf_pretrained, order))
 
         is_main_rank = not torch.distributed.is_initialized() or torch.distributed.get_rank() == 0
         bridge_name = self.__class__.__name__
@@ -555,16 +553,16 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
             TextColumn("{task.fields[bridge]}"),
             disable=not (is_main_rank and show_progress),
         ) as progress:
-            task_id = progress.add_task("Converting to HuggingFace", total=len(save_plan), bridge=bridge_name)
+            task_id = progress.add_task("Converting to HuggingFace", total=len(megatron_to_hf_plans), bridge=bridge_name)
 
-            for task in save_plan:
+            for task in megatron_to_hf_plans:
                 # Owns param? fetch weight & module; otherwise None (bridge will broadcast)
-                weight = None
-                module = None
+                local_weight = None
+                local_module = None
                 if task.pp_rank == mpu.get_pipeline_model_parallel_rank():
-                    module, weight = self._get_param_and_module_from_vp(megatron_model, task.vp_stage, task.param_name)
+                    local_module, local_weight = self._get_param_and_module_from_vp(megatron_model, task.vp_stage, task.param_name)
 
-                kv_pairs = task.megatron_to_hf(weight, module)
+                kv_pairs = task.megatron_to_hf(local_weight, local_module)
 
                 # Handle distribution modes
                 if mode == WeightDistributionMode.REPLICATE:
@@ -581,11 +579,11 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
                     # In this mode, we need to modify the behavior to skip gathering
                     # This would require changes to the param mappings themselves
                     # For now, we'll yield whatever shard this rank has
-                    if task.pp_rank == mpu.get_pipeline_model_parallel_rank() and weight is not None:
+                    if task.pp_rank == mpu.get_pipeline_model_parallel_rank() and local_weight is not None:
                         # Return the local shard without gathering
                         yield HFWeightTuple(
                             task.param_name + f"_rank{mpu.get_tensor_model_parallel_rank()}",
-                            weight.cpu() if cpu else weight,
+                            local_weight.cpu() if cpu else local_weight,
                         )
 
                 progress.update(task_id, advance=1)
@@ -759,8 +757,6 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
             This method uses all_gather to collect parameter information from
             all pipeline parallel ranks to build a complete view of the model.
         """
-        if not models:
-            raise ValueError("models list cannot be empty")
 
         pp_rank = mpu.get_pipeline_model_parallel_rank()
 
@@ -798,11 +794,6 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         Raises:
             ValueError: If vp_stage is out of range or parameter doesn't exist
         """
-        if not models:
-            raise ValueError("models list cannot be empty")
-
-        if not param_name:
-            raise ValueError("param_name cannot be empty")
 
         if vp_stage is None:
             model = models[0]
@@ -840,11 +831,12 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         mapping_registry = self.mapping_registry()
         hf_state_dict = hf_pretrained.state if hasattr(hf_pretrained, "state") else {}
         model_config = unwrap_model(megatron_model)[0].config
+        pp_rank = mpu.get_pipeline_model_parallel_rank()
         for vp_stage, model in enumerate(megatron_model):
             layer_offset = get_transformer_layer_offset(
-                model_config, pipeline_rank=mpu.get_pipeline_model_parallel_rank(), vp_stage=vp_stage
+                model_config, pipeline_rank=pp_rank, vp_stage=vp_stage
             )
-            for local_name, param in model.named_parameters():
+            for local_name, _ in model.named_parameters():
                 if "_extra_state" in local_name:
                     continue
 
@@ -871,15 +863,16 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
                         )
                         continue
 
-                owner_module = unwrap_model(model)
-                for part in local_name.split(".")[:-1]:
-                    owner_module = getattr(owner_module, part)
+                local_module, local_weight = self._get_param_and_module_from_vp(
+                    megatron_model, mapping.hf_param, local_name
+                )
 
                 yield WeightConversionTask(
+                    pp_rank=pp_rank,
                     vp_stage=vp_stage,
                     param_name=local_name,
-                    megatron_module=owner_module,
-                    megatron_param=param,
+                    megatron_module=local_module,
+                    param_weight=local_weight,
                     mapping=mapping,
                 )
 
