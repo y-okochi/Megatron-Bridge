@@ -48,6 +48,7 @@ from rich.table import Table
 from megatron.bridge import CausalLMBridge
 from megatron.bridge.models.decorators import torchrun_main
 
+
 HF_MODEL_ID = "meta-llama/Llama-3.2-1B"
 console = Console()
 
