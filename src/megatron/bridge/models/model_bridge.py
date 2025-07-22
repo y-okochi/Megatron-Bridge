@@ -56,19 +56,6 @@ MegatronModel = TypeVar("MegatronModel", bound=MegatronModule)
 _BridgeImplClass = TypeVar("_BridgeImplClass", bound="MegatronModelBridge")
 
 
-class WeightDistributionMode(Enum):
-    """Weight distribution modes following PyTorch conventions."""
-
-    REPLICATE = "replicate"  # All ranks get full replicated tensors (like broadcast)
-    CONSOLIDATE = "consolidate"  # Consolidate to rank 0 (like gather)
-    DISTRIBUTE = "distribute"  # Each rank gets its shard (like scatter)
-
-    # Aliases for compatibility
-    BROADCAST = "replicate"
-    GATHER = "consolidate"
-    SCATTER = "distribute"
-
-
 class MegatronWeightTuple(NamedTuple):
     """Tuple representing a Megatron model weight with its metadata."""
 
@@ -469,13 +456,13 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         cpu: bool = True,
         order: Literal["megatron", "hf", "safetensors"] = "safetensors",
         show_progress: bool = True,
-        mode: Union[str, WeightDistributionMode] = WeightDistributionMode.CONSOLIDATE,
     ) -> Iterable[HFWeightTuple]:
         """Export Megatron weights to HuggingFace format.
 
         This method orchestrates the conversion of weights from Megatron's distributed
         format back to HuggingFace format. It handles gathering from tensor parallel
         ranks, broadcasting across pipeline parallel ranks, and format conversions.
+        All ranks receive the full tensors.
 
         Args:
             megatron_model (Union[MegatronModel, List[MegatronModel]]): Megatron model instance
@@ -491,11 +478,6 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
                 - "safetensors": Grouped by safetensors file (default)
             show_progress (bool, optional): Display progress bar during export.
                 Defaults to True.
-            mode (Union[str, WeightDistributionMode], optional): Weight
-                distribution mode:
-                - WeightDistributionMode.CONSOLIDATE: Gather to rank 0 only (default)
-                - WeightDistributionMode.REPLICATE: All ranks get full tensors
-                - WeightDistributionMode.DISTRIBUTE: Each rank keeps its shard
 
         Yields:
             HFWeightTuple: Named tuples of (param_name, weight_tensor) in HF format.
@@ -503,41 +485,19 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         Example:
             .. code-block:: python
 
-                # Export weights with default settings
+                # Export weights
                 for name, weight in bridge.stream_weights_megatron_to_hf(megatron_model, hf_config):
                     print(f"Exported {name}: {weight.shape}")
 
-                # Export with all ranks getting weights
-                weights = list(bridge.stream_weights_megatron_to_hf(
-                    megatron_model, hf_config,
-                    mode=WeightDistributionMode.REPLICATE
-                ))
-
         Raises:
-            ValueError: If mode string is invalid or input parameters are invalid.
+            ValueError: If input parameters are invalid.
 
         Note:
-            The yielded weights depend on the mode:
-            - CONSOLIDATE: Only rank 0 yields weights
-            - REPLICATE: All ranks yield full weights
-            - DISTRIBUTE: Each rank yields its shard (experimental)
+            All ranks yield the full tensors after gathering from distributed format.
         """
 
         if not isinstance(megatron_model, list):
             megatron_model = [megatron_model]
-
-        # Normalize mode parameter
-        if isinstance(mode, str):
-            # Handle string mode and aliases
-            mode_str = mode.lower()
-            if mode_str in ["replicate", "broadcast"]:
-                mode = WeightDistributionMode.REPLICATE
-            elif mode_str in ["consolidate", "gather"]:
-                mode = WeightDistributionMode.CONSOLIDATE
-            elif mode_str in ["distribute", "scatter"]:
-                mode = WeightDistributionMode.DISTRIBUTE
-            else:
-                raise ValueError(f"Invalid mode: {mode}. Must be one of: replicate, consolidate, distribute")
 
         megatron_to_hf_plans = list(self._build_plan_megatron_to_hf(megatron_model, hf_pretrained, order))
 
@@ -564,27 +524,9 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
 
                 kv_pairs = task.megatron_to_hf(local_weight, local_module)
 
-                # Handle distribution modes
-                if mode == WeightDistributionMode.REPLICATE:
-                    # All ranks get the full tensor
-                    for name, tensor in kv_pairs.items():
-                        yield HFWeightTuple(name, tensor.cpu() if cpu else tensor)
-                elif mode == WeightDistributionMode.CONSOLIDATE:
-                    # Only rank 0 gets the tensor (current default behavior)
-                    if is_main_rank:
-                        for name, tensor in kv_pairs.items():
-                            yield HFWeightTuple(name, tensor.cpu() if cpu else tensor)
-                elif mode == WeightDistributionMode.DISTRIBUTE:
-                    # Each rank gets its shard (no gathering)
-                    # In this mode, we need to modify the behavior to skip gathering
-                    # This would require changes to the param mappings themselves
-                    # For now, we'll yield whatever shard this rank has
-                    if task.pp_rank == mpu.get_pipeline_model_parallel_rank() and local_weight is not None:
-                        # Return the local shard without gathering
-                        yield HFWeightTuple(
-                            task.param_name + f"_rank{mpu.get_tensor_model_parallel_rank()}",
-                            local_weight.cpu() if cpu else local_weight,
-                        )
+                # All ranks get the full tensor
+                for name, tensor in kv_pairs.items():
+                    yield HFWeightTuple(name, tensor.cpu() if cpu else tensor)
 
                 progress.update(task_id, advance=1)
 
@@ -1031,7 +973,6 @@ def stream_weights_megatron_to_hf(
     cpu: bool = True,
     order: Literal["megatron", "hf", "safetensors"] = "safetensors",
     show_progress: bool = True,
-    mode: Union[str, WeightDistributionMode] = WeightDistributionMode.CONSOLIDATE,
 ) -> Iterable[HFWeightTuple]:
     """Bridge Megatron model state to HuggingFace format."""
     ...
@@ -1065,11 +1006,10 @@ def register_bridge_implementation(
         cpu: bool = True,
         order: Literal["megatron", "hf", "safetensors"] = "safetensors",
         show_progress: bool = True,
-        mode: Union[str, WeightDistributionMode] = WeightDistributionMode.CONSOLIDATE,
     ) -> Iterable[HFWeightTuple]:
         bridge = bridge_class()
         return bridge.stream_weights_megatron_to_hf(
-            megatron_model, hf_pretrained, cpu=cpu, order=order, show_progress=show_progress, mode=mode
+            megatron_model, hf_pretrained, cpu=cpu, order=order, show_progress=show_progress
         )
 
     # Set meaningful names for debugging

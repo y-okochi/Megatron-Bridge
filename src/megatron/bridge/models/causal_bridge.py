@@ -31,7 +31,6 @@ from typing_extensions import Unpack
 from megatron.bridge.models import model_bridge
 from megatron.bridge.models.gpt_provider import GPTModelProvider
 from megatron.bridge.models.hf_pretrained.causal_lm import PreTrainedCausalLM
-from megatron.bridge.models.model_bridge import WeightDistributionMode
 from megatron.bridge.models.model_provider_mixin import GetModelKwargs, ModelProviderMixin
 from megatron.bridge.models.state import SafeTensorsStateSource
 
@@ -73,8 +72,7 @@ class CausalLMBridge(Generic[MegatronModelT]):
         >>> # Convert weights with custom settings
         >>> for name, weight in bridge.export_hf_weights(
         ...     megatron_model,
-        ...     order="safetensors",
-        ...     mode="consolidate"
+        ...     order="safetensors"
         ... ):
         ...     print(f"Exported {name}: {weight.shape}")
 
@@ -223,7 +221,6 @@ class CausalLMBridge(Generic[MegatronModelT]):
         order: Literal["megatron", "hf", "safetensors"] = "megatron",
         cpu: bool = False,
         show_progress: bool = True,
-        mode: Union[str, WeightDistributionMode] = WeightDistributionMode.CONSOLIDATE,
     ) -> Iterable["HFWeightTuple"]: ...
 
     def __call__(
@@ -232,9 +229,8 @@ class CausalLMBridge(Generic[MegatronModelT]):
         order: Literal["megatron", "hf", "safetensors"] = "megatron",
         cpu: bool = False,
         show_progress: bool = True,
-        mode: Union[str, WeightDistributionMode] = WeightDistributionMode.CONSOLIDATE,
     ) -> Iterable["HFWeightTuple"]:
-        return self.export_hf_weights(model=model, order=order, cpu=cpu, show_progress=show_progress, mode=mode)
+        return self.export_hf_weights(model=model, order=order, cpu=cpu, show_progress=show_progress)
 
     def load_hf_weights(self, model: list[MegatronModelT], hf_path: str | Path | None = None) -> None:
         """
@@ -281,7 +277,6 @@ class CausalLMBridge(Generic[MegatronModelT]):
         order: Literal["megatron", "hf", "safetensors"] = "megatron",
         cpu: bool = False,
         show_progress: bool = True,
-        mode: Union[str, WeightDistributionMode] = WeightDistributionMode.CONSOLIDATE,
     ) -> Iterable["HFWeightTuple"]: ...
 
     def export_hf_weights(
@@ -290,14 +285,13 @@ class CausalLMBridge(Generic[MegatronModelT]):
         order: Literal["megatron", "hf", "safetensors"] = "safetensors",
         cpu: bool = False,
         show_progress: bool = True,
-        mode: Union[str, WeightDistributionMode] = WeightDistributionMode.CONSOLIDATE,
     ) -> Iterable["HFWeightTuple"]:
         """
         Export Megatron model weights to HuggingFace format.
 
         This method yields weight tensors in HuggingFace format, handling the
         gathering of distributed tensors and format conversion. It's useful for
-        streaming weight export or custom processing.
+        streaming weight export or custom processing. All ranks get full tensors.
 
         Args:
             model: Megatron model instance or list of instances
@@ -307,10 +301,6 @@ class CausalLMBridge(Generic[MegatronModelT]):
                 - "safetensors": Group by safetensors file, then by key
             cpu: Whether to move tensors to CPU before yielding
             show_progress: Display progress bar during export
-            mode: Weight distribution mode
-                - "consolidate": Gather to rank 0
-                - "replicate": All ranks get full tensors
-                - "distribute": Each rank keeps its shard
 
         Yields:
             HFWeightTuple: Named tuples of (param_name, weight_tensor)
@@ -324,13 +314,12 @@ class CausalLMBridge(Generic[MegatronModelT]):
             >>> weights = list(bridge.export_hf_weights(
             ...     model,
             ...     order="safetensors",
-            ...     cpu=True,
-            ...     mode="replicate"  # All ranks get full weights
+            ...     cpu=True
             ... ))
         """
         dispatch_instance = (self._get_causal_lm_architecture(), self._get_model_instance(model))
         return model_bridge.stream_weights_megatron_to_hf(
-            dispatch_instance, model, self.hf_pretrained, order=order, cpu=cpu, show_progress=show_progress, mode=mode
+            dispatch_instance, model, self.hf_pretrained, order=order, cpu=cpu, show_progress=show_progress
         )
 
     @overload
