@@ -34,6 +34,13 @@ from megatron.bridge import CausalLMBridge
 
 
 class SingleBatchIterator:
+    """Iterator that yields a single batch of data for text generation.
+    Required by the forward_backward_func function.
+    
+    This class creates an iterator that yields exactly one batch containing
+    input tokens, position IDs, and attention mask, then raises StopIteration.
+    Used for single-step inference in the forward pass.
+    """
     def __init__(self, input_ids, position_ids, attention_mask):
         self.batch = dict(
             tokens=input_ids,
@@ -53,6 +60,20 @@ class SingleBatchIterator:
 
 
 def text_forward_step(data_iterator, model, **kwargs) -> torch.Tensor:
+    """Forward step function for text generation.
+    Required by the forward_backward_func function.
+    
+    Extracts a batch from the data iterator and runs the model forward pass
+    with the provided input tokens, position IDs, and attention mask.
+    
+    Args:
+        data_iterator: Iterator providing batches of input data
+        model: The Megatron model to run forward pass on
+        **kwargs: Additional keyword arguments (unused)
+    
+    Returns:
+        Tuple of (model_output, loss_function)
+    """
     batch = next(data_iterator)
     forward_args = {
         "input_ids": batch["tokens"],
@@ -67,6 +88,16 @@ def text_forward_step(data_iterator, model, **kwargs) -> torch.Tensor:
 
 
 def main(args) -> None:
+    """Main function for text generation from HuggingFace or Megatron models.
+    
+    Loads a model either from HuggingFace (with optional conversion to Megatron)
+    or directly from a Megatron checkpoint, then performs greedy text generation
+    using the provided prompt.
+    
+    Args:
+        args: Parsed command line arguments containing model paths, prompt,
+              parallelism settings, and generation parameters
+    """
     # pylint: disable=C0115,C0116
     tp = args.tp
     pp = args.pp

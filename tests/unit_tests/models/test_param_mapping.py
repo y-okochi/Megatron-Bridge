@@ -323,7 +323,7 @@ class TestGatedMLPMapping:
 
         with patch.object(mapping, "scatter_to_tp_ranks") as mock_scatter:
             mock_scatter.return_value = torch.randn(128, 32)
-            result = mapping.hf_to_megatron(weights, megatron_module)
+            mapping.hf_to_megatron(weights, megatron_module)
 
             # Verify scatter was called with proper splits
             mock_scatter.assert_called_once()
