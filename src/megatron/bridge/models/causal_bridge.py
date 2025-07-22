@@ -16,7 +16,6 @@ import dataclasses
 from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Generic, Iterable, Literal, Type, TypeVar, Union, overload
-from typing_extensions import Unpack
 
 import torch.distributed
 import transformers
@@ -27,6 +26,7 @@ from megatron.core.transformer.transformer_config import MLATransformerConfig, T
 from megatron.core.utils import get_model_config
 from transformers import AutoConfig
 from transformers.configuration_utils import PretrainedConfig
+from typing_extensions import Unpack
 
 from megatron.bridge.models import model_bridge
 from megatron.bridge.models.gpt_provider import GPTModelProvider
@@ -34,6 +34,7 @@ from megatron.bridge.models.hf_pretrained.causal_lm import PreTrainedCausalLM
 from megatron.bridge.models.model_bridge import WeightDistributionMode
 from megatron.bridge.models.model_provider_mixin import GetModelKwargs, ModelProviderMixin
 from megatron.bridge.models.state import SafeTensorsStateSource
+
 
 if TYPE_CHECKING:
     from megatron.bridge.models.model_bridge import HFWeightTuple, MegatronModelBridge
