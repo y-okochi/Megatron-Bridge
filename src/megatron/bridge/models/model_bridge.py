@@ -804,7 +804,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
                         continue
 
                 local_module, local_weight = self._get_param_and_module_from_vp(
-                    megatron_model, mapping.hf_param, local_name
+                    megatron_model, vp_stage, local_name
                 )
 
                 yield WeightConversionTask(
