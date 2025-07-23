@@ -454,7 +454,6 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         megatron_model: Union[MegatronModel, List[MegatronModel]],
         hf_pretrained: HFPreTrained,
         cpu: bool = True,
-        order: Literal["megatron", "hf", "safetensors"] = "safetensors",
         show_progress: bool = True,
     ) -> Iterable[HFWeightTuple]:
         """Export Megatron weights to HuggingFace format.
@@ -464,6 +463,10 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         ranks, broadcasting across pipeline parallel ranks, and format conversions.
         All ranks receive the full tensors.
 
+        The export order is determined automatically:
+        - First tries safetensors order (if key_to_filename_map is available)
+        - Falls back to HuggingFace state dict order
+
         Args:
             megatron_model (Union[MegatronModel, List[MegatronModel]]): Megatron model instance
                 or list of model instances (one per virtual pipeline stage).
@@ -471,11 +474,6 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
                 and mapping info.
             cpu (bool, optional): Whether to move tensors to CPU before yielding.
                 Defaults to True.
-            order (Literal["megatron", "hf", "safetensors"], optional): Export
-                order for weights:
-                - "megatron": Natural order of Megatron parameters
-                - "hf": Order from HuggingFace state dict
-                - "safetensors": Grouped by safetensors file (default)
             show_progress (bool, optional): Display progress bar during export.
                 Defaults to True.
 
@@ -499,7 +497,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         if not isinstance(megatron_model, list):
             megatron_model = [megatron_model]
 
-        megatron_to_hf_plans = list(self._build_plan_megatron_to_hf(megatron_model, hf_pretrained, order))
+        megatron_to_hf_plans = list(self._build_plan_megatron_to_hf(megatron_model, hf_pretrained))
 
         is_main_rank = not torch.distributed.is_initialized() or torch.distributed.get_rank() == 0
         bridge_name = self.__class__.__name__
@@ -822,54 +820,30 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         self,
         megatron_model: List[MegatronModel],
         hf_pretrained: HFPreTrained,
-        order: Literal["megatron", "hf", "safetensors"],
     ) -> Iterable[WeightConversionTask]:
         """Construct the *Megatron ➜ HF* save plan.
+
+        Uses safetensors ordering if available (when key_to_filename_map exists),
+        otherwise falls back to HuggingFace state dict ordering.
 
         Args:
             megatron_model (List[MegatronModel]): List of local Megatron
                 *pipeline* replicas (length ≥ 1, length > 1 only when
                 virtual-pipeline-parallelism (VP) is enabled).
             hf_pretrained (HFPreTrained): HF model whose *state* object provides
-                ordering information when *order* is ``'hf'`` or
-                ``'safetensors'``.
-            order (Literal["megatron", "hf", "safetensors"]):
-                - ``'src'`` – follow the natural order of Megatron parameters
-                - ``'hf'``  – follow the order of keys in the HF state-dict source
-                - ``'safetensors'`` – group by file name, then by key (mimics the
-                  original safetensors file order).
+                ordering information.
 
         Returns:
-            Iterable[_HFSaveTask]: The save plan.
+            Iterable[WeightConversionTask]: The save plan.
         """
 
-        model_config = unwrap_model(megatron_model)[0].config
-        if order == "megatron":
-            if model_config.pipeline_model_parallel_size > 1:
-                raise ValueError("megatron ordering is not supported with `pipeline_model_parallel_size` > 1")
-            mapping_registry = self.mapping_registry()
-            for pp_rank, vp_stage, local_name in self._collect_all_params_info(megatron_model):
-                local_name = self._unwrap_name(local_name)
-                mapping = mapping_registry.megatron_to_hf_lookup(local_name)
-                if mapping:
-                    yield WeightConversionTask(
-                        pp_rank=pp_rank,
-                        vp_stage=vp_stage,
-                        param_name=local_name,
-                        mapping=mapping,
-                    )
-            return
-
-        # --- Otherwise: follow HF / safetensors order --------------------------------
+        # Ensure hf_pretrained has the required state structure
         if not (hasattr(hf_pretrained, "state") and hasattr(hf_pretrained.state, "source")):
-            raise ValueError(f"order='{order}' requires hf_pretrained.state.source to be present")
+            raise ValueError("hf_pretrained.state.source is required for weight ordering")
 
-        if order == "hf":
-            hf_keys: Iterable[str] = hf_pretrained.state.source.get_all_keys()
-        elif order == "safetensors":
-            if not hasattr(hf_pretrained.state.source, "key_to_filename_map"):
-                raise TypeError("order='safetensors' requires the state source to have a 'key_to_filename_map'.")
-
+        # Try safetensors order first, fallback to hf order
+        if hasattr(hf_pretrained.state.source, "key_to_filename_map"):
+            # Use safetensors ordering (grouped by file, then by key)
             key_to_filename: Mapping[str, str] = hf_pretrained.state.source.key_to_filename_map
             filename_to_keys = defaultdict(list)
             for key, filename in key_to_filename.items():
@@ -877,8 +851,10 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
 
             hf_keys = (key for fname in sorted(filename_to_keys.keys()) for key in filename_to_keys[fname])
         else:
-            raise ValueError(f"Invalid order: {order}, supported orders are 'megatron', 'hf' and 'safetensors'")
+            # Fallback to hf order
+            hf_keys: Iterable[str] = hf_pretrained.state.source.get_all_keys()
 
+        model_config = unwrap_model(megatron_model)[0].config
         mapping_registry = self.mapping_registry()
         emitted = set()
 
@@ -971,7 +947,6 @@ def stream_weights_megatron_to_hf(
     megatron_model: Union[MegatronModel, List[MegatronModel]],
     hf_pretrained: HFPreTrained,
     cpu: bool = True,
-    order: Literal["megatron", "hf", "safetensors"] = "safetensors",
     show_progress: bool = True,
 ) -> Iterable[HFWeightTuple]:
     """Bridge Megatron model state to HuggingFace format."""
@@ -1004,12 +979,11 @@ def register_bridge_implementation(
         megatron_model: Union[MegatronModel, List[MegatronModel]],
         hf_pretrained: HFPreTrained,
         cpu: bool = True,
-        order: Literal["megatron", "hf", "safetensors"] = "safetensors",
         show_progress: bool = True,
     ) -> Iterable[HFWeightTuple]:
         bridge = bridge_class()
         return bridge.stream_weights_megatron_to_hf(
-            megatron_model, hf_pretrained, cpu=cpu, order=order, show_progress=show_progress
+            megatron_model, hf_pretrained, cpu=cpu, show_progress=show_progress
         )
 
     # Set meaningful names for debugging
