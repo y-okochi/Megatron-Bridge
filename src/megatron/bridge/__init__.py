@@ -14,10 +14,8 @@
 """Megatron Bridge - A component of the Megatron ecosystem."""
 
 from megatron.bridge.models.auto_bridge import AutoBridge
-from megatron.bridge.models.causal_bridge import CausalLMBridge
 
 
 __all__ = [
     "AutoBridge",
-    "CausalLMBridge",
 ]
