@@ -713,7 +713,7 @@ class ReplicatedMapping(MegatronParamMapping[torch.Tensor]):
         return {str(self.hf_param): megatron_weights}
 
 
-class TPAwareMapping(MegatronParamMapping[torch.Tensor]):
+class AutoMapping(MegatronParamMapping[torch.Tensor]):
     """
     Smart mapping that automatically detects and applies the correct parallelism strategy.
 
@@ -739,7 +739,7 @@ class TPAwareMapping(MegatronParamMapping[torch.Tensor]):
         .. code-block:: python
 
             # Automatically handles any weight type
-            mapping = TPAwareMapping(
+            mapping = AutoMapping(
                 megatron_param="decoder.layers.*.mlp.linear_fc1.weight",
                 hf_param="model.layers.*.mlp.gate_proj.weight"
             )
@@ -751,7 +751,7 @@ class TPAwareMapping(MegatronParamMapping[torch.Tensor]):
             norm_weight = mapping.hf_to_megatron(hf_norm, layer_norm_module)
 
             # Register custom module types
-            TPAwareMapping.register_module_type("MyCustomLinear", "column")
+            AutoMapping.register_module_type("MyCustomLinear", "column")
 
     Note:
         If the parallelism type cannot be determined, the mapping will raise
@@ -843,7 +843,7 @@ class TPAwareMapping(MegatronParamMapping[torch.Tensor]):
             f"at weight '{self.megatron_param}'.\n"
             f"Please use an explicit mapping type (e.g., ColumnParallelMapping) "
             f"or register the module type using:\n"
-            f"  TPAwareMapping.register_module_type('{module_type}', 'column|row|replicated')\n\n"
+            f"  AutoMapping.register_module_type('{module_type}', 'column|row|replicated')\n\n"
             f"Currently known module types:\n{json.dumps(known_types, indent=2)}"
         )
 
@@ -910,7 +910,7 @@ class QKVMapping(MegatronParamMapping[Dict[str, torch.Tensor]]):
     **Key features**
     1.  Format conversion: Handles merging/splitting with proper interleaving
     2.  Grouped Query Attention: Supports different numbers of Q and KV heads
-    3.  Tensor parallelism: Delegates to TPAwareMapping for distribution
+    3.  Tensor parallelism: Delegates to AutoMapping for distribution
 
     Example:
         .. code-block:: python
@@ -951,7 +951,7 @@ class QKVMapping(MegatronParamMapping[Dict[str, torch.Tensor]]):
         # do not hard-code the assumption that QKV projections are column-parallel.
         # This keeps the format-handling (merge/split) concerns separate from
         # TP/PP distribution mechanics.
-        self._tp_mapping = TPAwareMapping(megatron_param, megatron_param)
+        self._tp_mapping = AutoMapping(megatron_param, megatron_param)
 
     def hf_to_megatron(
         self,
@@ -1194,13 +1194,13 @@ class MOEMapping(MegatronParamMapping[torch.Tensor]):
 
     MoE models distribute expert weights across Expert Parallel (EP) ranks.
     Each EP rank owns a subset of experts, and this mapping handles the
-    EP distribution while delegating TP operations to TPAwareMapping.
+    EP distribution while delegating TP operations to AutoMapping.
 
     **Key features handled by this mapping**
     1.  **Expert parallel distribution** – different experts on different EP ranks
     2.  **Dynamic expert IDs** – weight names contain expert indices as wildcards
     3.  **Cross-EP communication** – broadcasting weights from owning EP rank
-    4.  **TP delegation** – all tensor parallel ops handled by TPAwareMapping
+    4.  **TP delegation** – all tensor parallel ops handled by AutoMapping
 
     **Weight naming convention**
     -   Megatron: `"mlp.experts.linear_fc1.weight*"`  (where `*` is the expert ID)
@@ -1221,7 +1221,7 @@ class MOEMapping(MegatronParamMapping[torch.Tensor]):
 
         # Create a TP mapping for handling tensor parallelism
         # This will be used after EP distribution is resolved
-        self._tp_mapping = TPAwareMapping(megatron_param, hf_param)
+        self._tp_mapping = AutoMapping(megatron_param, hf_param)
 
     def hf_to_megatron(
         self,
@@ -1234,7 +1234,7 @@ class MOEMapping(MegatronParamMapping[torch.Tensor]):
         This method:
         1. Determines which EP rank should own this expert
         2. Ensures only the owning rank has the weight
-        3. Delegates TP distribution to TPAwareMapping
+        3. Delegates TP distribution to AutoMapping
         """
         config = self._get_config(megatron_module)
 
@@ -1268,7 +1268,7 @@ class MOEMapping(MegatronParamMapping[torch.Tensor]):
         1. Handles cross-PP broadcast (inherited from base)
         2. Determines which EP rank owns this expert
         3. Broadcasts from owning EP rank
-        4. Delegates TP gathering to TPAwareMapping
+        4. Delegates TP gathering to AutoMapping
         """
         # Handle cross-PP broadcast first
         megatron_weights = self.broadcast_from_pp_rank(megatron_weights)
@@ -1294,7 +1294,7 @@ class MOEMapping(MegatronParamMapping[torch.Tensor]):
         owning_ep_rank = self._get_expert_ownership(expert_id, config)
 
         # Broadcast weight from owning EP rank to all EP ranks
-        # (TPAwareMapping needs the weight on all ranks for TP gathering)
+        # (AutoMapping needs the weight on all ranks for TP gathering)
         if self.ep_rank == owning_ep_rank:
             # First gather TP shards on the owning EP rank
             tp_gathered = self._tp_mapping.megatron_to_hf(megatron_weights, megatron_module)

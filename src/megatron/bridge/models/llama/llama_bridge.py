@@ -26,7 +26,7 @@ from megatron.bridge.models.param_mapping import (
     DirectMapping,
     GatedMLPMapping,
     QKVMapping,
-    TPAwareMapping,
+    AutoMapping,
 )
 
 
@@ -84,11 +84,11 @@ class LlamaBridge(MegatronModelBridge):
             # ------------------------------------------------------------------
             # Embedding & output projection – column-parallel
             # ------------------------------------------------------------------
-            TPAwareMapping(
+            AutoMapping(
                 megatron_param="embedding.word_embeddings.weight",
                 hf_param="model.embed_tokens.weight",
             ),
-            TPAwareMapping(
+            AutoMapping(
                 megatron_param="output_layer.weight",
                 hf_param="lm_head.weight",
             ),
@@ -116,7 +116,7 @@ class LlamaBridge(MegatronModelBridge):
                 k="model.layers.*.self_attn.k_proj.weight",
                 v="model.layers.*.self_attn.v_proj.weight",
             ),
-            TPAwareMapping(
+            AutoMapping(
                 megatron_param="decoder.layers.*.self_attention.linear_proj.weight",
                 hf_param="model.layers.*.self_attn.o_proj.weight",
             ),
@@ -128,7 +128,7 @@ class LlamaBridge(MegatronModelBridge):
                 gate="model.layers.*.mlp.gate_proj.weight",
                 up="model.layers.*.mlp.up_proj.weight",
             ),
-            TPAwareMapping(
+            AutoMapping(
                 megatron_param="decoder.layers.*.mlp.linear_fc2.weight",
                 hf_param="model.layers.*.mlp.down_proj.weight",
             ),

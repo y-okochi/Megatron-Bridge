@@ -46,7 +46,7 @@ from megatron.bridge.models.param_mapping import (
     QKVMapping,
     ReplicatedMapping,
     RowParallelMapping,
-    TPAwareMapping,
+    AutoMapping,
 )
 from megatron.bridge.models.t5_provider import T5ModelProvider
 
@@ -61,7 +61,7 @@ __all__ = [
     "QKVMapping",
     "ReplicatedMapping",
     "RowParallelMapping",
-    "TPAwareMapping",
+    "AutoMapping",
     "GPTModelProvider",
     "T5ModelProvider",
     "LlamaModelProvider",

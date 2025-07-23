@@ -215,7 +215,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
 
             def mapping_registry(self) -> MegatronMappingRegistry:
                 return MegatronMappingRegistry(
-                    TPAwareMapping(
+                    AutoMapping(
                         megatron_param="embedding.word_embeddings.weight",
                         hf_param="model.embed_tokens.weight"
                     ),
@@ -285,7 +285,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
 
                 def mapping_registry(self):
                     return MegatronMappingRegistry(
-                        TPAwareMapping(
+                        AutoMapping(
                             megatron_param="embedding.word_embeddings.weight",
                             hf_param="model.embed_tokens.weight"
                         ),

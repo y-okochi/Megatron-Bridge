@@ -37,7 +37,7 @@ class MegatronMappingRegistry:
     Example:
         >>> # Create a mapping registry with various mappings
         >>> mapping_registry = MegatronMappingRegistry(
-        ...     TPAwareMapping(
+        ...     AutoMapping(
         ...         megatron_param="embedding.word_embeddings.weight",
         ...         hf_param="model.embed_tokens.weight",
         ...     ),
