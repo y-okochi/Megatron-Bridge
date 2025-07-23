@@ -25,6 +25,7 @@ echo "Test output directory: $TEST_OUTPUT_DIR"
 
 # Run generate_from_hf.py with tp=2 and pp=1
 python -m torch.distributed.run --nproc_per_node=2 --nnodes=1 \
+    -m coverage run --data-file=/workspace/.coverage --source=/workspace/ --parallel-mode \
     examples/models/generate_from_hf.py \
     --hf_model_path "meta-llama/Llama-3.2-1B" \
     --prompt "Hello, how are you?" \
@@ -56,6 +57,9 @@ fi
 echo "SUCCESS: Text generation test with Tensor Parallelism (tp=2) completed successfully"
 echo "Generation output:"
 cat "$TEST_OUTPUT_DIR/generation_output.txt"
+
+# Combine coverage data
+coverage combine
 
 # Clean up temporary directory
 rm -rf "$TEST_OUTPUT_DIR"
