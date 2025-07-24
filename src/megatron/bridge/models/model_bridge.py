@@ -47,6 +47,7 @@ from megatron.bridge.models.param_mapping import MegatronParamMapping
 from megatron.bridge.models.utils import get_transformer_layer_offset
 from megatron.bridge.utils.common_utils import unwrap_model
 
+
 logger = logging.getLogger(__name__)
 
 MappingT = TypeVar("MappingT", bound=MegatronParamMapping)
@@ -370,12 +371,12 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
             for task in hf_to_megatron_plans:
                 # 1) Fetch source tensor(s) from HF state dict
                 if isinstance(task.mapping.hf_param, str):
-                    hf_weight = hf_state_dict[task.mapping.hf_param]
+                    hf_weights = hf_state_dict[task.mapping.hf_param]
                 else:
-                    hf_weight = {k: hf_state_dict[v] for k, v in task.mapping.hf_param.items()}
+                    hf_weights = {k: hf_state_dict[v] for k, v in task.mapping.hf_param.items()}
 
                 # 2) Delegate conversion & distribution to the bridge
-                local_weight = task.hf_to_megatron(hf_weight, task.megatron_module)
+                weight_local = task.hf_to_megatron(hf_weights, task.megatron_module)
 
                 # 3) Copy into Megatron param if this rank received a shard
                 if local_weight is not None:
