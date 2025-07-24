@@ -428,7 +428,7 @@ class CausalLMBridge(Generic[MegatronModelT]):
         if torch.distributed.is_available() and torch.distributed.is_initialized():
             torch.distributed.barrier()
 
-    def save_megatron_model(self, model, path: str | Path, ckpt_format: str = "torch_dist") -> None:
+    def save_megatron_model(self, model, path: str | Path) -> None:
         """
         Save a Megatron model in native Megatron checkpoint format without optimizer
         state.
@@ -453,37 +453,10 @@ class CausalLMBridge(Generic[MegatronModelT]):
             - The checkpoint format follows Megatron's standard structure for compatibility
         """
         try:
-            from megatron.hub.training.checkpointing import save_checkpoint
-            from megatron.hub.training.config import CheckpointConfig, ConfigContainer, LoggerConfig
-            from megatron.hub.training.state import GlobalState
+            from megatron.hub.training.model_io import save_megatron_model
         except ImportError:
             raise ImportError("megatron.hub.training is not installed.")
-        # Get model config from the first model instance
-        model_config = get_model_config(model[0])
-
-        # Create global state for checkpointing
-        state = GlobalState()
-        state.cfg = ConfigContainer(
-            model=model_config,
-            train=None,
-            optimizer=OptimizerConfig(use_distributed_optimizer=False),
-            ddp=None,
-            scheduler=None,
-            dataset=None,
-            logger=LoggerConfig(),
-            tokenizer=None,
-            checkpoint=CheckpointConfig(async_save=False, save=str(path), save_optim=False, ckpt_format=ckpt_format),
-            dist=None,
-        )
-
-        # Save the checkpoint
-        save_checkpoint(
-            state=state,
-            model=model,
-            optimizer=None,
-            opt_param_scheduler=None,
-            num_floating_point_operations_so_far=0,
-        )
+        save_megatron_model(model, path)
 
     def load_megatron_model(self, path: str | Path, **kwargs: Unpack[GetModelKwargs]) -> list[MegatronModelT]:
         """
@@ -518,7 +491,7 @@ class CausalLMBridge(Generic[MegatronModelT]):
         """
         try:
             from megatron.hub.core.utils.instantiate_utils import instantiate
-            from megatron.hub.training.converters.common import load_mcore_model
+            from megatron.hub.training.model_io import load_megatron_model
         except ImportError:
             raise ImportError("megatron.hub.training is not installed.")
 
@@ -536,7 +509,7 @@ class CausalLMBridge(Generic[MegatronModelT]):
         model_config = instantiate(model_config)
 
         # Load the state dict
-        model = load_mcore_model(
+        model = load_megatron_model(
             checkpoint_path,
             model_cfg=model_config,
             use_cpu_init=True,
