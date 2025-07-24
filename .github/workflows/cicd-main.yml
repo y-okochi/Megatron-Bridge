@@ -127,7 +127,7 @@ jobs:
         include:
           - script: L2_Launch_training
             timeout: 60
-          - script: L2_Multi_GPU_Conversion
+          - script: L2_Multi_GPU_Conversion_TP
             timeout: 30
           - script: L2_Multi_GPU_Conversion_PP
             timeout: 30
