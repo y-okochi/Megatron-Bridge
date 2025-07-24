@@ -868,6 +868,10 @@ class AutoMapping(MegatronParamMapping[torch.Tensor]):
         """Delegate to appropriate mapping based on module type."""
         parallelism_type = self._detect_parallelism_type(megatron_module)
 
+        # layer norm weight and bias needs to be handled as replicated
+        if "layer_norm_weight" in megatron_param_name or "layer_norm_bias" in megatron_param_name:
+            parallelism_type = "replicated"
+
         if parallelism_type == "column":
             return self._column_mapping.hf_to_megatron(hf_weights, megatron_module, megatron_param_name)
         elif parallelism_type == "row":
