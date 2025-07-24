@@ -121,11 +121,11 @@ class LlamaBridge(MegatronModelBridge):
             if isinstance(hf_param, str):
                 mappings.append(AutoMapping(megatron_param=megatron_param, hf_param=hf_param))
             elif isinstance(hf_param, tuple):
-                mapping_class, hf_params = hf_param
+                mapping_class, hf_param = hf_param
                 if isinstance(hf_param, str):
                     mappings.append(mapping_class(megatron_param=megatron_param, hf_param=hf_param))
                 elif isinstance(hf_param, dict):
-                    mappings.append(mapping_class(megatron_param=megatron_param, **hf_params))
+                    mappings.append(mapping_class(megatron_param=megatron_param, **hf_param))
                 else:
                     raise TypeError(f"Unsupported hf_param type for {megatron_param}: {type(hf_param)}")
             else:

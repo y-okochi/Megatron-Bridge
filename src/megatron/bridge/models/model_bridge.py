@@ -386,7 +386,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
                     # Check shape compatibility before copying
                     if local_weights.shape != task.param_weight.shape:
                         raise ValueError(
-                            f"Shape mismatch for {task.mapping.megatron_param}:\n"
+                            f"Shape mismatch for megatron param {task.mapping.megatron_param}:\n"
                             f"  Expected shape: {task.param_weight.shape}\n"
                             f"  Got shape: {local_weights.shape}\n"
                             f"  Bridge type: {type(task.mapping).__name__}\n"
