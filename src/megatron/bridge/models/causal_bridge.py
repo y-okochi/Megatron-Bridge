@@ -453,9 +453,9 @@ class CausalLMBridge(Generic[MegatronModelT]):
             - The checkpoint format follows Megatron's standard structure for compatibility
         """
         try:
-            from megatron.hub.training.model_io import save_megatron_model
+            from megatron.bridge.training.model_load_save import save_megatron_model
         except ImportError:
-            raise ImportError("megatron.hub.training is not installed.")
+            raise ImportError("megatron.bridge.training is not available.")
         save_megatron_model(model, path)
 
     def load_megatron_model(self, path: str | Path, **kwargs: Unpack[GetModelKwargs]) -> list[MegatronModelT]:
@@ -491,9 +491,9 @@ class CausalLMBridge(Generic[MegatronModelT]):
         """
         try:
             from megatron.hub.core.utils.instantiate_utils import instantiate
-            from megatron.hub.training.model_io import load_megatron_model
+            from megatron.bridge.training.model_load_save import load_megatron_model
         except ImportError:
-            raise ImportError("megatron.hub.training is not installed.")
+            raise ImportError("megatron.bridge.training is not available.")
 
         checkpoint_path = Path(path) / "iter_0000000"
         config_file = checkpoint_path / "run_config.yaml"
