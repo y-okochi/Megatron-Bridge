@@ -1197,8 +1197,8 @@ class GatedMLPMapping(MegatronParamMapping[Dict[str, torch.Tensor]]):
         # Split the concatenated tensor in half along dim 0
         # This works for both bias (1D) and weight (2D) tensors
         gate, up = torch.chunk(fused_mlp, 2, dim=0)
-
         return {self.hf_param["gate"]: gate, self.hf_param["up"]: up}
+
 
     def resolve(self, captures: Tuple[str, ...]) -> "MegatronParamMapping":
         """Return a new *resolved* GatedMLPMapping instance."""
