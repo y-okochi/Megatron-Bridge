@@ -106,7 +106,7 @@ class WeightConversionTask(Generic[MappingT]):
 
     def hf_to_megatron(
         self,
-        weights: Union[torch.Tensor, Mapping[str, torch.Tensor]],
+        hf_weights: Union[torch.Tensor, Mapping[str, torch.Tensor]],
         megatron_module: torch.nn.Module,
     ) -> torch.Tensor:
         """Convert HuggingFace weights to Megatron format.
@@ -116,7 +116,7 @@ class WeightConversionTask(Generic[MappingT]):
         distribution, and pipeline parallel communication.
 
         Args:
-            weights: HuggingFace weights to convert (single tensor or dict of tensors).
+            hf_weights: HuggingFace weights to convert (single tensor or dict of tensors).
             megatron_module: Megatron module that owns the target parameter.
 
         Returns:
@@ -126,11 +126,11 @@ class WeightConversionTask(Generic[MappingT]):
             ValueError: If required fields for HF->Megatron conversion are missing.
         """
 
-        return self.mapping.hf_to_megatron(weights, megatron_module)
+        return self.mapping.hf_to_megatron(hf_weights, megatron_module, self.param_name)
 
     def megatron_to_hf(
         self,
-        megatron_weight: Optional[torch.Tensor],
+        megatron_weights: Optional[torch.Tensor],
         megatron_module: Optional[torch.nn.Module],
     ) -> Dict[str, torch.Tensor]:
         """Convert Megatron weights to HuggingFace format.
@@ -140,7 +140,7 @@ class WeightConversionTask(Generic[MappingT]):
         parallel broadcasting, and format transformation.
 
         Args:
-            megatron_weight: Megatron weight tensor to convert (may be None if not owned by this rank).
+            megatron_weights: Megatron weight tensor to convert (may be None if not owned by this rank).
             megatron_module: Megatron module that owns the parameter (may be None).
 
         Returns:
@@ -150,7 +150,7 @@ class WeightConversionTask(Generic[MappingT]):
             ValueError: If required fields for Megatron->HF conversion are missing.
         """
 
-        return self.mapping.megatron_to_hf(megatron_weight, megatron_module)
+        return self.mapping.megatron_to_hf(megatron_weights, megatron_module,  self.param_name)
 
 
 def _adjust_layer_number_to_global(name: str, layer_offset: int) -> str:
@@ -370,12 +370,12 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
             for task in hf_to_megatron_plans:
                 # 1) Fetch source tensor(s) from HF state dict
                 if isinstance(task.mapping.hf_param, str):
-                    hf_weight = hf_state_dict[task.mapping.hf_param]
+                    hf_weights = hf_state_dict[task.mapping.hf_param]
                 else:
-                    hf_weight = {k: hf_state_dict[v] for k, v in task.mapping.hf_param.items()}
+                    hf_weights = {k: hf_state_dict[v] for k, v in task.mapping.hf_param.items()}
 
                 # 2) Delegate conversion & distribution to the bridge
-                local_weight = task.hf_to_megatron(hf_weight, task.megatron_module)
+                local_weight = task.hf_to_megatron(hf_weights, task.megatron_module)
 
                 # 3) Copy into Megatron param if this rank received a shard
                 if local_weight is not None:
@@ -440,11 +440,11 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         for task in self._build_plan_hf_to_megatron(hf_pretrained, megatron_model):
             hf_state_dict: Mapping[str, torch.Tensor] = hf_pretrained.state
             if isinstance(task.mapping.hf_param, str):
-                hf_weight = hf_state_dict[task.mapping.hf_param]
+                hf_weights = hf_state_dict[task.mapping.hf_param]
             else:
-                hf_weight = {k: hf_state_dict[v] for k, v in task.mapping.hf_param.items()}
+                hf_weights = {k: hf_state_dict[v] for k, v in task.mapping.hf_param.items()}
 
-            local_weight = task.hf_to_megatron(hf_weight, task.megatron_module)
+            local_weight = task.hf_to_megatron(hf_weights, task.megatron_module)
             if local_weight is not None:
                 # Assert that vp_stage is not None for HF->Megatron tasks
                 yield MegatronWeightTuple(task.param_name, local_weight, task.vp_stage)
