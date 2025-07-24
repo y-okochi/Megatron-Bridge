@@ -19,7 +19,7 @@ from unittest.mock import Mock, patch, MagicMock
 import pytest
 import torch
 
-from megatron.bridge.training.model_io import (
+from megatron.bridge.training.model_load_save import (
     torch_dtype_from_mcore_config,
     megatron_cpu_init_context,
     temporary_distributed_context,
