@@ -177,7 +177,7 @@ def load_megatron_model(
             return _load_checkpoint()
 
 
-def save_megatron_model(model, path: Union[str, Path], ckpt_format: str = "torch_dist") -> None:
+def save_megatron_model(model: list[MegatronModule], path: Union[str, Path], ckpt_format: str = "torch_dist") -> None:
     """Save a Megatron model in native Megatron checkpoint format without optimizer state.
 
     This method saves the model in Megatron's native checkpoint format, which
