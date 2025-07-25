@@ -490,7 +490,7 @@ class CausalLMBridge(Generic[MegatronModelT]):
             - The model architecture must match the bridge configuration
         """
         try:
-            from megatron.hub.core.utils.instantiate_utils import instantiate
+            from megatron.bridge.utils.instantiate_utils import instantiate
             from megatron.bridge.training.model_load_save import load_megatron_model
         except ImportError:
             raise ImportError("megatron.bridge.training is not available.")
