@@ -426,7 +426,7 @@ class CausalLMBridge(Generic[MegatronModelT]):
         if torch.distributed.is_available() and torch.distributed.is_initialized():
             torch.distributed.barrier()
 
-    def save_megatron_model(self, model, path: str | Path) -> None:
+    def save_megatron_model(self, model: list[MegatronModule], path: str | Path) -> None:
         """
         Save a Megatron model in native Megatron checkpoint format without optimizer
         state.
