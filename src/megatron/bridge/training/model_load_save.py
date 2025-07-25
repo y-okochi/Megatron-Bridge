@@ -29,6 +29,7 @@ from megatron.core.utils import get_model_config
 from megatron.bridge.training.checkpointing import save_checkpoint
 from megatron.bridge.training.config import CheckpointConfig, ConfigContainer, LoggerConfig
 from megatron.bridge.training.state import GlobalState
+from megatron.bridge.models.model_provider_mixin import ModelProviderMixin
 
 
 logger = logging.getLogger(__name__)
@@ -201,6 +202,15 @@ def save_megatron_model(model: list[MegatronModule], path: Union[str, Path], ckp
     """
     # Get model config from the first model instance
     model_config = get_model_config(model[0])
+    
+    # Validate that the model config is a model provider
+    if not isinstance(model_config, ModelProviderMixin):
+        raise TypeError(
+            f"Expected model config to be an instance of ModelProviderMixin, "
+            f"but got {type(model_config).__name__}. "
+            f"Model configs must inherit from ModelProviderMixin to ensure proper "
+            f"model instantiation and configuration handling."
+        )
 
     # Create global state for checkpointing
     state = GlobalState()
@@ -216,8 +226,9 @@ def save_megatron_model(model: list[MegatronModule], path: Union[str, Path], ckp
         checkpoint=CheckpointConfig(
             async_save=False, 
             save=str(path), 
-            save_optim=False, 
-            ckpt_format=ckpt_format
+            save_optim=False,
+            save_rng=False,
+            ckpt_format=ckpt_format,
         ),
         dist=None,
     )
