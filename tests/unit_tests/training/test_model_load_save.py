@@ -19,6 +19,7 @@ from unittest.mock import Mock, patch
 import pytest
 import torch
 
+from megatron.bridge.models.model_provider_mixin import ModelProviderMixin
 from megatron.bridge.training.model_load_save import (
     dtype_from_hf,
     dtype_from_str,
@@ -28,7 +29,6 @@ from megatron.bridge.training.model_load_save import (
     temporary_distributed_context,
     torch_dtype_from_mcore_config,
 )
-from megatron.bridge.models.model_provider_mixin import ModelProviderMixin
 
 
 class TestTorchDtypeFromMcoreConfig:
@@ -127,7 +127,7 @@ class TestTemporaryDistributedContext:
         """Test temporary distributed context with gloo backend."""
         # Mock environment to not have MASTER_ADDR and MASTER_PORT
         mock_os.environ = {}
-        
+
         # Mock socket for port selection
         mock_socket_instance = Mock()
         mock_socket_instance.getsockname.return_value = ("localhost", 12345)
@@ -164,7 +164,7 @@ class TestTemporaryDistributedContext:
         """Test temporary distributed context with nccl backend."""
         # Mock environment to not have MASTER_ADDR and MASTER_PORT
         mock_os.environ = {}
-        
+
         # Mock socket for port selection
         mock_socket_instance = Mock()
         mock_socket_instance.getsockname.return_value = ("localhost", 12345)
@@ -307,11 +307,11 @@ class TestSaveMegatronModel:
         """Test saving megatron model."""
         # Setup mocks
         mock_model = Mock()
-        
+
         class MockModelConfig(ModelProviderMixin, Mock):
             def provide(self, pre_process=None, post_process=None, vp_stage=None):
                 return Mock()
-        
+
         mock_model_config = MockModelConfig()
         mock_get_model_config.return_value = mock_model_config
 
