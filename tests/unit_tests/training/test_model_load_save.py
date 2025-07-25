@@ -28,6 +28,7 @@ from megatron.bridge.training.model_load_save import (
     temporary_distributed_context,
     torch_dtype_from_mcore_config,
 )
+from megatron.bridge.models.model_provider_mixin import ModelProviderMixin
 
 
 class TestTorchDtypeFromMcoreConfig:
@@ -118,11 +119,15 @@ class TestMegatronCpuInitContext:
 class TestTemporaryDistributedContext:
     """Test temporary_distributed_context context manager."""
 
-    @patch("megatron.bridge.training.model_io.dist")
-    @patch("megatron.bridge.training.model_io.parallel_state")
-    @patch("megatron.bridge.training.model_io.socket")
-    def test_temporary_distributed_context_gloo(self, mock_socket, mock_parallel_state, mock_dist):
+    @patch("megatron.bridge.training.model_load_save.dist")
+    @patch("megatron.bridge.training.model_load_save.parallel_state")
+    @patch("megatron.bridge.training.model_load_save.socket")
+    @patch("megatron.bridge.training.model_load_save.os")
+    def test_temporary_distributed_context_gloo(self, mock_os, mock_socket, mock_parallel_state, mock_dist):
         """Test temporary distributed context with gloo backend."""
+        # Mock environment to not have MASTER_ADDR and MASTER_PORT
+        mock_os.environ = {}
+        
         # Mock socket for port selection
         mock_socket_instance = Mock()
         mock_socket_instance.getsockname.return_value = ("localhost", 12345)
@@ -138,9 +143,9 @@ class TestTemporaryDistributedContext:
         mock_parallel_state.destroy_model_parallel.assert_called_once()
         mock_dist.destroy_process_group.assert_called_once()
 
-    @patch("megatron.bridge.training.model_io.dist")
-    @patch("megatron.bridge.training.model_io.parallel_state")
-    @patch("megatron.bridge.training.model_io.os")
+    @patch("megatron.bridge.training.model_load_save.dist")
+    @patch("megatron.bridge.training.model_load_save.parallel_state")
+    @patch("megatron.bridge.training.model_load_save.os")
     def test_temporary_distributed_context_with_env_vars(self, mock_os, mock_parallel_state, mock_dist):
         """Test temporary distributed context when env vars are already set."""
         mock_os.environ = {"MASTER_ADDR": "localhost", "MASTER_PORT": "12345"}
@@ -150,12 +155,16 @@ class TestTemporaryDistributedContext:
 
         mock_dist.init_process_group.assert_called_once_with(backend="gloo", init_method=None, world_size=1, rank=0)
 
-    @patch("megatron.bridge.training.model_io.dist")
-    @patch("megatron.bridge.training.model_io.parallel_state")
-    @patch("megatron.bridge.training.model_io.socket")
+    @patch("megatron.bridge.training.model_load_save.dist")
+    @patch("megatron.bridge.training.model_load_save.parallel_state")
+    @patch("megatron.bridge.training.model_load_save.socket")
+    @patch("megatron.bridge.training.model_load_save.os")
     @patch("megatron.core.tensor_parallel.model_parallel_cuda_manual_seed")
-    def test_temporary_distributed_context_nccl(self, mock_seed, mock_socket, mock_parallel_state, mock_dist):
+    def test_temporary_distributed_context_nccl(self, mock_seed, mock_os, mock_socket, mock_parallel_state, mock_dist):
         """Test temporary distributed context with nccl backend."""
+        # Mock environment to not have MASTER_ADDR and MASTER_PORT
+        mock_os.environ = {}
+        
         # Mock socket for port selection
         mock_socket_instance = Mock()
         mock_socket_instance.getsockname.return_value = ("localhost", 12345)
@@ -168,15 +177,18 @@ class TestTemporaryDistributedContext:
             backend="nccl", init_method="tcp://localhost:12345", world_size=1, rank=0
         )
         mock_seed.assert_called_once_with(0)
+        mock_parallel_state.initialize_model_parallel.assert_called_once()
+        mock_parallel_state.destroy_model_parallel.assert_called_once()
+        mock_dist.destroy_process_group.assert_called_once()
 
 
 class TestLoadMegatronModel:
     """Test load_megatron_model function."""
 
-    @patch("megatron.bridge.training.model_io.temporary_distributed_context")
-    @patch("megatron.bridge.training.model_io.TorchDistLoadShardedStrategy")
-    @patch("megatron.bridge.training.model_io.megatron_cpu_init_context")
-    @patch("megatron.bridge.training.model_io.dist")
+    @patch("megatron.bridge.training.model_load_save.temporary_distributed_context")
+    @patch("megatron.bridge.training.model_load_save.TorchDistLoadShardedStrategy")
+    @patch("megatron.bridge.training.model_load_save.megatron_cpu_init_context")
+    @patch("megatron.bridge.training.model_load_save.dist")
     def test_load_megatron_model_return_state_dict(
         self, mock_dist, mock_cpu_context, mock_strategy_class, mock_temp_dist
     ):
@@ -210,10 +222,10 @@ class TestLoadMegatronModel:
         mock_cpu_context.assert_called_once()
         mock_strategy.load.assert_called_once()
 
-    @patch("megatron.bridge.training.model_io.temporary_distributed_context")
-    @patch("megatron.bridge.training.model_io.TorchDistLoadShardedStrategy")
-    @patch("megatron.bridge.training.model_io.megatron_cpu_init_context")
-    @patch("megatron.bridge.training.model_io.dist")
+    @patch("megatron.bridge.training.model_load_save.temporary_distributed_context")
+    @patch("megatron.bridge.training.model_load_save.TorchDistLoadShardedStrategy")
+    @patch("megatron.bridge.training.model_load_save.megatron_cpu_init_context")
+    @patch("megatron.bridge.training.model_load_save.dist")
     def test_load_megatron_model_return_model(self, mock_dist, mock_cpu_context, mock_strategy_class, mock_temp_dist):
         """Test loading model and returning model instance."""
         # Setup mocks
@@ -244,7 +256,7 @@ class TestLoadMegatronModel:
         assert result == mock_model
         mock_model.load_state_dict.assert_called_once()
 
-    @patch("megatron.bridge.training.model_io.dist")
+    @patch("megatron.bridge.training.model_load_save.dist")
     def test_load_megatron_model_skip_temp_dist_context(self, mock_dist):
         """Test loading model when distributed is already initialized."""
         mock_dist.is_available.return_value = True
@@ -258,12 +270,12 @@ class TestLoadMegatronModel:
         mock_config.provide.return_value = mock_model
         mock_config.use_cpu_initialization = False
 
-        with patch("megatron.bridge.training.model_io.TorchDistLoadShardedStrategy") as mock_strategy_class:
+        with patch("megatron.bridge.training.model_load_save.TorchDistLoadShardedStrategy") as mock_strategy_class:
             mock_strategy = Mock()
             mock_strategy.load.return_value = {"layer.weight": torch.randn(2, 2)}
             mock_strategy_class.return_value = mock_strategy
 
-            with patch("megatron.bridge.training.model_io.megatron_cpu_init_context"):
+            with patch("megatron.bridge.training.model_load_save.megatron_cpu_init_context"):
                 with tempfile.TemporaryDirectory() as temp_dir:
                     result = load_megatron_model(
                         dist_ckpt_folder=Path(temp_dir), model_cfg=mock_config, use_cpu_init=True
@@ -275,13 +287,13 @@ class TestLoadMegatronModel:
 class TestSaveMegatronModel:
     """Test save_megatron_model function."""
 
-    @patch("megatron.bridge.training.model_io.save_checkpoint")
-    @patch("megatron.bridge.training.model_io.get_model_config")
-    @patch("megatron.bridge.training.model_io.GlobalState")
-    @patch("megatron.bridge.training.model_io.ConfigContainer")
-    @patch("megatron.bridge.training.model_io.OptimizerConfig")
-    @patch("megatron.bridge.training.model_io.LoggerConfig")
-    @patch("megatron.bridge.training.model_io.CheckpointConfig")
+    @patch("megatron.bridge.training.model_load_save.save_checkpoint")
+    @patch("megatron.bridge.training.model_load_save.get_model_config")
+    @patch("megatron.bridge.training.model_load_save.GlobalState")
+    @patch("megatron.bridge.training.model_load_save.ConfigContainer")
+    @patch("megatron.bridge.training.model_load_save.OptimizerConfig")
+    @patch("megatron.bridge.training.model_load_save.LoggerConfig")
+    @patch("megatron.bridge.training.model_load_save.CheckpointConfig")
     def test_save_megatron_model(
         self,
         mock_ckpt_config,
@@ -295,7 +307,12 @@ class TestSaveMegatronModel:
         """Test saving megatron model."""
         # Setup mocks
         mock_model = Mock()
-        mock_model_config = Mock()
+        
+        class MockModelConfig(ModelProviderMixin, Mock):
+            def provide(self, pre_process=None, post_process=None, vp_stage=None):
+                return Mock()
+        
+        mock_model_config = MockModelConfig()
         mock_get_model_config.return_value = mock_model_config
 
         mock_state = Mock()

@@ -111,9 +111,8 @@ def temporary_distributed_context(backend: str = "gloo") -> Generator[None, None
     try:
         yield
     finally:
-        if backend == "gloo":
-            parallel_state.destroy_model_parallel()
-            dist.destroy_process_group()
+        parallel_state.destroy_model_parallel()
+        dist.destroy_process_group()
 
 
 def load_megatron_model(
