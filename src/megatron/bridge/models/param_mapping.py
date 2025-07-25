@@ -650,6 +650,54 @@ class RowParallelMapping(MegatronParamMapping[torch.Tensor]):
         return {str(self.hf_param): merged}
 
 
+
+class ReplicatedMapping(MegatronParamMapping[torch.Tensor]):
+    """Mapping for weights that are **fully replicated** across TP ranks.
+
+    Examples: layer-norm scales, biases, router weights in MoE, etc.
+
+    These tensors exist in exactly the same form on *every* TP rank, so the
+    mapping logic is trivial – but we still need to broadcast across TP ranks
+    during *load* (HF → Megatron) and ensure we do **not** emit duplicates
+    during *export* (Megatron → HF).
+    """
+
+    def hf_to_megatron(
+        self,
+        hf_weights: torch.Tensor,
+        megatron_module: nn.Module,
+        megatron_param_name: Optional[str] = None,
+    ) -> torch.Tensor:
+        """Replicate weight to all TP ranks."""
+        target_device = megatron_module.weight.device
+        hf_weights = hf_weights.to(device=target_device)
+        if self.tp_size == 1:
+            return hf_weights
+
+        # All ranks need the full weight
+        if self.tp_rank > 0:
+            # Create empty tensor of correct shape
+            hf_weights = torch.empty_like(hf_weights)
+
+        # Broadcast from rank 0 to all TP ranks
+        return self.broadcast_tensor_to_tp_ranks(hf_weights, src_rank=0)
+
+    def megatron_to_hf(
+        self,
+        megatron_weights: Optional[torch.Tensor],
+        megatron_module: Optional[nn.Module],
+        megatron_param_name: Optional[str] = None,
+    ) -> Dict[str, torch.Tensor]:
+        """Return weight only from rank 0 to avoid duplication."""
+        # Handle cross-PP broadcast
+        megatron_weights = self.broadcast_from_pp_rank(megatron_weights)
+
+        if megatron_weights is None:
+            return {}
+
+        return {str(self.hf_param): megatron_weights}
+
+
 class AutoMapping(MegatronParamMapping[torch.Tensor]):
     """
     Smart mapping that automatically detects and applies the correct parallelism strategy.
@@ -745,7 +793,7 @@ class AutoMapping(MegatronParamMapping[torch.Tensor]):
         # Create delegate mappings
         self._column_mapping = ColumnParallelMapping(megatron_param, hf_param)
         self._row_mapping = RowParallelMapping(megatron_param, hf_param)
-        self._replicated_mapping = DirectMapping(megatron_param, hf_param)
+        self._replicated_mapping = ReplicatedMapping(megatron_param, hf_param)
 
     def _detect_parallelism_type(self, module: nn.Module, megatron_param_name: str) -> str:
         """Detect parallelism type from module."""
