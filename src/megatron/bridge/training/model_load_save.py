@@ -26,9 +26,9 @@ from megatron.core.dist_checkpointing.strategies.torch import TorchDistLoadShard
 from megatron.core.optimizer import OptimizerConfig
 from megatron.core.utils import get_model_config
 
-from megatron.hub.training.checkpointing import save_checkpoint
-from megatron.hub.training.config import CheckpointConfig, ConfigContainer, LoggerConfig
-from megatron.hub.training.state import GlobalState
+from megatron.bridge.training.checkpointing import save_checkpoint
+from megatron.bridge.training.config import CheckpointConfig, ConfigContainer, LoggerConfig
+from megatron.bridge.training.state import GlobalState
 
 
 logger = logging.getLogger(__name__)
