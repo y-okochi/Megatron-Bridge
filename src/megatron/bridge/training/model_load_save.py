@@ -24,6 +24,7 @@ import torch.distributed as dist
 from megatron.core import parallel_state
 from megatron.core.dist_checkpointing.strategies.torch import TorchDistLoadShardedStrategy
 from megatron.core.optimizer import OptimizerConfig
+from megatron.core.transformer import MegatronModule
 from megatron.core.utils import get_model_config
 
 from megatron.bridge.models.model_provider_mixin import ModelProviderMixin
