@@ -14,19 +14,19 @@
 
 import tempfile
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 
 import pytest
 import torch
 
 from megatron.bridge.training.model_load_save import (
-    torch_dtype_from_mcore_config,
-    megatron_cpu_init_context,
-    temporary_distributed_context,
-    load_megatron_model,
-    save_megatron_model,
-    dtype_from_str,
     dtype_from_hf,
+    dtype_from_str,
+    load_megatron_model,
+    megatron_cpu_init_context,
+    save_megatron_model,
+    temporary_distributed_context,
+    torch_dtype_from_mcore_config,
 )
 
 
@@ -38,7 +38,7 @@ class TestTorchDtypeFromMcoreConfig:
         config = Mock()
         config.bf16 = True
         config.fp16 = False
-        
+
         result = torch_dtype_from_mcore_config(config)
         assert result == torch.bfloat16
 
@@ -47,7 +47,7 @@ class TestTorchDtypeFromMcoreConfig:
         config = Mock()
         config.bf16 = False
         config.fp16 = True
-        
+
         result = torch_dtype_from_mcore_config(config)
         assert result == torch.float16
 
@@ -56,14 +56,14 @@ class TestTorchDtypeFromMcoreConfig:
         config = Mock()
         config.bf16 = False
         config.fp16 = False
-        
+
         result = torch_dtype_from_mcore_config(config)
         assert result == torch.float32
 
     def test_torch_dtype_from_mcore_config_no_attributes(self):
         """Test configuration without bf16/fp16 attributes defaults to fp32."""
         config = Mock(spec=[])  # Mock with no attributes
-        
+
         result = torch_dtype_from_mcore_config(config)
         assert result == torch.float32
 
@@ -72,7 +72,7 @@ class TestTorchDtypeFromMcoreConfig:
         config = Mock()
         config.bf16 = True
         config.fp16 = True
-        
+
         result = torch_dtype_from_mcore_config(config)
         assert result == torch.bfloat16
 
@@ -84,34 +84,34 @@ class TestMegatronCpuInitContext:
         """Test that the context manager preserves original use_cpu_initialization value."""
         config = Mock()
         config.use_cpu_initialization = False
-        
+
         with megatron_cpu_init_context(config):
             assert config.use_cpu_initialization is True
-        
+
         assert config.use_cpu_initialization is False
 
     def test_megatron_cpu_init_context_with_already_true(self):
         """Test context manager when use_cpu_initialization is already True."""
         config = Mock()
         config.use_cpu_initialization = True
-        
+
         with megatron_cpu_init_context(config):
             assert config.use_cpu_initialization is True
-        
+
         assert config.use_cpu_initialization is True
 
     def test_megatron_cpu_init_context_exception_handling(self):
         """Test that the context manager restores value even when exception occurs."""
         config = Mock()
         config.use_cpu_initialization = False
-        
+
         try:
             with megatron_cpu_init_context(config):
                 assert config.use_cpu_initialization is True
                 raise ValueError("Test exception")
         except ValueError:
             pass
-        
+
         assert config.use_cpu_initialization is False
 
 
@@ -127,10 +127,10 @@ class TestTemporaryDistributedContext:
         mock_socket_instance = Mock()
         mock_socket_instance.getsockname.return_value = ("localhost", 12345)
         mock_socket.socket.return_value.__enter__.return_value = mock_socket_instance
-        
+
         with temporary_distributed_context(backend="gloo"):
             pass
-        
+
         mock_dist.init_process_group.assert_called_once_with(
             backend="gloo", init_method="tcp://localhost:12345", world_size=1, rank=0
         )
@@ -144,13 +144,11 @@ class TestTemporaryDistributedContext:
     def test_temporary_distributed_context_with_env_vars(self, mock_os, mock_parallel_state, mock_dist):
         """Test temporary distributed context when env vars are already set."""
         mock_os.environ = {"MASTER_ADDR": "localhost", "MASTER_PORT": "12345"}
-        
+
         with temporary_distributed_context(backend="gloo"):
             pass
-        
-        mock_dist.init_process_group.assert_called_once_with(
-            backend="gloo", init_method=None, world_size=1, rank=0
-        )
+
+        mock_dist.init_process_group.assert_called_once_with(backend="gloo", init_method=None, world_size=1, rank=0)
 
     @patch("megatron.bridge.training.model_io.dist")
     @patch("megatron.bridge.training.model_io.parallel_state")
@@ -162,10 +160,10 @@ class TestTemporaryDistributedContext:
         mock_socket_instance = Mock()
         mock_socket_instance.getsockname.return_value = ("localhost", 12345)
         mock_socket.socket.return_value.__enter__.return_value = mock_socket_instance
-        
+
         with temporary_distributed_context(backend="nccl"):
             pass
-        
+
         mock_dist.init_process_group.assert_called_once_with(
             backend="nccl", init_method="tcp://localhost:12345", world_size=1, rank=0
         )
@@ -179,35 +177,34 @@ class TestLoadMegatronModel:
     @patch("megatron.bridge.training.model_io.TorchDistLoadShardedStrategy")
     @patch("megatron.bridge.training.model_io.megatron_cpu_init_context")
     @patch("megatron.bridge.training.model_io.dist")
-    def test_load_megatron_model_return_state_dict(self, mock_dist, mock_cpu_context, mock_strategy_class, mock_temp_dist):
+    def test_load_megatron_model_return_state_dict(
+        self, mock_dist, mock_cpu_context, mock_strategy_class, mock_temp_dist
+    ):
         """Test loading model and returning state dict."""
         # Setup mocks
         mock_dist.is_available.return_value = False
         mock_dist.is_initialized.return_value = False
-        
+
         mock_model = Mock()
         mock_model.sharded_state_dict.return_value = {"layer.weight": torch.randn(2, 2)}
-        
+
         mock_config = Mock()
         mock_config.params_dtype = torch.float32
         mock_config.bf16 = True
         mock_config.fp16 = False
         mock_config.provide.return_value = mock_model
         mock_config.use_cpu_initialization = False
-        
+
         mock_strategy = Mock()
         mock_strategy.load.return_value = {"layer.weight": torch.randn(2, 2)}
         mock_strategy_class.return_value = mock_strategy
-        
+
         # Test
         with tempfile.TemporaryDirectory() as temp_dir:
             result = load_megatron_model(
-                dist_ckpt_folder=Path(temp_dir),
-                model_cfg=mock_config,
-                return_state_dict=True,
-                use_cpu_init=True
+                dist_ckpt_folder=Path(temp_dir), model_cfg=mock_config, return_state_dict=True, use_cpu_init=True
             )
-        
+
         # Assertions
         assert isinstance(result, dict)
         mock_cpu_context.assert_called_once()
@@ -222,30 +219,27 @@ class TestLoadMegatronModel:
         # Setup mocks
         mock_dist.is_available.return_value = False
         mock_dist.is_initialized.return_value = False
-        
+
         mock_model = Mock()
         mock_model.sharded_state_dict.return_value = {"layer.weight": torch.randn(2, 2)}
-        
+
         mock_config = Mock()
         mock_config.params_dtype = torch.float32
         mock_config.bf16 = False
         mock_config.fp16 = False
         mock_config.provide.return_value = mock_model
         mock_config.use_cpu_initialization = False
-        
+
         mock_strategy = Mock()
         mock_strategy.load.return_value = {"layer.weight": torch.randn(2, 2)}
         mock_strategy_class.return_value = mock_strategy
-        
+
         # Test
         with tempfile.TemporaryDirectory() as temp_dir:
             result = load_megatron_model(
-                dist_ckpt_folder=Path(temp_dir),
-                model_cfg=mock_config,
-                return_state_dict=False,
-                use_cpu_init=True
+                dist_ckpt_folder=Path(temp_dir), model_cfg=mock_config, return_state_dict=False, use_cpu_init=True
             )
-        
+
         # Assertions
         assert result == mock_model
         mock_model.load_state_dict.assert_called_once()
@@ -255,7 +249,7 @@ class TestLoadMegatronModel:
         """Test loading model when distributed is already initialized."""
         mock_dist.is_available.return_value = True
         mock_dist.is_initialized.return_value = True
-        
+
         mock_model = Mock()
         mock_config = Mock()
         mock_config.params_dtype = torch.bfloat16
@@ -263,20 +257,18 @@ class TestLoadMegatronModel:
         mock_config.fp16 = False
         mock_config.provide.return_value = mock_model
         mock_config.use_cpu_initialization = False
-        
+
         with patch("megatron.bridge.training.model_io.TorchDistLoadShardedStrategy") as mock_strategy_class:
             mock_strategy = Mock()
             mock_strategy.load.return_value = {"layer.weight": torch.randn(2, 2)}
             mock_strategy_class.return_value = mock_strategy
-            
+
             with patch("megatron.bridge.training.model_io.megatron_cpu_init_context"):
                 with tempfile.TemporaryDirectory() as temp_dir:
                     result = load_megatron_model(
-                        dist_ckpt_folder=Path(temp_dir),
-                        model_cfg=mock_config,
-                        use_cpu_init=True
+                        dist_ckpt_folder=Path(temp_dir), model_cfg=mock_config, use_cpu_init=True
                     )
-        
+
         assert result == mock_model
 
 
@@ -290,22 +282,29 @@ class TestSaveMegatronModel:
     @patch("megatron.bridge.training.model_io.OptimizerConfig")
     @patch("megatron.bridge.training.model_io.LoggerConfig")
     @patch("megatron.bridge.training.model_io.CheckpointConfig")
-    def test_save_megatron_model(self, mock_ckpt_config, mock_logger_config, mock_opt_config, 
-                                 mock_config_container, mock_global_state, mock_get_model_config, 
-                                 mock_save_checkpoint):
+    def test_save_megatron_model(
+        self,
+        mock_ckpt_config,
+        mock_logger_config,
+        mock_opt_config,
+        mock_config_container,
+        mock_global_state,
+        mock_get_model_config,
+        mock_save_checkpoint,
+    ):
         """Test saving megatron model."""
         # Setup mocks
         mock_model = Mock()
         mock_model_config = Mock()
         mock_get_model_config.return_value = mock_model_config
-        
+
         mock_state = Mock()
         mock_global_state.return_value = mock_state
-        
+
         # Test
         with tempfile.TemporaryDirectory() as temp_dir:
             save_megatron_model([mock_model], temp_dir, ckpt_format="torch_dist")
-        
+
         # Assertions
         mock_get_model_config.assert_called_once_with(mock_model)
         mock_global_state.assert_called_once()
@@ -358,7 +357,7 @@ class TestDtypeFromHf:
         """Test extracting torch.dtype from HF config with torch.dtype attribute."""
         config = Mock()
         config.torch_dtype = torch.bfloat16
-        
+
         result = dtype_from_hf(config)
         assert result == torch.bfloat16
 
@@ -366,14 +365,14 @@ class TestDtypeFromHf:
         """Test extracting torch.dtype from HF config with string attribute."""
         config = Mock()
         config.torch_dtype = "fp16"
-        
+
         result = dtype_from_hf(config)
         assert result == torch.float16
 
     def test_dtype_from_hf_missing_attribute(self):
         """Test error when HF config missing torch_dtype attribute."""
         config = Mock(spec=[])  # Mock with no attributes
-        
+
         with pytest.raises(AttributeError, match="Expected config to have attr `torch_dtype`"):
             dtype_from_hf(config)
 
@@ -381,6 +380,6 @@ class TestDtypeFromHf:
         """Test error when torch_dtype is neither string nor torch.dtype."""
         config = Mock()
         config.torch_dtype = 123
-        
+
         with pytest.raises(ValueError, match="torch_dtype is not of type str/torch.dtype"):
-            dtype_from_hf(config) 
+            dtype_from_hf(config)

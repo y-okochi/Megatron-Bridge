@@ -26,10 +26,10 @@ from megatron.core.dist_checkpointing.strategies.torch import TorchDistLoadShard
 from megatron.core.optimizer import OptimizerConfig
 from megatron.core.utils import get_model_config
 
+from megatron.bridge.models.model_provider_mixin import ModelProviderMixin
 from megatron.bridge.training.checkpointing import save_checkpoint
 from megatron.bridge.training.config import CheckpointConfig, ConfigContainer, LoggerConfig
 from megatron.bridge.training.state import GlobalState
-from megatron.bridge.models.model_provider_mixin import ModelProviderMixin
 
 
 logger = logging.getLogger(__name__)
@@ -68,7 +68,7 @@ def megatron_cpu_init_context(config: Any) -> Generator[None, None, None]:
     """
     original_use_cpu_initialization = config.use_cpu_initialization
     config.use_cpu_initialization = True
-    
+
     try:
         yield
     finally:
@@ -101,11 +101,12 @@ def temporary_distributed_context(backend: str = "gloo") -> Generator[None, None
 
     dist.init_process_group(backend=backend, init_method=init_method, world_size=1, rank=0)
     parallel_state.initialize_model_parallel()
-    
+
     if backend == "nccl":
         from megatron.core.tensor_parallel import model_parallel_cuda_manual_seed
+
         model_parallel_cuda_manual_seed(0)
-    
+
     try:
         yield
     finally:
@@ -202,7 +203,7 @@ def save_megatron_model(model: list[MegatronModule], path: Union[str, Path], ckp
     """
     # Get model config from the first model instance
     model_config = get_model_config(model[0])
-    
+
     # Validate that the model config is a model provider
     if not isinstance(model_config, ModelProviderMixin):
         raise TypeError(
@@ -224,8 +225,8 @@ def save_megatron_model(model: list[MegatronModule], path: Union[str, Path], ckp
         logger=LoggerConfig(),
         tokenizer=None,
         checkpoint=CheckpointConfig(
-            async_save=False, 
-            save=str(path), 
+            async_save=False,
+            save=str(path),
             save_optim=False,
             save_rng=False,
             ckpt_format=ckpt_format,
@@ -257,7 +258,7 @@ def dtype_from_str(dtype: str) -> torch.dtype:
     """
     if not isinstance(dtype, str):
         raise TypeError(f"Expected str, got {type(dtype)}")
-        
+
     if dtype in ("float16", "fp16", "16", "16-mixed"):
         return torch.float16
     elif dtype in ("bfloat16", "bf16-mixed"):
@@ -281,13 +282,12 @@ def dtype_from_hf(config: Any) -> torch.dtype:
     """
     if not hasattr(config, "torch_dtype"):
         raise AttributeError("Expected config to have attr `torch_dtype`")
-        
+
     torch_dtype = config.torch_dtype
-    
+
     if isinstance(torch_dtype, torch.dtype):
         return torch_dtype
     elif isinstance(torch_dtype, str):
         return dtype_from_str(torch_dtype)
     else:
         raise ValueError(f"torch_dtype is not of type str/torch.dtype, got {type(torch_dtype)}")
-
