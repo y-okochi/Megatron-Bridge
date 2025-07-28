@@ -980,7 +980,8 @@ def _load_checkpoint_from_path(
         if ckpt_tp_pp != run_tp_pp:
             print_rank_0("{}: RNG state will be ignored".format(mismatch_msg))
 
-    sharded_sd_metadata = dist_checkpointing.load_content_metadata(preloaded_state_dict=state_dict)
+    # sharded_sd_metadata = dist_checkpointing.load_content_metadata(preloaded_state_dict=state_dict)
+    sharded_sd_metadata = None
     print_rank_0(f"sharded_state_dict metadata loaded from the checkpoint: {sharded_sd_metadata}")
     # Determine if optimizer state will be loaded
     if (

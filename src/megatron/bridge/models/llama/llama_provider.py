@@ -55,6 +55,7 @@ class LlamaModelProvider(GPTModelProvider):
     bias_dropout_fusion: bool = field(default_factory=fusions.can_enable_bias_dropout_fusion)
     apply_rope_fusion: bool = field(default_factory=fusions.can_enable_apply_rope_fusion)
     use_transformer_engine_op_fuser: Optional[bool] = None
+    persist_layer_norm: bool = False
 
 
 @dataclass
@@ -143,7 +144,6 @@ class Llama31ModelProvider(Llama3ModelProvider):
     high_freq_factor: float = 4.0
     old_context_len: int = 8192
     init_method_std: float = 0.02
-    persist_layer_norm: bool = False
 
     def provide(self, pre_process=None, post_process=None, vp_stage=None, tokenizer=None) -> "MCoreGPTModel":
         """Configure and instantiate a Megatron Core Llama 3.1 model.
