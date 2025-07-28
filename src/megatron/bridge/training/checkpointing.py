@@ -513,8 +513,8 @@ def save_checkpoint(
         opt_param_scheduler,
         rng_state,
         iteration=train_state.step,
-        optim_sd_kwargs=dict(metadata=sharded_sd_metadata),
-        model_sd_kwargs=dict(metadata=sharded_sd_metadata),
+        optim_sd_kwargs=dict(),
+        model_sd_kwargs=dict(),
         rerun_state=rerun_state,
     )
 
@@ -1019,8 +1019,8 @@ def _load_checkpoint_from_path(
         gen_sd_optim = None
         gen_sd_opt_param_scheduler = None
 
-    optim_sd_kwargs = dict(metadata=sharded_sd_metadata, is_loading=True)
-    model_sd_kwargs = dict(metadata=sharded_sd_metadata)
+    optim_sd_kwargs = dict(is_loading=True)
+    model_sd_kwargs = dict()
 
     # Determine if rerun state will be loaded
     if ckpt_tp_pp == run_tp_pp and not release and not cfg.checkpoint.finetune and "rerun_state_machine" in state_dict:
