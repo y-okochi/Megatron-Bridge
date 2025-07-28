@@ -229,7 +229,7 @@ class GPTModelProvider(TransformerConfig, ModelProviderMixin[MCoreGPTModel]):
                 post_process=post_process
                 or parallel_state.is_pipeline_last_stage(ignore_virtual=False, vp_stage=vp_stage),
                 scatter_embedding_sequence_parallel=self.scatter_embedding_sequence_parallel,
-                vp_stage=vp_stage,
+                # vp_stage=vp_stage,
                 **kwargs,
             )
 
