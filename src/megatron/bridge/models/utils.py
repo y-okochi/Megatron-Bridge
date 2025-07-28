@@ -56,12 +56,11 @@ def weights_verification_table(bridge, megatron_model) -> Table:
 # Update argument to able to take in pipeline_rank
 def get_transformer_layer_offset(config: TransformerConfig, pipeline_rank: int = 0, vp_stage: Optional[int] = None):
     """Get the index offset of current pipeline stage, given the level of pipelining."""
-    from megatron.core.transformer.enums import LayerType
 
     if config.pipeline_model_parallel_size > 1:
         if config.pipeline_model_parallel_layout:
             offset = config.pipeline_model_parallel_layout.get_layer_offset(
-                layer_type=LayerType.decoder, vp_stage=vp_stage
+                vp_stage=vp_stage
             )
         elif (
             config.num_layers_in_first_pipeline_stage is not None
