@@ -563,7 +563,7 @@ def save_checkpoint(
             async_sharded_save=ckpt_cfg.async_save,
             validate_access_integrity=validate_sharding_integrity,
             preprocess_common_before_consistancy_check=preprocess_common_state_dict_fn,
-            content_metadata=sharded_sd_metadata,
+            # content_metadata=sharded_sd_metadata,
         )
         # [ModelOpt]: save sharded modelopt_state
         if has_nvidia_modelopt:
