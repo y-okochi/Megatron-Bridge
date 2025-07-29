@@ -81,7 +81,7 @@ class LlamaBridge(MegatronModelBridge):
     def mapping_registry(self) -> MegatronMappingRegistry:
         # Return MegatronMappingRegistry containing parameter mappings from HF to Megatron format
         # First create simple 1:1 parameter mappings using a dictionary for readability
-        
+
         # Dictionary maps HF parameter names -> Megatron parameter names
         # Supports wildcard (*) patterns for layer-specific parameters
         param_mappings = {
