@@ -11,27 +11,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Megatron Bridge - A component of the Megatron ecosystem."""
 
-from megatron.bridge.models.auto_bridge import AutoBridge
-from megatron.bridge.package_info import (
-    __contact_emails__,
-    __contact_names__,
-    __download_url__,
-    __homepage__,
-    __package_name__,
-    __repository_url__,
-    __version__,
-)
+#!/bin/bash
+set -xeuo pipefail # Exit immediately if a command exits with a non-zero status
 
+export CUDA_VISIBLE_DEVICES="0,1"
 
-__all__ = [
-    "__version__",
-    "__package_name__",
-    "__contact_names__",
-    "__contact_emails__",
-    "__homepage__",
-    "__repository_url__",
-    "__download_url__",
-    "AutoBridge",
-]
+coverage run --data-file=/workspace/.coverage --source=/workspace/ --parallel-mode -m pytest -o log_cli=true -o log_cli_level=INFO -v -s -x -m "not pleasefixme" --tb=short tests/functional_tests/converter
+coverage combine 
