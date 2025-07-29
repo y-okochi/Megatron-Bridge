@@ -776,9 +776,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         model_config = unwrap_model(megatron_model)[0].config
         pp_rank = mpu.get_pipeline_model_parallel_rank()
         for vp_stage, model in enumerate(megatron_model):
-            layer_offset = get_transformer_layer_offset(
-                model_config, pipeline_rank=pp_rank, vp_stage=vp_stage
-            )
+            layer_offset = get_transformer_layer_offset(model_config, pipeline_rank=pp_rank, vp_stage=vp_stage)
             for local_name, _ in model.named_parameters():
                 if "_extra_state" in local_name:
                     continue
@@ -806,9 +804,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
                         )
                         continue
 
-                local_module, local_weights = self._get_param_and_module_from_vp(
-                    megatron_model, vp_stage, local_name
-                )
+                local_module, local_weights = self._get_param_and_module_from_vp(megatron_model, vp_stage, local_name)
 
                 yield WeightConversionTask(
                     pp_rank=pp_rank,

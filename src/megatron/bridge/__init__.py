@@ -24,6 +24,7 @@ from megatron.bridge.package_info import (
     __version__,
 )
 
+
 __all__ = [
     "__version__",
     "__package_name__",

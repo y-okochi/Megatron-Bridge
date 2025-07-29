@@ -15,15 +15,13 @@
 import dataclasses
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Generic, Iterable, Literal, Type, TypeVar, Union, overload
+from typing import TYPE_CHECKING, Any, Generic, Iterable, Type, TypeVar, Union
 
 import torch.distributed
 import transformers
 import yaml
-from megatron.core.optimizer import OptimizerConfig
 from megatron.core.transformer.module import MegatronModule
 from megatron.core.transformer.transformer_config import MLATransformerConfig, TransformerConfig
-from megatron.core.utils import get_model_config
 from transformers import AutoConfig
 from transformers.configuration_utils import PretrainedConfig
 from typing_extensions import Unpack
