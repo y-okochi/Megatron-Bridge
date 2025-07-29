@@ -420,7 +420,7 @@ class AutoBridge(Generic[MegatronModelT]):
             torch.distributed.barrier()
         dispatch_instance = (self._get_causal_lm_architecture(), self._get_model_instance(model))
         generator = model_bridge.stream_weights_megatron_to_hf(
-            dispatch_instance, model, self.hf_pretrained, order="safetensors", cpu=True, show_progress=show_progress
+            dispatch_instance, model, self.hf_pretrained, cpu=True, show_progress=show_progress
         )
 
         # Check if the state source is SafeTensorsStateSource for streaming save.
