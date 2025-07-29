@@ -71,6 +71,8 @@ class TestMultiGPUConversion:
                 str(pp),
             ]
 
+            print("Running:", " ".join(cmd))
+
             result = subprocess.run(
                 cmd, capture_output=True, text=True, cwd=Path(__file__).parent.parent.parent.parent
             )

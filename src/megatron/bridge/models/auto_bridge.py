@@ -105,6 +105,7 @@ class AutoBridge(Generic[MegatronModelT]):
         supported = []
 
         # Access the dispatch registry to find all registered types
+
         if hasattr(model_bridge.get_model_bridge, "_exact_types"):
             for arch_type in model_bridge.get_model_bridge._exact_types.keys():
                 if hasattr(arch_type, "__name__"):
@@ -307,6 +308,8 @@ class AutoBridge(Generic[MegatronModelT]):
             pre_trained = PreTrainedCausalLM.from_pretrained(hf_path)
         self._model_bridge.load_weights_hf_to_megatron(model, pre_trained)
 
+        return model
+
     def export_hf_weights(
         self,
         model: list[MegatronModelT],
@@ -433,7 +436,7 @@ class AutoBridge(Generic[MegatronModelT]):
         if torch.distributed.is_available() and torch.distributed.is_initialized():
             torch.distributed.barrier()
 
-    def save_megatron_model(self, model: list[MegatronModelT], path: str | Path, ckpt_format: str = "torch_dist") -> None:
+    def save_megatron_model(self, model: list[MegatronModule], path: str | Path) -> None:
         """
         Save a Megatron model in native Megatron checkpoint format without optimizer
         state.
@@ -458,37 +461,10 @@ class AutoBridge(Generic[MegatronModelT]):
             - The checkpoint format follows Megatron's standard structure for compatibility
         """
         try:
-            from megatron.hub.training.checkpointing import save_checkpoint
-            from megatron.hub.training.config import CheckpointConfig, ConfigContainer, LoggerConfig
-            from megatron.hub.training.state import GlobalState
+            from megatron.bridge.training.model_load_save import save_megatron_model
         except ImportError:
-            raise ImportError("megatron.hub.training is not installed.")
-        # Get model config from the first model instance
-        model_config = get_model_config(model[0])
-
-        # Create global state for checkpointing
-        state = GlobalState()
-        state.cfg = ConfigContainer(
-            model=model_config,
-            train=None,
-            optimizer=OptimizerConfig(use_distributed_optimizer=False),
-            ddp=None,
-            scheduler=None,
-            dataset=None,
-            logger=LoggerConfig(),
-            tokenizer=None,
-            checkpoint=CheckpointConfig(async_save=False, save=str(path), save_optim=False, ckpt_format=ckpt_format),
-            dist=None,
-        )
-
-        # Save the checkpoint
-        save_checkpoint(
-            state=state,
-            model=model,
-            optimizer=None,
-            opt_param_scheduler=None,
-            num_floating_point_operations_so_far=0,
-        )
+            raise ImportError("megatron.bridge.training is not available.")
+        save_megatron_model(model, path)
 
     def load_megatron_model(self, path: str | Path, **kwargs: Unpack[GetModelKwargs]) -> list[MegatronModelT]:
         """
@@ -522,12 +498,28 @@ class AutoBridge(Generic[MegatronModelT]):
             - The model architecture must match the bridge configuration
         """
         try:
-            from megatron.hub.core.utils.instantiate_utils import instantiate
-            from megatron.hub.training.converters.common import load_mcore_model
+            from megatron.bridge.training.model_load_save import load_megatron_model
+            from megatron.bridge.utils.instantiate_utils import instantiate
         except ImportError:
-            raise ImportError("megatron.hub.training is not installed.")
+            raise ImportError("megatron.bridge.training is not available.")
 
-        checkpoint_path = Path(path) / "iter_0000000"
+        checkpoint_path = Path(path)
+
+        # Check for iter_* folders
+        iter_folders = [f for f in checkpoint_path.iterdir() if f.is_dir() and f.name.startswith("iter_")]
+
+        if iter_folders:
+            # Find the folder with the largest iteration number
+            def get_iter_number(folder_name):
+                try:
+                    return int(folder_name.replace("iter_", ""))
+                except ValueError:
+                    return -1  # Invalid format, put at the end
+
+            latest_iter = max(iter_folders, key=lambda f: get_iter_number(f.name))
+            checkpoint_path = checkpoint_path / latest_iter.name
+        # else: checkpoint_path remains as the input path (no iter folders found)
+
         config_file = checkpoint_path / "run_config.yaml"
 
         if not config_file.exists():
@@ -541,12 +533,111 @@ class AutoBridge(Generic[MegatronModelT]):
         model_config = instantiate(model_config)
 
         # Load the state dict
-        model = load_mcore_model(
+        model = load_megatron_model(
             checkpoint_path,
             model_cfg=model_config,
             use_cpu_init=True,
         )
         return model if isinstance(model, list) else [model]
+
+    @classmethod
+    def import_ckpt(
+        cls,
+        hf_model_id: str | Path,
+        megatron_path: str | Path,
+        **kwargs,
+    ) -> None:
+        """
+        Import a HuggingFace model and save it as a Megatron checkpoint.
+
+        This is a convenience method that combines loading a HuggingFace model,
+        converting it to Megatron format, and saving it as a native Megatron
+        checkpoint. This is useful for preparing models for Megatron training
+        or creating Megatron checkpoints from pretrained HuggingFace models.
+
+        Args:
+            hf_model_id: HuggingFace model ID or path to model directory
+                Examples: "meta-llama/Llama-3-8B", "./my_model"
+            megatron_path: Directory path where the Megatron checkpoint will be saved
+            **kwargs: Additional arguments passed to from_hf_pretrained
+                Common options include:
+                - torch_dtype: Model precision (torch.float16, torch.bfloat16)
+                - device_map: Device placement strategy ("auto", "cuda:0", etc.)
+                - trust_remote_code: Allow custom model code execution
+                - attn_implementation: Attention implementation ("flash_attention_2", etc.)
+
+        Example:
+            >>> # Basic import
+            >>> AutoBridge.import_ckpt(
+            ...     "meta-llama/Llama-3-8B",
+            ...     "./megatron_checkpoints/llama3_8b"
+            ... )
+
+            >>> # Import with specific settings
+            >>> AutoBridge.import_ckpt(
+            ...     "meta-llama/Llama-3-8B",
+            ...     "./megatron_checkpoints/llama3_8b",
+            ...     torch_dtype=torch.float16,
+            ...     device_map="auto"
+            ... )
+        """
+        # Load the HuggingFace model
+        bridge = cls.from_hf_pretrained(hf_model_id, **kwargs)
+
+        # Convert to Megatron model
+        megatron_model = bridge.to_megatron_model(wrap_with_ddp=False)
+
+        # Save as Megatron checkpoint
+        bridge.save_megatron_model(megatron_model, megatron_path)
+
+    def export_ckpt(
+        self,
+        megatron_path: str | Path,
+        hf_path: str | Path,
+        show_progress: bool = True,
+    ) -> None:
+        """
+        Export a Megatron checkpoint to HuggingFace format.
+
+        This is a convenience method that loads a Megatron checkpoint and
+        exports it to HuggingFace format. This is useful for sharing trained
+        models or deploying them with HuggingFace inference tools.
+
+        Args:
+            megatron_path: Directory path where the Megatron checkpoint is stored
+            hf_path: Directory path where the HuggingFace model will be saved
+            show_progress: Display progress bar during weight export
+
+        Example:
+            >>> # Basic export
+            >>> bridge = AutoBridge.from_hf_config(config)
+            >>> bridge.export_ckpt(
+            ...     "./megatron_checkpoints/my_model",
+            ...     "./hf_exports/my_model"
+            ... )
+
+            >>> # Export with specific settings
+            >>> bridge.export_ckpt(
+            ...     "./megatron_checkpoints/my_model",
+            ...     "./hf_exports/my_model",
+            ...     show_progress=False
+            ... )
+
+            >>> # Load the exported model with HuggingFace
+            >>> from transformers import AutoModelForCausalLM
+            >>> hf_model = AutoModelForCausalLM.from_pretrained("./hf_exports/my_model")
+        """
+        try:
+            from megatron.bridge.training.model_load_save import temporary_distributed_context
+        except ImportError:
+            raise ImportError("megatron.bridge.training is not available.")
+
+        with temporary_distributed_context(backend="gloo"):
+            # Load the Megatron model
+            megatron_model = self.load_megatron_model(megatron_path, wrap_with_ddp=False)
+
+            # Save in HuggingFace format
+            self.save_hf_pretrained(megatron_model, hf_path, show_progress=show_progress)
 
     def push_to_hub(self, path: str | Path) -> None: ...
 
