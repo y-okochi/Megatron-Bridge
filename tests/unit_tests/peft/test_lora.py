@@ -23,13 +23,9 @@ import torch.distributed as dist
 import torch.nn as nn
 from megatron.core.transformer.module import MegatronModule
 
-from megatron.hub.core.utils.import_utils import safe_import
-from megatron.hub.models.gpt_provider import GPTModelProvider
-from megatron.hub.peft.lora import LoRA, LoRAMerge
-from megatron.hub.peft.lora_layers import LinearAdapter, LoRALinear
-
-
-te, HAVE_TE = safe_import("transformer_engine.pytorch")
+from megatron.bridge.models.gpt_provider import GPTModelProvider
+from megatron.bridge.peft.lora import LoRA, LoRAMerge
+from megatron.bridge.peft.lora_layers import LinearAdapter, LoRALinear
 
 
 class SimpleModel(nn.Module):
@@ -265,8 +261,7 @@ class TestLoRA:
         inference_model = lora(model, training=False)
         assert not inference_model.training
 
-    @patch("megatron.hub.peft.lora.HAVE_TE", True)
-    @patch("megatron.hub.peft.lora.te")
+    @patch("megatron.bridge.peft.lora.te")
     def test_lora_te_linear_support(self, mock_te):
         """Test LoRA support for Transformer Engine Linear layers."""
 
@@ -305,7 +300,7 @@ class TestLoRA:
                 self.module = module
 
         # Import the module to patch the specific import
-        from megatron.hub.peft import lora as lora_module
+        from megatron.bridge.peft import lora as lora_module
 
         # Use patch.object to handle cases where TELinearAdapter might not exist
         # by creating it if necessary.
@@ -546,7 +541,6 @@ class TestLoRAIntegration:
         )
 
 
-@pytest.mark.run_only_on("GPU")
 class TestLoRAMegatronIntegration:
     """Integration tests for LoRA with real Megatron models."""
 
@@ -584,7 +578,7 @@ class TestLoRAMegatronIntegration:
             )
 
         assert parallel_state.model_parallel_is_initialized(), "Model parallel not initialized"
-        from megatron.hub.training.initialize import _set_random_seed
+        from megatron.bridge.training.initialize import _set_random_seed
 
         _set_random_seed(
             seed_=1234,
