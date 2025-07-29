@@ -79,55 +79,43 @@ class LlamaBridge(MegatronModelBridge):
         return provider
 
     def mapping_registry(self) -> MegatronMappingRegistry:
-        # Expected to return MegatronMappingRegistry(AutoMapping(megatron_param, hf_param), ...)
-        # We can also use a dictionary-based mapping for clarity
-        # Dictionary-based mapping:
-        # - Key: Megatron parameter name
-        # - Value:
-        #   - An hf_params string for simple 1:1 **AutoMapping**
-        #   - A tuple of (MappingClass, {hf_params}) for complex mappings
+        # Return MegatronMappingRegistry containing parameter mappings from HF to Megatron format
+        # First create simple 1:1 parameter mappings using a dictionary for readability
+        
+        # Dictionary maps HF parameter names -> Megatron parameter names
+        # Supports wildcard (*) patterns for layer-specific parameters
         param_mappings = {
-            # Embeddings
-            "embedding.word_embeddings.weight": "model.embed_tokens.weight",
-            "output_layer.weight": "lm_head.weight",
-            # LayerNorms
-            "decoder.final_layernorm.weight": "model.norm.weight",
-            "decoder.layers.*.self_attention.linear_qkv.layer_norm_weight": "model.layers.*.input_layernorm.weight",
-            "decoder.layers.*.mlp.linear_fc1.layer_norm_weight": "model.layers.*.post_attention_layernorm.weight",
-            # Attention
-            "decoder.layers.*.self_attention.linear_qkv.weight": (
-                QKVMapping,
-                {
-                    "q": "model.layers.*.self_attn.q_proj.weight",
-                    "k": "model.layers.*.self_attn.k_proj.weight",
-                    "v": "model.layers.*.self_attn.v_proj.weight",
-                },
-            ),
-            "decoder.layers.*.self_attention.linear_proj.weight": "model.layers.*.self_attn.o_proj.weight",
-            # MLP
-            "decoder.layers.*.mlp.linear_fc1.weight": (
-                GatedMLPMapping,
-                {
-                    "gate": "model.layers.*.mlp.gate_proj.weight",
-                    "up": "model.layers.*.mlp.up_proj.weight",
-                },
-            ),
-            "decoder.layers.*.mlp.linear_fc2.weight": "model.layers.*.mlp.down_proj.weight",
+            "model.embed_tokens.weight": "embedding.word_embeddings.weight",
+            "lm_head.weight": "output_layer.weight",
+            "model.norm.weight": "decoder.final_layernorm.weight",
+            "model.layers.*.input_layernorm.weight": "decoder.layers.*.self_attention.linear_qkv.layer_norm_weight",
+            "model.layers.*.post_attention_layernorm.weight": "decoder.layers.*.mlp.linear_fc1.layer_norm_weight",
+            "model.layers.*.self_attn.o_proj.weight": "decoder.layers.*.self_attention.linear_proj.weight",
+            "model.layers.*.mlp.down_proj.weight": "decoder.layers.*.mlp.linear_fc2.weight",
         }
 
-        mappings = []
-        for megatron_param, hf_param in param_mappings.items():
-            if isinstance(hf_param, str):
-                mappings.append(AutoMapping(megatron_param=megatron_param, hf_param=hf_param))
-            elif isinstance(hf_param, tuple):
-                mapping_class, hf_param = hf_param
-                if isinstance(hf_param, str):
-                    mappings.append(mapping_class(megatron_param=megatron_param, hf_param=hf_param))
-                elif isinstance(hf_param, dict):
-                    mappings.append(mapping_class(megatron_param=megatron_param, **hf_param))
-                else:
-                    raise TypeError(f"Unsupported hf_param type for {megatron_param}: {type(hf_param)}")
-            else:
-                raise TypeError(f"Unsupported hf_param type for {megatron_param}: {type(hf_param)}")
+        mapping_list = []
+        # Convert each dictionary entry to AutoMapping(hf_param, megatron_param)
+        for hf_param, megatron_param in param_mappings.items():
+            mapping_list.append(AutoMapping(hf_param=hf_param, megatron_param=megatron_param))
 
-        return MegatronMappingRegistry(*mappings)
+        # Add special mappings that require parameter concatenation/transformation
+        mapping_list.extend(
+            [
+                # QKV: Combine separate Q, K, V matrices into single QKV matrix
+                QKVMapping(
+                    q="model.layers.*.self_attn.q_proj.weight",
+                    k="model.layers.*.self_attn.k_proj.weight",
+                    v="model.layers.*.self_attn.v_proj.weight",
+                    megatron_param="decoder.layers.*.self_attention.linear_qkv.weight",
+                ),
+                # Gated MLP: Combine gate and up projection matrices into single FC1 matrix
+                GatedMLPMapping(
+                    gate="model.layers.*.mlp.gate_proj.weight",
+                    up="model.layers.*.mlp.up_proj.weight",
+                    megatron_param="decoder.layers.*.mlp.linear_fc1.weight",
+                ),
+            ]
+        )
+
+        return MegatronMappingRegistry(*mapping_list)
