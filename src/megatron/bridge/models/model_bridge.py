@@ -17,14 +17,12 @@ import abc
 import logging
 from collections import defaultdict
 from dataclasses import dataclass
-from enum import Enum
 from typing import (
     Callable,
     Dict,
     Generic,
     Iterable,
     List,
-    Literal,
     Mapping,
     NamedTuple,
     Optional,
@@ -512,14 +510,18 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
             TextColumn("{task.fields[bridge]}"),
             disable=not (is_main_rank and show_progress),
         ) as progress:
-            task_id = progress.add_task("Converting to HuggingFace", total=len(megatron_to_hf_plans), bridge=bridge_name)
+            task_id = progress.add_task(
+                "Converting to HuggingFace", total=len(megatron_to_hf_plans), bridge=bridge_name
+            )
 
             for task in megatron_to_hf_plans:
                 # Owns param? fetch weight & module; otherwise None (bridge will broadcast)
                 local_weights = None
                 local_module = None
                 if task.pp_rank == mpu.get_pipeline_model_parallel_rank():
-                    local_module, local_weights = self._get_param_and_module_from_vp(megatron_model, task.vp_stage, task.param_name)
+                    local_module, local_weights = self._get_param_and_module_from_vp(
+                        megatron_model, task.vp_stage, task.param_name
+                    )
 
                 kv_pairs = task.megatron_to_hf(local_weights, local_module)
 
