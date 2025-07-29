@@ -20,7 +20,7 @@ import nemo_run as run
 
 from megatron.bridge.recipes.llama.llama3_8b import pretrain_config
 from megatron.bridge.recipes.utils.nemo_run_utils import get_partial_fn
-from megatron.bridge.training.config import ConfigContainer, ProfilingConfig
+from megatron.bridge.training.config import ConfigContainer, ProfilingConfig, TokenizerConfig
 from megatron.bridge.training.gpt_step import forward_step
 from megatron.bridge.training.pretrain import pretrain
 
