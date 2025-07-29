@@ -869,6 +869,8 @@ class AutoMapping(MegatronParamMapping[torch.Tensor]):
     ) -> Dict[str, torch.Tensor]:
         """Delegate to appropriate mapping based on module type."""
         # Need to determine type even if module is None (different PP rank)
+        assert megatron_param_name is not None, "`megatron_param_name` is required for AutoMapping."
+
         if megatron_module is not None:
             parallelism_type = self._detect_parallelism_type(megatron_module, megatron_param_name)
             # Broadcast to other ranks
