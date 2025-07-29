@@ -323,7 +323,7 @@ class TestMegatronMappingRegistryEdgeCases:
 
     def test_describe_formatting(self):
         """Test the describe method formatting with various bridge types."""
-        from megatron.bridge.models.param_mapping import GatedMLPMapping, AutoMapping
+        from megatron.bridge.models.param_mapping import AutoMapping, GatedMLPMapping
 
         mappings = [
             DirectMapping("a.weight", "b.weight"),

@@ -30,8 +30,8 @@ The process is as follows:
 
 import argparse
 import os
-import torch
 
+import torch
 from rich.console import Console
 
 from megatron.bridge import AutoBridge

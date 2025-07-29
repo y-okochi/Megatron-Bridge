@@ -19,13 +19,13 @@ import torch
 from megatron.core.transformer.transformer_config import TransformerConfig
 
 from megatron.bridge.models.param_mapping import (
+    AutoMapping,
     ColumnParallelMapping,
     DirectMapping,
     GatedMLPMapping,
     QKVMapping,
     ReplicatedMapping,
     RowParallelMapping,
-    AutoMapping,
     merge_qkv_biases,
     merge_qkv_weights,
     split_qkv_biases,

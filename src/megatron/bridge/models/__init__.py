@@ -40,13 +40,13 @@ from megatron.bridge.models.llama import (
 from megatron.bridge.models.mapping_registry import MegatronMappingRegistry
 from megatron.bridge.models.model_bridge import MegatronModelBridge
 from megatron.bridge.models.param_mapping import (
+    AutoMapping,
     ColumnParallelMapping,
     GatedMLPMapping,
     MegatronParamMapping,
     QKVMapping,
     ReplicatedMapping,
     RowParallelMapping,
-    AutoMapping,
 )
 from megatron.bridge.models.t5_provider import T5ModelProvider
 

@@ -520,7 +520,6 @@ class ColumnParallelMapping(MegatronParamMapping[torch.Tensor]):
         along their only dimension following the same pattern.
     """
 
-
     def hf_to_megatron(
         self,
         hf_weights: torch.Tensor,

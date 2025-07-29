@@ -149,7 +149,7 @@ class WeightConversionTask(Generic[MappingT]):
             ValueError: If required fields for Megatron->HF conversion are missing.
         """
 
-        return self.mapping.megatron_to_hf(megatron_weights, megatron_module,  self.param_name)
+        return self.mapping.megatron_to_hf(megatron_weights, megatron_module, self.param_name)
 
 
 def _adjust_layer_number_to_global(name: str, layer_offset: int) -> str:
