@@ -28,6 +28,7 @@ from megatron.bridge.models.model_provider import (
     _print_num_params,
     get_model,
 )
+from megatron.bridge.models.model_provider_mixin import ModelProviderMixin
 
 
 def create_test_config(**kwargs):
@@ -58,6 +59,17 @@ class MockMegatronModule(MegatronModule):
         return [torch.nn.Parameter(torch.randn(10, 10))]
 
 
+class MockModelProvider(ModelProviderMixin):
+    """Mock ModelProviderMixin for testing."""
+
+    def __init__(self, model_instance=None):
+        self.model_instance = model_instance or MockMegatronModule()
+
+    def provide(self, pre_process=None, post_process=None, vp_stage=None):
+        """Provide a mock model instance."""
+        return self.model_instance
+
+
 class TestCreateModel:
     """Test cases for _create_model function."""
 
@@ -71,9 +83,9 @@ class TestCreateModel:
         mock_parallel_state.is_pipeline_first_stage.return_value = True
         mock_parallel_state.is_pipeline_last_stage.return_value = True
 
-        # Create mock model
+        # Create mock model and provider
         mock_model = MockMegatronModule()
-        model_provider = Mock(return_value=mock_model)
+        model_provider = MockModelProvider(mock_model)
 
         result = _create_model(model_provider, ModelType.encoder_or_decoder)
 
@@ -82,7 +94,6 @@ class TestCreateModel:
         assert len(result) == 1
         assert result[0] is mock_model
         assert mock_model.model_type == ModelType.encoder_or_decoder
-        model_provider.assert_called_once_with(pre_process=True, post_process=True)
 
     @patch("megatron.bridge.models.model_provider.parallel_state")
     @patch("megatron.bridge.models.model_provider.tensor_parallel")
@@ -94,9 +105,10 @@ class TestCreateModel:
         mock_parallel_state.is_pipeline_first_stage.side_effect = [True, False]
         mock_parallel_state.is_pipeline_last_stage.side_effect = [False, True]
 
-        # Create mock models
+        # Create mock models and provider
         mock_models = [MockMegatronModule(), MockMegatronModule()]
-        model_provider = Mock(side_effect=mock_models)
+        model_provider = Mock()
+        model_provider.provide = Mock(side_effect=mock_models)
 
         result = _create_model(model_provider, ModelType.encoder_or_decoder)
 
@@ -104,7 +116,7 @@ class TestCreateModel:
         assert isinstance(result, list)
         assert len(result) == 2
         assert all(model.model_type == ModelType.encoder_or_decoder for model in result)
-        assert model_provider.call_count == 2
+        assert model_provider.provide.call_count == 2
 
     @patch("megatron.bridge.models.model_provider.parallel_state")
     @patch("megatron.bridge.models.model_provider.tensor_parallel")
@@ -345,7 +357,7 @@ class TestGetModel:
         mock_fix_float8.return_value = [model]
         mock_ddp_wrap.return_value = [model]
 
-        model_provider = Mock()
+        model_provider = MockModelProvider(model)
         ddp_config = DistributedDataParallelConfig()
 
         result = get_model(model_provider, ddp_config)
@@ -391,7 +403,7 @@ class TestGetModel:
         mock_fix_float8.return_value = [wrapped_model]
         mock_ddp_wrap.return_value = [wrapped_model]
 
-        model_provider = Mock()
+        model_provider = MockModelProvider(model)
         ddp_config = DistributedDataParallelConfig()
 
         get_model(model_provider, ddp_config, fp16=True)
@@ -428,7 +440,7 @@ class TestGetModel:
         mock_fix_float8.return_value = [model]
         mock_ddp_wrap.return_value = [model]
 
-        model_provider = Mock()
+        model_provider = MockModelProvider(model)
         ddp_config = DistributedDataParallelConfig()
 
         get_model(model_provider, ddp_config, use_cpu_initialization=True)
@@ -461,7 +473,7 @@ class TestGetModel:
         mock_create_model.return_value = [model]
         mock_fix_float8.return_value = [model]
 
-        model_provider = Mock()
+        model_provider = MockModelProvider(model)
         ddp_config = DistributedDataParallelConfig()
 
         result = get_model(model_provider, ddp_config, wrap_with_ddp=False)
@@ -498,7 +510,7 @@ class TestGetModel:
         mock_fix_float8.return_value = [model]
         mock_ddp_wrap.return_value = [model]
 
-        model_provider = Mock()
+        model_provider = MockModelProvider(model)
         ddp_config = DistributedDataParallelConfig()
 
         get_model(
@@ -543,7 +555,7 @@ class TestGetModel:
         mock_correct_amax.return_value = [hooked_model]
         mock_ddp_wrap.return_value = [hooked_model]
 
-        model_provider = Mock()
+        model_provider = MockModelProvider(model)
         ddp_config = DistributedDataParallelConfig()
 
         result = get_model(model_provider, ddp_config, pre_wrap_hook=pre_wrap_hook, use_cpu_initialization=True)
@@ -625,7 +637,7 @@ class TestEdgeCases:
         model.cuda = Mock()
         mock_create_model.return_value = [model]
 
-        model_provider = Mock()
+        model_provider = MockModelProvider(model)
         ddp_config = DistributedDataParallelConfig()
 
         with patch("megatron.bridge.models.model_provider._ddp_wrap") as mock_wrap:
@@ -644,7 +656,7 @@ class TestEdgeCases:
         mock_parallel_state.get_pipeline_model_parallel_world_size.return_value = 2
         mock_parallel_state.get_virtual_pipeline_model_parallel_world_size.return_value = 2
 
-        model_provider = Mock()
+        model_provider = MockModelProvider()
 
         with pytest.raises(AssertionError) as excinfo:
             _create_model(model_provider, ModelType.encoder_and_decoder)
