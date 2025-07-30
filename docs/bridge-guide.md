@@ -174,9 +174,6 @@ Always prefer high-level APIs like `AutoBridge` for automatic model detection, o
 # ✅ Preferred: Use AutoBridge for automatic detection
 bridge = AutoBridge.from_hf_pretrained("any-supported-model")
 
-# ✅ Or use AutoBridge for causal language models
-bridge = AutoBridge.from_hf_pretrained("gpt2")
-
 # ❌ Avoid: Direct bridge usage unless you know the specific type
 ```
 
