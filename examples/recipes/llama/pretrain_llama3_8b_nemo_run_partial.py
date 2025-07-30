@@ -65,18 +65,21 @@ def main(args: argparse.Namespace) -> None:
     #cfg.logger.log_interval = 1
 
     #cfg.dataset.sequence_length = 4096
-    cfg.checkpoint.save = None
+    #cfg.checkpoint.save = None
     paths = ["/home/data/llama/my-llama_00_text_document"]
     cfg.dataset.split = "900,95,5"
     from megatron.core.datasets.utils import get_blend_from_list
     paths, weights = get_blend_from_list(paths)
     cfg.dataset.blend = [paths, weights]
-    print(cfg.dataset)
+    #print(cfg.dataset)
     if cfg.profiling is None:
         cfg.profiling = ProfilingConfig()
     cfg.profiling.use_nsys_profiler = False
     cfg.profiling.use_pytorch_profiler = True
     cfg.profiling.record_shapes = True
+    
+    import torch
+    cfg.model.embedding_init_method = run.Partial(torch.nn.init.normal_, mean=0.0, std=0.01)
 
     # Create a run.Partial object for the pretrain function
     fn = get_partial_fn(pretrain, cfg, forward_step)

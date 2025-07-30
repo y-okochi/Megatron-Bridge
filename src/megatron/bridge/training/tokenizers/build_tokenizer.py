@@ -6,9 +6,9 @@ import math
 
 from megatron.core.tokenizers import MegatronTokenizer
 
-from megatron.hub.core.utils.common_utils import get_rank_safe
-from megatron.hub.training.tokenizers.config import TokenizerConfig
-from megatron.hub.training.tokenizers.multimodal_tokenizer import MultimodalTokenizer
+from megatron.bridge.utils.common_utils import get_rank_safe
+from megatron.bridge.training.tokenizers.config import TokenizerConfig
+from megatron.bridge.training.tokenizers.multimodal_tokenizer import MultimodalTokenizer
 
 
 def build_tokenizer(
