@@ -41,6 +41,15 @@ class TestMegatronMappingRegistry:
                 megatron_param="output_layer.weight",
                 hf_param="lm_head.weight",
             ),
+            # Test mappings for ** wildcard
+            DirectMapping(
+                megatron_param="decoder.**weight",
+                hf_param="model.**weight",
+            ),
+            DirectMapping(
+                megatron_param="encoder.*.**bias",
+                hf_param="transformer.*.**bias",
+            ),
         ]
 
     @pytest.fixture
@@ -123,27 +132,29 @@ class TestMegatronMappingRegistry:
         all_mappings.append("new_item")
         assert len(mapping_registry.get_all_mappings()) == len(sample_mappings)
 
-    def test_get_mappings_by_pattern(self, mapping_registry):
+    def test_get_mappings_by_megatron_pattern(self, mapping_registry):
         """Test retrieving mappings by a regex pattern."""
-        mlp_mappings = mapping_registry.get_mappings_by_pattern("decoder.layers.*.mlp.*")
+        mlp_mappings = mapping_registry.get_mappings_by_megatron_pattern("decoder.layers.*.mlp.**")
         assert len(mlp_mappings) == 1
         assert mlp_mappings[0].megatron_param == "decoder.layers.*.mlp.linear_fc1.weight"
 
-        qkv_mappings = mapping_registry.get_mappings_by_pattern("decoder.layers.*.self_attention.linear_qkv.weight")
+        qkv_mappings = mapping_registry.get_mappings_by_megatron_pattern(
+            "decoder.layers.*.self_attention.linear_qkv.weight"
+        )
         assert len(qkv_mappings) == 1
         assert isinstance(qkv_mappings[0], QKVMapping)
 
-        all_decoder = mapping_registry.get_mappings_by_pattern("decoder.*")
-        assert len(all_decoder) == 2
+        all_decoder = mapping_registry.get_mappings_by_megatron_pattern("decoder.**")
+        assert len(all_decoder) == 3
 
-        no_match = mapping_registry.get_mappings_by_pattern("encoder.*")
-        assert len(no_match) == 0
+        encoder_match = mapping_registry.get_mappings_by_megatron_pattern("encoder.**")
+        assert len(encoder_match) == 1
 
     def test_describe(self, mapping_registry):
         """Test the human-readable description of the bridge."""
         description = mapping_registry.describe()
         assert isinstance(description, str)
-        assert "MegatronMappingRegistry with 4 mappings" in description
+        assert "MegatronMappingRegistry with 6 mappings" in description
         assert "embedding.word_embeddings.weight" in description
         assert "→ model.embed_tokens.weight" in description
         assert "decoder.layers.*.self_attention.linear_qkv.weight" in description
@@ -153,13 +164,99 @@ class TestMegatronMappingRegistry:
 
     def test_iterator_and_repr(self, mapping_registry, sample_mappings):
         """Test the iterator and string representation of the bridge."""
-        assert repr(mapping_registry) == "MegatronMappingRegistry(4 mappings)"
+        assert repr(mapping_registry) == "MegatronMappingRegistry(6 mappings)"
 
         count = 0
         for mapping in mapping_registry:
             assert mapping in sample_mappings
             count += 1
         assert count == len(sample_mappings)
+
+    def test_double_wildcard_basic_match(self, mapping_registry):
+        """Test basic ** wildcard matching for nested paths."""
+        # Test ** matching nested layers
+        mapping = mapping_registry.megatron_to_hf_lookup("decoder.layers.0.mlp.linear_fc2.weight")
+        assert mapping is not None
+        assert mapping.megatron_param == "decoder.layers.0.mlp.linear_fc2.weight"
+        assert mapping.hf_param == "model.layers.0.mlp.linear_fc2.weight"
+        assert isinstance(mapping, DirectMapping)
+
+    def test_double_wildcard_deep_nesting(self, mapping_registry):
+        """Test ** wildcard matching very deep nested paths."""
+        # Test deeply nested path
+        deep_path = "decoder.transformer.blocks.layer_12.attention.self.query.projection.weight"
+        mapping = mapping_registry.megatron_to_hf_lookup(deep_path)
+        assert mapping is not None
+        assert mapping.megatron_param == deep_path
+        expected_hf_path = "model.transformer.blocks.layer_12.attention.self.query.projection.weight"
+        assert mapping.hf_param == expected_hf_path
+
+    def test_double_wildcard_reverse_lookup(self, mapping_registry):
+        """Test reverse lookup with ** wildcard."""
+        # Test reverse lookup for ** pattern
+        hf_path = "model.layers.5.attention.output.dense.weight"
+        mapping = mapping_registry.hf_to_megatron_lookup(hf_path)
+        assert mapping is not None
+        assert mapping.hf_param == hf_path
+        expected_megatron_path = "decoder.layers.5.attention.output.dense.weight"
+        assert mapping.megatron_param == expected_megatron_path
+
+    def test_mixed_wildcards(self, mapping_registry):
+        """Test patterns with both * and ** wildcards."""
+        # Test pattern: encoder.*.**.bias
+        # This should match: encoder.{layer_id}.{any_nested_path}.bias
+        test_path = "encoder.12.attention.self.query.bias"
+        mapping = mapping_registry.megatron_to_hf_lookup(test_path)
+        assert mapping is not None
+        assert mapping.megatron_param == test_path
+        expected_hf_path = "transformer.12.attention.self.query.bias"
+        assert mapping.hf_param == expected_hf_path
+
+    def test_mixed_wildcards_complex(self, mapping_registry):
+        """Test more complex mixed wildcard patterns."""
+        # Test with multiple levels of nesting
+        test_path = "encoder.layer_5.mlp.dense.output.bias"
+        mapping = mapping_registry.megatron_to_hf_lookup(test_path)
+        assert mapping is not None
+        assert mapping.megatron_param == test_path
+        expected_hf_path = "transformer.layer_5.mlp.dense.output.bias"
+        assert mapping.hf_param == expected_hf_path
+
+    def test_double_wildcard_no_match(self, mapping_registry):
+        """Test that ** wildcard doesn't match inappropriate patterns."""
+        # This should not match the ** pattern because it doesn't end with .weight
+        mapping = mapping_registry.megatron_to_hf_lookup("decoder.layers.0.mlp.linear_fc1.bias")
+        # This should match the regular * pattern instead (if any), not the ** pattern
+        # Since we don't have a .bias pattern in our regular mappings, this should return None
+        # or match a different pattern if available
+        assert mapping is None
+
+        # Test a path that definitely shouldn't match any pattern
+        mapping = mapping_registry.megatron_to_hf_lookup("completely.different.structure")
+        assert mapping is None
+
+    def test_double_wildcard_edge_cases(self, mapping_registry):
+        """Test edge cases for ** wildcard."""
+        # Test minimal matching - just the prefix and suffix
+        test_path = "decoder.weight"
+        mapping = mapping_registry.megatron_to_hf_lookup(test_path)
+        assert mapping is not None
+        assert mapping.megatron_param == test_path
+        assert mapping.hf_param == "model.weight"
+
+        # Test with empty middle section (though this might not be realistic)
+        # decoder.**.weight should match decoder.weight (** matches empty string)
+
+    def test_wildcard_precedence(self, mapping_registry):
+        """Test that more specific patterns take precedence over ** wildcards."""
+        # The specific pattern "decoder.layers.*.mlp.linear_fc1.weight" should match
+        # instead of the more general "decoder.**.weight" pattern
+        test_path = "decoder.layers.3.mlp.linear_fc1.weight"
+        mapping = mapping_registry.megatron_to_hf_lookup(test_path)
+        assert mapping is not None
+        assert mapping.megatron_param == test_path
+        # This should match the specific pattern, not the ** pattern
+        assert mapping.hf_param == "model.layers.3.mlp.gate_proj.weight"
 
 
 class TestMegatronMappingRegistryEdgeCases:
@@ -172,7 +269,7 @@ class TestMegatronMappingRegistryEdgeCases:
         assert bridge.megatron_to_hf_lookup("any.weight") is None
         assert bridge.hf_to_megatron_lookup("any.weight") is None
         assert bridge.get_all_mappings() == []
-        assert bridge.get_mappings_by_pattern("*") == []
+        assert bridge.get_mappings_by_megatron_pattern("*") == []
         assert repr(bridge) == "MegatronMappingRegistry(0 mappings)"
 
         # Test iterator on empty bridge
@@ -200,18 +297,20 @@ class TestMegatronMappingRegistryEdgeCases:
         assert result.megatron_param == "decoder.layers.5.blocks.1.weight"
         assert result.hf_param == "model.layers.5.sublayers.1.weight"
 
-    def test_non_numeric_wildcard_no_match(self):
-        """Test that wildcards only match digits."""
+    def test_wildcard_single_component_match(self):
+        """Test that single * wildcards match any non-dot characters."""
         mapping = DirectMapping(megatron_param="decoder.layers.*.weight", hf_param="model.layers.*.weight")
         bridge = MegatronMappingRegistry(mapping)
 
-        # Should not match non-numeric values
-        assert bridge.megatron_to_hf_lookup("decoder.layers.abc.weight") is None
-        assert bridge.megatron_to_hf_lookup("decoder.layers.12a.weight") is None
-        assert bridge.megatron_to_hf_lookup("decoder.layers.1.2.weight") is None
-
-        # Should match numeric values
+        # Should match any non-dot character sequences
+        assert bridge.megatron_to_hf_lookup("decoder.layers.abc.weight") is not None
+        assert bridge.megatron_to_hf_lookup("decoder.layers.12a.weight") is not None
         assert bridge.megatron_to_hf_lookup("decoder.layers.123.weight") is not None
+        assert bridge.megatron_to_hf_lookup("decoder.layers.layer_5.weight") is not None
+
+        # Should NOT match patterns with dots in the wildcard position (dots separate components)
+        assert bridge.megatron_to_hf_lookup("decoder.layers.1.2.weight") is None
+        assert bridge.megatron_to_hf_lookup("decoder.layers.sub.component.weight") is None
 
     def test_duplicate_patterns(self):
         """Test behavior with duplicate patterns (first match wins)."""
@@ -224,8 +323,8 @@ class TestMegatronMappingRegistryEdgeCases:
         assert result is not None
         assert result.hf_param == "model.layers.0.weight_v1"
 
-        # get_mappings_by_pattern should return both
-        matches = bridge.get_mappings_by_pattern("decoder.layers.*.weight")
+        # get_mappings_by_megatron_pattern should return both
+        matches = bridge.get_mappings_by_megatron_pattern("decoder.layers.*.weight")
         assert len(matches) == 2
 
     def test_complex_qkv_patterns(self):
@@ -289,8 +388,8 @@ class TestMegatronMappingRegistryEdgeCases:
         assert result is not None
         assert result.hf_param == "transformed.42"
 
-    def test_get_mappings_by_pattern_complex(self):
-        """Test get_mappings_by_pattern with various patterns."""
+    def test_get_mappings_by_megatron_pattern_complex(self):
+        """Test get_mappings_by_megatron_pattern with various patterns."""
         mappings = [
             DirectMapping("embedding.weight", "embed.weight"),
             DirectMapping("decoder.layers.*.weight", "layers.*.w"),
@@ -301,24 +400,24 @@ class TestMegatronMappingRegistryEdgeCases:
         bridge = MegatronMappingRegistry(*mappings)
 
         # Test exact match pattern
-        exact = bridge.get_mappings_by_pattern("embedding.weight")
+        exact = bridge.get_mappings_by_megatron_pattern("embedding.weight")
         assert len(exact) == 1
         assert exact[0].megatron_param == "embedding.weight"
 
         # Test wildcard pattern
-        decoder_all = bridge.get_mappings_by_pattern("decoder.*")
+        decoder_all = bridge.get_mappings_by_megatron_pattern("decoder.**")
         assert len(decoder_all) == 3  # 2 DirectMapping + 1 QKVMapping
 
         # Test more specific wildcard
-        decoder_weights = bridge.get_mappings_by_pattern("decoder.layers.*.weight")
+        decoder_weights = bridge.get_mappings_by_megatron_pattern("decoder.layers.*.weight")
         assert len(decoder_weights) == 1
 
         # Test pattern matching everything
-        all_mappings = bridge.get_mappings_by_pattern("*")
+        all_mappings = bridge.get_mappings_by_megatron_pattern("**")
         assert len(all_mappings) == len(mappings)
 
         # Test no matches
-        no_match = bridge.get_mappings_by_pattern("nonexistent.*")
+        no_match = bridge.get_mappings_by_megatron_pattern("nonexistent.**")
         assert len(no_match) == 0
 
     def test_describe_formatting(self):

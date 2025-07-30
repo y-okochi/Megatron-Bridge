@@ -83,23 +83,62 @@ class MegatronParamMapping(ABC, Generic[WeightType]):
         self._validate_patterns()
 
     def _resolve_names(self, captures: Tuple[str, ...]) -> Tuple[str, Union[str, Dict[str, str]]]:
-        resolved_megatron_param = self.megatron_param
-        for value in captures:
-            resolved_megatron_param = resolved_megatron_param.replace("*", value, 1)
+        """
+        Resolve wildcard patterns with captured values.
+
+        Supports both * (matches non-dot chars) and ** (matches anything including dots).
+        Wildcards are replaced left-to-right in the order they appear.
+        """
+        resolved_megatron_param = self._resolve_wildcards_in_string(self.megatron_param, captures)
 
         if isinstance(self.hf_param, str):
-            resolved_hf_param = self.hf_param
-            for value in captures:
-                resolved_hf_param = resolved_hf_param.replace("*", value, 1)
+            resolved_hf_param = self._resolve_wildcards_in_string(self.hf_param, captures)
         else:
             resolved_hf_param = {}
             for k, v in self.hf_param.items():
-                resolved_v = v
-                for value in captures:
-                    resolved_v = resolved_v.replace("*", value, 1)
-                resolved_hf_param[k] = resolved_v
+                resolved_hf_param[k] = self._resolve_wildcards_in_string(v, captures)
 
         return resolved_megatron_param, resolved_hf_param
+
+    def _resolve_wildcards_in_string(self, pattern: str, captures: Tuple[str, ...]) -> str:
+        """
+        Replace wildcards in a string with captured values in left-to-right order.
+
+        Args:
+            pattern: String containing * and/or ** wildcards
+            captures: Tuple of captured values from regex matching
+
+        Returns:
+            String with wildcards replaced by captured values
+        """
+        result = pattern
+        capture_index = 0
+
+        # Process wildcards left-to-right
+        i = 0
+        while i < len(result) and capture_index < len(captures):
+            if i < len(result) - 1 and result[i : i + 2] == "**":
+                # Found ** wildcard
+                if capture_index < len(captures):
+                    result = result[:i] + captures[capture_index] + result[i + 2 :]
+                    # Move i forward by the length of the replacement
+                    i += len(captures[capture_index])
+                    capture_index += 1
+                else:
+                    break
+            elif result[i] == "*":
+                # Found single * wildcard
+                if capture_index < len(captures):
+                    result = result[:i] + captures[capture_index] + result[i + 1 :]
+                    # Move i forward by the length of the replacement
+                    i += len(captures[capture_index])
+                    capture_index += 1
+                else:
+                    break
+            else:
+                i += 1
+
+        return result
 
     def resolve(self, captures: Tuple[str, ...]) -> "MegatronParamMapping":
         """Create a new mapping with resolved wildcards.

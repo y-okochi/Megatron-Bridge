@@ -24,7 +24,7 @@ class MegatronMappingRegistry:
 
     This class serves as a registry of weight mappings between Megatron and external
     (typically HuggingFace) model formats. It provides efficient pattern matching
-    for parameter names using glob-like wildcards (*) and supports both forward
+    for parameter names using glob-like wildcards (* and **) and supports both forward
     (Megatron → HF) and reverse (HF → Megatron) lookups.
 
     The registry pre-compiles regex patterns for efficient repeated lookups and
@@ -47,11 +47,20 @@ class MegatronMappingRegistry:
         ...         k="model.layers.*.self_attn.k_proj.weight",
         ...         v="model.layers.*.self_attn.v_proj.weight",
         ...     ),
+        ...     # Example with ** wildcard for deep nesting
+        ...     TPAwareMapping(
+        ...         megatron_param="decoder.**.weight",
+        ...         hf_param="model.**.weight",
+        ...     ),
         ... )
 
         >>> # Query for a specific layer (wildcards are resolved)
         >>> mapping = mapping_registry.megatron_to_hf_lookup("decoder.layers.0.self_attention.linear_qkv.weight")
         >>> print(mapping.hf_param)  # Will show resolved HF names for layer 0
+
+        >>> # ** wildcard example - matches deeply nested paths
+        >>> mapping = mapping_registry.megatron_to_hf_lookup("decoder.layers.0.mlp.linear_fc1.weight")
+        >>> print(mapping.hf_param)  # "model.layers.0.mlp.linear_fc1.weight"
 
         >>> # Reverse lookup from HF name
         >>> mapping = mapping_registry.hf_to_megatron_lookup("model.layers.5.self_attn.q_proj.weight")
@@ -62,8 +71,11 @@ class MegatronMappingRegistry:
         >>> mapping_registry = MegatronMappingRegistry(*mappings)
 
     Note:
-        Wildcard patterns use '*' which matches any sequence of digits (0-9).
-        This is specifically designed for layer indices in transformer models.
+        Wildcard patterns support two types:
+        - '*' matches any sequence of characters between dots (e.g., layer indices)
+        - '**' matches any sequence of characters including dots (e.g., nested paths)
+
+        Wildcards are processed left-to-right in the order they appear in the pattern.
     """
 
     def __init__(self, *mappings: MegatronParamMapping):
@@ -82,10 +94,8 @@ class MegatronMappingRegistry:
         for mapping in mappings:
             # Compile source patterns
             if "*" in mapping.megatron_param:
-                # Convert glob pattern to regex
-                # decoder.layers.*.mlp.linear_fc1.weight -> decoder\.layers\.(\d+)\.mlp\.linear_fc1\.weight
-                pattern = re.escape(mapping.megatron_param)
-                pattern = pattern.replace(r"\*", r"(\d+)")
+                # Convert glob pattern to regex, handling both ** and * wildcards
+                pattern = self._compile_wildcard_pattern(mapping.megatron_param)
                 self._compiled_patterns.append((re.compile(f"^{pattern}$"), mapping))
             else:
                 self._compiled_patterns.append((None, mapping))
@@ -93,8 +103,7 @@ class MegatronMappingRegistry:
             # Compile destination patterns for reverse lookups
             if isinstance(mapping.hf_param, str):
                 if "*" in mapping.hf_param:
-                    pattern = re.escape(mapping.hf_param)
-                    pattern = pattern.replace(r"\*", r"(\d+)")
+                    pattern = self._compile_wildcard_pattern(mapping.hf_param)
                     self._reverse_patterns.append((re.compile(f"^{pattern}$"), mapping))
                 else:
                     self._reverse_patterns.append((None, mapping))
@@ -103,12 +112,39 @@ class MegatronMappingRegistry:
                 reverse_dict_patterns = {}
                 for key, hf_pattern in mapping.hf_param.items():
                     if "*" in hf_pattern:
-                        pattern = re.escape(hf_pattern)
-                        pattern = pattern.replace(r"\*", r"(\d+)")
+                        pattern = self._compile_wildcard_pattern(hf_pattern)
                         reverse_dict_patterns[key] = re.compile(f"^{pattern}$")
                     else:
                         reverse_dict_patterns[key] = None
                 self._reverse_patterns.append((reverse_dict_patterns, mapping))
+
+    def _compile_wildcard_pattern(self, pattern_str: str) -> str:
+        """
+        Compile a wildcard pattern to regex, supporting both * and ** wildcards.
+
+        ** matches anything including dots (including empty): (.*)
+        * matches any sequence of characters between dots: ([^.]+)
+
+        Args:
+            pattern_str: Pattern string with * and/or ** wildcards
+
+        Returns:
+            Compiled regex pattern string
+        """
+        # First escape the entire string
+        pattern = re.escape(pattern_str)
+
+        # Use a placeholder for ** to avoid conflicts with *
+        # \\*\\* becomes our ** placeholder after escaping
+        pattern = pattern.replace(r"\*\*", "___DOUBLE_WILDCARD___")
+
+        # Replace single * (now \\* after escaping) with regex for non-dot characters
+        pattern = pattern.replace(r"\*", r"([^.]+)")
+
+        # Replace the ** placeholder with regex for anything (including empty)
+        pattern = pattern.replace("___DOUBLE_WILDCARD___", r"(.*)")
+
+        return pattern
 
     def megatron_to_hf_lookup(self, megatron_name: str) -> Optional[MegatronParamMapping]:
         """
@@ -192,7 +228,7 @@ class MegatronMappingRegistry:
         """Get all mappings in this MegatronMappingRegistry."""
         return self.mappings.copy()
 
-    def get_mappings_by_pattern(self, pattern: str) -> List[MegatronParamMapping]:
+    def get_mappings_by_megatron_pattern(self, pattern: str) -> List[MegatronParamMapping]:
         """
         Get all mappings that match a given pattern.
 
@@ -202,11 +238,9 @@ class MegatronMappingRegistry:
         Returns:
             List of matching MegatronParamMapping objects
         """
-        # Convert pattern to regex
-        regex_pattern = re.escape(pattern)
-        regex_pattern = regex_pattern.replace(r"\*", r".*")
+        # Use the same wildcard compilation logic as the main pattern matching
+        regex_pattern = self._compile_wildcard_pattern(pattern)
         compiled_pattern = re.compile(f"^{regex_pattern}$")
-
         matches = []
         for mapping in self.mappings:
             if compiled_pattern.match(mapping.megatron_param):
