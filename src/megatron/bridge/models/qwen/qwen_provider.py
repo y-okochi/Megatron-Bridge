@@ -183,6 +183,91 @@ class Qwen25ModelProvider72B(Qwen2ModelProvider72B):
 
 
 @dataclass
+class Qwen3ModelProvider(Qwen2ModelProvider):
+    """Configuration for Qwen3 models.
+
+    Qwen3 differs from Qwen2 by using QK layernorm.
+    """
+
+    qk_layernorm: bool = True  # Qwen3 uses QK layernorm
+
+
+@dataclass
+class Qwen3ModelProvider1P7B(Qwen3ModelProvider):
+    """
+    Config for Qwen3 1.7B: https://huggingface.co/Qwen/Qwen3-1.7B
+    """
+
+    num_layers: int = 24
+    hidden_size: int = 1536
+    num_attention_heads: int = 12
+    num_query_groups: int = 2
+    ffn_hidden_size: int = 8960
+    vocab_size: int = 151936
+    seq_length: int = 8192
+
+
+@dataclass
+class Qwen3ModelProvider7B(Qwen3ModelProvider):
+    """
+    Config for Qwen3 7B: https://huggingface.co/Qwen/Qwen3-7B
+    """
+
+    num_layers: int = 28
+    hidden_size: int = 3584
+    num_attention_heads: int = 28
+    num_query_groups: int = 4
+    ffn_hidden_size: int = 18944
+    vocab_size: int = 152064
+    seq_length: int = 8192
+
+
+@dataclass
+class Qwen3ModelProvider14B(Qwen3ModelProvider):
+    """
+    Config for Qwen3 14B: https://huggingface.co/Qwen/Qwen3-14B
+    """
+
+    num_layers: int = 40
+    hidden_size: int = 5120
+    num_attention_heads: int = 40
+    num_query_groups: int = 8
+    ffn_hidden_size: int = 13824
+    vocab_size: int = 152064
+    seq_length: int = 8192
+
+
+@dataclass
+class Qwen3ModelProvider28B(Qwen3ModelProvider):
+    """
+    Config for Qwen3 28B: https://huggingface.co/Qwen/Qwen3-28B
+    """
+
+    num_layers: int = 48
+    hidden_size: int = 6016
+    num_attention_heads: int = 47
+    num_query_groups: int = 8
+    ffn_hidden_size: int = 16256
+    vocab_size: int = 152064
+    seq_length: int = 8192
+
+
+@dataclass
+class Qwen3ModelProvider110B(Qwen3ModelProvider):
+    """
+    Config for Qwen3 110B: https://huggingface.co/Qwen/Qwen3-110B
+    """
+
+    num_layers: int = 80
+    hidden_size: int = 8192
+    num_attention_heads: int = 64
+    num_query_groups: int = 8
+    ffn_hidden_size: int = 49152
+    vocab_size: int = 152064
+    seq_length: int = 8192
+
+
+@dataclass
 class Qwen3MoeModelProvider(Qwen2ModelProvider):
     """Base configuration for Qwen3 MoE models.
 

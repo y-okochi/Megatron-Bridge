@@ -38,20 +38,15 @@ main() {
     # Install dependencies
     export DEBIAN_FRONTEND=noninteractive
     apt-get update
-    apt-get install -y curl git python3-pip python3-venv
+    apt-get install -y curl git python3-pip python3-venv cmake
 
     # Install uv
     UV_VERSION="0.7.2"
     curl -LsSf https://astral.sh/uv/${UV_VERSION}/install.sh | sh
-    export PATH="/root/.local/bin:$PATH"
-    export UV_PROJECT_ENVIRONMENT=/opt/venv
-    export PATH="$UV_PROJECT_ENVIRONMENT/bin:$PATH"
-    export UV_LINK_MODE=copy
 
     UV_ARGS=()
     if [[ "$BASE_IMAGE" == "pytorch" ]]; then
         UV_ARGS=(
-            "--system-site-packages"
             "--no-install-package" "torch"
             "--no-install-package" "torchvision"
             "--no-install-package" "triton"
@@ -68,6 +63,9 @@ main() {
             "--no-install-package" "nvidia-cusparselt-cu12"
             "--no-install-package" "nvidia-nccl-cu12"
         )
+    else
+        UV_ARGS=(
+        )
     fi
 
     # Create virtual environment and install dependencies
@@ -76,6 +74,7 @@ main() {
     # Install dependencies
     uv sync --locked --only-group build ${UV_ARGS[@]}
     uv sync \
+        -v \
         --link-mode copy \
         --locked \
         --all-extras \
@@ -84,16 +83,6 @@ main() {
     # Install the package
     uv pip install --no-deps -e .
 
-    # Write environment variables to a file for later sourcing
-    cat >/opt/venv/env.sh <<'EOF'
-#!/bin/bash
-export UV_PROJECT_ENVIRONMENT=/opt/venv
-export PATH="/opt/venv/bin:$PATH"
-export UV_LINK_MODE=copy
-export PATH="/root/.local/bin:$PATH"
-EOF
-
-    chmod +x /opt/venv/env.sh
 }
 
 # Call the main function
