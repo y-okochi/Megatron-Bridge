@@ -30,10 +30,6 @@ inputs:
     description: "Upload coverage as unit test"
     required: false
     default: "false"
-  cpu-only:
-    description: "Run tests on CPU only"
-    required: false
-    default: "false"
   azure-client-id:
     description: "Azure Client ID"
     required: true
@@ -128,6 +124,25 @@ runs:
 
         ls -al $MNT_PATH/TestData
 
+    - name: Configure local file cache
+      shell: bash
+      if: ${{ inputs.has-azure-credentials == 'true' && inputs.is_unit_test == 'false' }}
+      env:
+        MNT_PATH: ${{ steps.azure-fileshare.outputs.MNT_PATH }}
+      run: |
+        sudo apt install -y rclone fuse3
+
+        sudo mkdir -p $MNT_PATH-cached
+
+        sudo rclone config create local-smb local nounc=true
+
+        sudo rclone mount -vv --vfs-cache-mode full \
+          --vfs-cache-max-size 50G \
+          --vfs-read-chunk-size 64M \
+          --allow-other \
+          --daemon \
+          local-smb:$MNT_PATH/ "$MNT_PATH-cached"
+
     - name: Checkout repository
       uses: actions/checkout@v2
       with:
@@ -142,12 +157,14 @@ runs:
 
     - name: Start container
       shell: bash
+      env:
+        MNT_PATH: ${{ steps.azure-fileshare.outputs.MNT_PATH }}
+        MOUNT_FS: ${{ inputs.has-azure-credentials == 'true' && inputs.is_unit_test == 'false' }}
       run: |
-        MNT_PATH=${{ steps.azure-fileshare.outputs.mnt_path }}
-
-        ARG=("")
-        if [[ "${{ inputs.cpu-only }}" == "false" ]]; then
-          ARG=("--runtime=nvidia --gpus all")
+        if [[ "$MOUNT_FS" == "true" ]]; then
+          VOLUME_ARGS="--volume $MNT_PATH-cached/TestData:/home/TestData"
+        else
+          VOLUME_ARGS=""
         fi
 
         cmd=$(cat <<RUN_TEST_EOF
@@ -156,15 +173,17 @@ runs:
         docker run \
           --rm \
           -d \
-          --name nemo_container_${{ github.run_id }} ${ARG[@]} \
+          --name nemo_container_${{ github.run_id }} \
+          --runtime=nvidia --gpus all \
           --shm-size=64g \
           --env TRANSFORMERS_OFFLINE=0 \
           --env HYDRA_FULL_ERROR=1 \
           --env HF_HOME=/home/TestData/HF_HOME \
+          --env NEMO_HOME=/home/TestData/nemo_home \
           --env RUN_ID=${{ github.run_id }} \
           --workdir /workspace \
           --volume $(pwd)/Megatron-Bridge:/workspace \
-          --volume $MNT_PATH/TestData:/home/TestData \
+          $VOLUME_ARGS \
           megatron-bridge \
           bash -c "sleep $(( ${{ inputs.timeout }} * 60 + 60 ))"
         RUN_TEST_EOF
@@ -185,11 +204,8 @@ runs:
 
         docker exec -t nemo_container_${{ github.run_id }} bash -c '
           set -e
-          
-          . /opt/venv/env.sh
-
+          export GH_TOKEN=${{ inputs.PAT }}
           bash tests/${{ inputs.is_unit_test == 'true' && 'unit_tests' || 'functional_tests' }}/${{ inputs.script }}.sh
-          
         '
 
         RUN_TEST_EOF

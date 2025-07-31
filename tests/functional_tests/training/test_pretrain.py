@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import os
-import shutil
 
 import pytest
 import torch
@@ -33,6 +32,12 @@ from megatron.bridge.training.config import (
 )
 from megatron.bridge.training.gpt_step import forward_step
 from megatron.bridge.training.pretrain import pretrain
+from tests.functional_tests.utils import (
+    broadcast_path,
+    clear_directories,
+    initialize_distributed,
+    verify_checkpoint_files,
+)
 
 
 class TestPretrain:
@@ -40,34 +45,22 @@ class TestPretrain:
     Test end to end training with checkpoint functionality.
     """
 
-    def clear_directories(self, tmp_path):
-        """Teardown method called after each test method."""
-        if torch.distributed.is_initialized():
-            torch.distributed.barrier()
-            if torch.distributed.get_rank() == 0:
-                if os.path.exists(tmp_path):
-                    shutil.rmtree(tmp_path)
-            torch.distributed.barrier()
-
-    def _verify_checkpoint_files(self, checkpoint_dir, total_iters):
-        """Verify that checkpoint files were created correctly."""
-        if torch.distributed.get_rank() == 0:
-            latest_tracker_file = os.path.join(checkpoint_dir, "latest_train_state.pt")
-            assert os.path.exists(latest_tracker_file), "Latest checkpoint tracker file not found"
-
-            final_iter_dir = os.path.join(checkpoint_dir, f"iter_{total_iters:07d}")
-            assert os.path.exists(final_iter_dir), f"Final checkpoint directory not found at {final_iter_dir}"
-
-            metadata_file = os.path.join(final_iter_dir, ".metadata")
-            assert os.path.exists(metadata_file), "Checkpoint metadata file not found"
-
     @pytest.mark.run_only_on("GPU")
     def test_pretrain_with_checkpoint(self, tmp_path):
         """
         Test end to end training with checkpoint functionality.
         """
-        checkpoint_dir = str(tmp_path / "checkpoints")
-        tensorboard_dir = str(tmp_path / "tensorboard")
+        initialize_distributed()
+        shared_base_dir = broadcast_path(tmp_path)
+
+        checkpoint_dir = os.path.join(shared_base_dir, "checkpoints")
+        tensorboard_dir = os.path.join(shared_base_dir, "tensorboard")
+
+        if torch.distributed.get_rank() == 0:
+            os.makedirs(checkpoint_dir, exist_ok=True)
+            os.makedirs(tensorboard_dir, exist_ok=True)
+
+        torch.distributed.barrier()
 
         try:
             global_batch_size = 8
@@ -162,21 +155,30 @@ class TestPretrain:
             pretrain(cfg, forward_step)
 
             # Verify checkpoint files
-            self._verify_checkpoint_files(checkpoint_dir, total_iters)
+            torch.distributed.barrier()
+            verify_checkpoint_files(checkpoint_dir, total_iters)
 
         finally:
             # pytest's tmp_path fixture doesn't clean up immediately.
             # Clean up manually.
-            self.clear_directories(tmp_path)
+            clear_directories(tmp_path)
 
     @pytest.mark.run_only_on("GPU")
     def test_pretrain_vpp(self, tmp_path):
         """
         Test end to end training with virtual pipeline parallelism.
         """
+        initialize_distributed()
+        shared_base_dir = broadcast_path(tmp_path)
 
-        checkpoint_dir = str(tmp_path / "checkpoints")
-        tensorboard_dir = str(tmp_path / "tensorboard")
+        checkpoint_dir = os.path.join(shared_base_dir, "checkpoints")
+        tensorboard_dir = os.path.join(shared_base_dir, "tensorboard")
+
+        if torch.distributed.get_rank() == 0:
+            os.makedirs(checkpoint_dir, exist_ok=True)
+            os.makedirs(tensorboard_dir, exist_ok=True)
+
+        torch.distributed.barrier()
 
         try:
             global_batch_size = 8
@@ -289,7 +291,12 @@ class TestPretrain:
 
             # Run training
             pretrain(cfg, forward_step)
+
+            # Verify checkpoint files
+            torch.distributed.barrier()
+            verify_checkpoint_files(checkpoint_dir, total_iters)
+
         finally:
             # pytest's tmp_path fixture doesn't clean up immediately.
             # Clean up manually.
-            self.clear_directories(tmp_path)
+            clear_directories(tmp_path)
