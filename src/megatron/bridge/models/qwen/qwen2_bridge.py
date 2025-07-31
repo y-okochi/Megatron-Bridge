@@ -71,63 +71,50 @@ class Qwen2Bridge(MegatronModelBridge):
         return provider
 
     def mapping_registry(self) -> MegatronMappingRegistry:
-        return MegatronMappingRegistry(
-            # ------------------------------------------------------------------
-            # Embedding & output projection – column-parallel
-            # ------------------------------------------------------------------
-            AutoMapping(
-                megatron_param="embedding.word_embeddings.weight",
-                hf_param="model.embed_tokens.weight",
-            ),
-            AutoMapping(
-                megatron_param="output_layer.weight",
-                hf_param="lm_head.weight",
-            ),
-            # ------------------------------------------------------------------
-            # LayerNorm (replicated across TP ranks)
-            # ------------------------------------------------------------------
-            AutoMapping(
-                megatron_param="decoder.final_layernorm.weight",
-                hf_param="model.norm.weight",
-            ),
-            AutoMapping(
-                megatron_param="decoder.layers.*.self_attention.linear_qkv.layer_norm_weight",
-                hf_param="model.layers.*.input_layernorm.weight",
-            ),
-            AutoMapping(
-                megatron_param="decoder.layers.*.mlp.linear_fc1.layer_norm_weight",
-                hf_param="model.layers.*.post_attention_layernorm.weight",
-            ),
-            # ------------------------------------------------------------------
-            # Attention – fused QKV & output projection
-            # Note: Qwen2 has bias in QKV projections
-            # ------------------------------------------------------------------
-            QKVMapping(
-                megatron_param="decoder.layers.*.self_attention.linear_qkv.weight",
-                q="model.layers.*.self_attn.q_proj.weight",
-                k="model.layers.*.self_attn.k_proj.weight",
-                v="model.layers.*.self_attn.v_proj.weight",
-            ),
-            QKVMapping(
-                megatron_param="decoder.layers.*.self_attention.linear_qkv.bias",
-                q="model.layers.*.self_attn.q_proj.bias",
-                k="model.layers.*.self_attn.k_proj.bias",
-                v="model.layers.*.self_attn.v_proj.bias",
-            ),
-            AutoMapping(
-                megatron_param="decoder.layers.*.self_attention.linear_proj.weight",
-                hf_param="model.layers.*.self_attn.o_proj.weight",
-            ),
-            # ------------------------------------------------------------------
-            # MLP – gated projection & output projection
-            # ------------------------------------------------------------------
-            GatedMLPMapping(
-                megatron_param="decoder.layers.*.mlp.linear_fc1.weight",
-                gate="model.layers.*.mlp.gate_proj.weight",
-                up="model.layers.*.mlp.up_proj.weight",
-            ),
-            AutoMapping(
-                megatron_param="decoder.layers.*.mlp.linear_fc2.weight",
-                hf_param="model.layers.*.mlp.down_proj.weight",
-            ),
+        # Return MegatronMappingRegistry containing parameter mappings from HF to Megatron format
+        # First create simple 1:1 parameter mappings using a dictionary for readability
+
+        # Dictionary maps HF parameter names -> Megatron parameter names
+        # Supports wildcard (*) patterns for layer-specific parameters
+        param_mappings = {
+            "model.embed_tokens.weight": "embedding.word_embeddings.weight",
+            "lm_head.weight": "output_layer.weight",
+            "model.norm.weight": "decoder.final_layernorm.weight",
+            "model.layers.*.input_layernorm.weight": "decoder.layers.*.self_attention.linear_qkv.layer_norm_weight",
+            "model.layers.*.post_attention_layernorm.weight": "decoder.layers.*.mlp.linear_fc1.layer_norm_weight",
+            "model.layers.*.self_attn.o_proj.weight": "decoder.layers.*.self_attention.linear_proj.weight",
+            "model.layers.*.mlp.down_proj.weight": "decoder.layers.*.mlp.linear_fc2.weight",
+        }
+
+        mapping_list = []
+        # Convert each dictionary entry to AutoMapping(hf_param, megatron_param)
+        for hf_param, megatron_param in param_mappings.items():
+            mapping_list.append(AutoMapping(hf_param=hf_param, megatron_param=megatron_param))
+
+        # Add special mappings that require parameter concatenation/transformation
+        mapping_list.extend(
+            [
+                # QKV: Combine separate Q, K, V matrices into single QKV matrix
+                QKVMapping(
+                    q="model.layers.*.self_attn.q_proj.weight",
+                    k="model.layers.*.self_attn.k_proj.weight",
+                    v="model.layers.*.self_attn.v_proj.weight",
+                    megatron_param="decoder.layers.*.self_attention.linear_qkv.weight",
+                ),
+                # QKV bias: Combine separate Q, K, V biases into single QKV bias (Qwen2 specific)
+                QKVMapping(
+                    q="model.layers.*.self_attn.q_proj.bias",
+                    k="model.layers.*.self_attn.k_proj.bias",
+                    v="model.layers.*.self_attn.v_proj.bias",
+                    megatron_param="decoder.layers.*.self_attention.linear_qkv.bias",
+                ),
+                # Gated MLP: Combine gate and up projection matrices into single FC1 matrix
+                GatedMLPMapping(
+                    gate="model.layers.*.mlp.gate_proj.weight",
+                    up="model.layers.*.mlp.up_proj.weight",
+                    megatron_param="decoder.layers.*.mlp.linear_fc1.weight",
+                ),
+            ]
         )
+
+        return MegatronMappingRegistry(*mapping_list)
