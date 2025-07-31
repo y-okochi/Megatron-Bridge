@@ -14,7 +14,7 @@
 
 import torch
 from megatron.core.models.gpt.gpt_model import GPTModel
-from transformers import Qwen3MoeForCausalLM
+from transformers import Qwen3MoEForCausalLM
 
 from megatron.bridge.models.hf_pretrained.causal_lm import PreTrainedCausalLM
 from megatron.bridge.models.mapping_registry import MegatronMappingRegistry
@@ -22,17 +22,17 @@ from megatron.bridge.models.model_bridge import MegatronModelBridge
 from megatron.bridge.models.param_mapping import (
     MOEMapping,
     QKVMapping,
-    TPAwareMapping,
+    AutoMapping,
 )
-from megatron.bridge.models.qwen.qwen_provider import Qwen3MoeModelProvider
+from megatron.bridge.models.qwen.qwen_provider import Qwen3MoEModelProvider
 
 
-@MegatronModelBridge.register_bridge(source=Qwen3MoeForCausalLM, target=GPTModel)
-class Qwen3MoeCausalBridge(MegatronModelBridge):
+@MegatronModelBridge.register_bridge(source=Qwen3MoEForCausalLM, target=GPTModel)
+class Qwen3MoECausalBridge(MegatronModelBridge):
     """
     Megatron Hub Bridge for Qwen3 MoE Causal LM.
 
-    This bridge handles the conversion between HuggingFace Qwen3MoeForCausalLM
+    This bridge handles the conversion between HuggingFace Qwen3MoEForCausalLM
     and Megatron-Core GPTModel formats. Qwen3 MoE models use mixture of experts
     architecture with QK layernorm.
 
@@ -42,10 +42,10 @@ class Qwen3MoeCausalBridge(MegatronModelBridge):
         >>> provider = bridge.to_megatron_provider()
     """
 
-    def provider_bridge(self, hf_pretrained: PreTrainedCausalLM) -> Qwen3MoeModelProvider:
+    def provider_bridge(self, hf_pretrained: PreTrainedCausalLM) -> Qwen3MoEModelProvider:
         hf_config = hf_pretrained.config
 
-        provider = Qwen3MoeModelProvider(
+        provider = Qwen3MoEModelProvider(
             num_layers=hf_config.num_hidden_layers,
             hidden_size=hf_config.hidden_size,
             ffn_hidden_size=hf_config.intermediate_size,
@@ -71,7 +71,6 @@ class Qwen3MoeCausalBridge(MegatronModelBridge):
         )
 
         provider.gradient_accumulation_fusion = False
-        provider.variable_seq_lengths = True
 
         return provider
 
@@ -80,41 +79,41 @@ class Qwen3MoeCausalBridge(MegatronModelBridge):
             # ------------------------------------------------------------------
             # Embedding & output projection – column-parallel
             # ------------------------------------------------------------------
-            TPAwareMapping(
+            AutoMapping(
                 megatron_param="embedding.word_embeddings.weight",
                 hf_param="model.embed_tokens.weight",
             ),
-            TPAwareMapping(
+            AutoMapping(
                 megatron_param="output_layer.weight",
                 hf_param="lm_head.weight",
             ),
             # ------------------------------------------------------------------
             # LayerNorm (replicated across TP ranks)
             # ------------------------------------------------------------------
-            TPAwareMapping(
+            AutoMapping(
                 megatron_param="decoder.final_layernorm.weight",
                 hf_param="model.norm.weight",
             ),
-            TPAwareMapping(
+            AutoMapping(
                 megatron_param="decoder.layers.*.self_attention.linear_qkv.layer_norm_weight",
                 hf_param="model.layers.*.input_layernorm.weight",
             ),
-            TPAwareMapping(
+            AutoMapping(
                 megatron_param="decoder.layers.*.mlp.router.weight",
                 hf_param="model.layers.*.mlp.gate.weight",
             ),
-            TPAwareMapping(
+            AutoMapping(
                 megatron_param="decoder.layers.*.pre_mlp_layernorm.weight",
                 hf_param="model.layers.*.post_attention_layernorm.weight",
             ),
             # ------------------------------------------------------------------
             # Attention – QK layernorm (Qwen3 MoE specific)
             # ------------------------------------------------------------------
-            TPAwareMapping(
+            AutoMapping(
                 megatron_param="decoder.layers.*.self_attention.q_layernorm.weight",
                 hf_param="model.layers.*.self_attn.q_norm.weight",
             ),
-            TPAwareMapping(
+            AutoMapping(
                 megatron_param="decoder.layers.*.self_attention.k_layernorm.weight",
                 hf_param="model.layers.*.self_attn.k_norm.weight",
             ),
@@ -128,7 +127,7 @@ class Qwen3MoeCausalBridge(MegatronModelBridge):
                 k="model.layers.*.self_attn.k_proj.weight",
                 v="model.layers.*.self_attn.v_proj.weight",
             ),
-            TPAwareMapping(
+            AutoMapping(
                 megatron_param="decoder.layers.*.self_attention.linear_proj.weight",
                 hf_param="model.layers.*.self_attn.o_proj.weight",
             ),

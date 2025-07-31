@@ -268,7 +268,7 @@ class Qwen3ModelProvider110B(Qwen3ModelProvider):
 
 
 @dataclass
-class Qwen3MoeModelProvider(Qwen2ModelProvider):
+class Qwen3MoEModelProvider(Qwen2ModelProvider):
     """Base configuration for Qwen3 MoE models.
 
     Qwen3 MoE models use mixture of experts architecture with QK layernorm.
@@ -285,7 +285,7 @@ class Qwen3MoeModelProvider(Qwen2ModelProvider):
 
 
 @dataclass
-class Qwen3MoeModelProvider235B(Qwen3MoeModelProvider):
+class Qwen3MoEModelProvider235B(Qwen3MoEModelProvider):
     """
     Config for Qwen3 235B-A22B MoE: https://huggingface.co/Qwen/Qwen3-235B-A22B
 
