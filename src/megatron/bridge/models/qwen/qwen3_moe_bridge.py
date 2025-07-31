@@ -75,77 +75,55 @@ class Qwen3MoECausalBridge(MegatronModelBridge):
         return provider
 
     def mapping_registry(self) -> MegatronMappingRegistry:
-        return MegatronMappingRegistry(
-            # ------------------------------------------------------------------
-            # Embedding & output projection – column-parallel
-            # ------------------------------------------------------------------
-            AutoMapping(
-                megatron_param="embedding.word_embeddings.weight",
-                hf_param="model.embed_tokens.weight",
-            ),
-            AutoMapping(
-                megatron_param="output_layer.weight",
-                hf_param="lm_head.weight",
-            ),
-            # ------------------------------------------------------------------
-            # LayerNorm (replicated across TP ranks)
-            # ------------------------------------------------------------------
-            AutoMapping(
-                megatron_param="decoder.final_layernorm.weight",
-                hf_param="model.norm.weight",
-            ),
-            AutoMapping(
-                megatron_param="decoder.layers.*.self_attention.linear_qkv.layer_norm_weight",
-                hf_param="model.layers.*.input_layernorm.weight",
-            ),
-            AutoMapping(
-                megatron_param="decoder.layers.*.mlp.router.weight",
-                hf_param="model.layers.*.mlp.gate.weight",
-            ),
-            AutoMapping(
-                megatron_param="decoder.layers.*.pre_mlp_layernorm.weight",
-                hf_param="model.layers.*.post_attention_layernorm.weight",
-            ),
-            # ------------------------------------------------------------------
-            # Attention – QK layernorm (Qwen3 MoE specific)
-            # ------------------------------------------------------------------
-            AutoMapping(
-                megatron_param="decoder.layers.*.self_attention.q_layernorm.weight",
-                hf_param="model.layers.*.self_attn.q_norm.weight",
-            ),
-            AutoMapping(
-                megatron_param="decoder.layers.*.self_attention.k_layernorm.weight",
-                hf_param="model.layers.*.self_attn.k_norm.weight",
-            ),
-            # ------------------------------------------------------------------
-            # Attention – fused QKV & output projection
-            # Note: Qwen3 MoE does NOT have bias in QKV projections
-            # ------------------------------------------------------------------
-            QKVMapping(
-                megatron_param="decoder.layers.*.self_attention.linear_qkv.weight",
-                q="model.layers.*.self_attn.q_proj.weight",
-                k="model.layers.*.self_attn.k_proj.weight",
-                v="model.layers.*.self_attn.v_proj.weight",
-            ),
-            AutoMapping(
-                megatron_param="decoder.layers.*.self_attention.linear_proj.weight",
-                hf_param="model.layers.*.self_attn.o_proj.weight",
-            ),
-            # ------------------------------------------------------------------
-            # MoE Experts – using MOEMapping for expert weights
-            # Note: NeMo shows separate mappings for gate/up, but we need to check
-            # if our MOEMapping handles the gated MLP structure correctly
-            # ------------------------------------------------------------------
-            MOEMapping(
-                megatron_param="decoder.layers.*.mlp.experts.linear_fc1.weight*",
-                hf_param="model.layers.*.mlp.experts.*.gate_proj.weight",
-            ),
-            MOEMapping(
-                megatron_param="decoder.layers.*.mlp.experts.linear_fc1.weight*",
-                hf_param="model.layers.*.mlp.experts.*.up_proj.weight",
-            ),
-            MOEMapping(
-                megatron_param="decoder.layers.*.mlp.experts.linear_fc2.weight*",
-                hf_param="model.layers.*.mlp.experts.*.down_proj.weight",
-            ),
+        # Return MegatronMappingRegistry containing parameter mappings from HF to Megatron format
+        # First create simple 1:1 parameter mappings using a dictionary for readability
+
+        # Dictionary maps HF parameter names -> Megatron parameter names
+        # Supports wildcard (*) patterns for layer-specific parameters
+        param_mappings = {
+            "model.embed_tokens.weight": "embedding.word_embeddings.weight",
+            "lm_head.weight": "output_layer.weight",
+            "model.norm.weight": "decoder.final_layernorm.weight",
+            "model.layers.*.input_layernorm.weight": "decoder.layers.*.self_attention.linear_qkv.layer_norm_weight",
+            "model.layers.*.mlp.gate.weight": "decoder.layers.*.mlp.router.weight",
+            "model.layers.*.post_attention_layernorm.weight": "decoder.layers.*.pre_mlp_layernorm.weight",
+            "model.layers.*.self_attn.q_norm.weight": "decoder.layers.*.self_attention.q_layernorm.weight",
+            "model.layers.*.self_attn.k_norm.weight": "decoder.layers.*.self_attention.k_layernorm.weight",
+            "model.layers.*.self_attn.o_proj.weight": "decoder.layers.*.self_attention.linear_proj.weight",
+        }
+
+        mapping_list = []
+        # Convert each dictionary entry to AutoMapping(hf_param, megatron_param)
+        for hf_param, megatron_param in param_mappings.items():
+            mapping_list.append(AutoMapping(hf_param=hf_param, megatron_param=megatron_param))
+
+        # Add special mappings that require parameter concatenation/transformation
+        mapping_list.extend(
+            [
+                # QKV: Combine separate Q, K, V matrices into single QKV matrix
+                # Note: Qwen3 MoE does NOT have bias in QKV projections
+                QKVMapping(
+                    q="model.layers.*.self_attn.q_proj.weight",
+                    k="model.layers.*.self_attn.k_proj.weight",
+                    v="model.layers.*.self_attn.v_proj.weight",
+                    megatron_param="decoder.layers.*.self_attention.linear_qkv.weight",
+                ),
+                # MoE Experts: Map expert gate projections
+                MOEMapping(
+                    megatron_param="decoder.layers.*.mlp.experts.linear_fc1.weight*",
+                    hf_param="model.layers.*.mlp.experts.*.gate_proj.weight",
+                ),
+                # MoE Experts: Map expert up projections
+                MOEMapping(
+                    megatron_param="decoder.layers.*.mlp.experts.linear_fc1.weight*",
+                    hf_param="model.layers.*.mlp.experts.*.up_proj.weight",
+                ),
+                # MoE Experts: Map expert down projections
+                MOEMapping(
+                    megatron_param="decoder.layers.*.mlp.experts.linear_fc2.weight*",
+                    hf_param="model.layers.*.mlp.experts.*.down_proj.weight",
+                ),
+            ]
         )
+
+        return MegatronMappingRegistry(*mapping_list)
