@@ -20,9 +20,9 @@ from megatron.bridge.models.hf_pretrained.causal_lm import PreTrainedCausalLM
 from megatron.bridge.models.mapping_registry import MegatronMappingRegistry
 from megatron.bridge.models.model_bridge import MegatronModelBridge
 from megatron.bridge.models.param_mapping import (
+    AutoMapping,
     GatedMLPMapping,
     QKVMapping,
-    TPAwareMapping,
 )
 from megatron.bridge.models.qwen.qwen_provider import Qwen3ModelProvider
 
@@ -38,7 +38,7 @@ class Qwen3Bridge(MegatronModelBridge):
 
     Example:
         >>> from megatron.bridge import AutoBridge
-        >>> bridge = AutoBridge.from_hf_pretrained("Qwen/Qwen3-0.5B")
+        >>> bridge = AutoBridge.from_hf_pretrained("Qwen/Qwen3-1.7B")
         >>> provider = bridge.to_megatron_provider()
     """
 
@@ -89,9 +89,9 @@ class Qwen3Bridge(MegatronModelBridge):
         }
 
         mapping_list = []
-        # Convert each dictionary entry to TPAwareMapping(hf_param, megatron_param)
+        # Convert each dictionary entry to AutoMapping(hf_param, megatron_param)
         for hf_param, megatron_param in param_mappings.items():
-            mapping_list.append(TPAwareMapping(hf_param=hf_param, megatron_param=megatron_param))
+            mapping_list.append(AutoMapping(hf_param=hf_param, megatron_param=megatron_param))
 
         # Add special mappings that require parameter concatenation/transformation
         mapping_list.extend(
