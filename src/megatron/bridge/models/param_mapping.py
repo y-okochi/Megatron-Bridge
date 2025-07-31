@@ -787,7 +787,7 @@ class AutoMapping(MegatronParamMapping[torch.Tensor]):
     def __init__(self, megatron_param: str, hf_param: str):
         """Initialize TP-aware mapping."""
         super().__init__(megatron_param, hf_param)
-        
+
         # Cache for detected parallelism type and delegate mapping
         self._detected_type: Optional[str] = None
         self._mapping: Optional[MegatronParamMapping[torch.Tensor]] = None
@@ -806,14 +806,15 @@ class AutoMapping(MegatronParamMapping[torch.Tensor]):
     def _detect_parallelism_type(self, module: nn.Module, megatron_param_name: str) -> str:
         """Detect parallelism type from module."""
         module_type = type(module).__name__
-        
+
         # Handle fused modules like TELayerNormColumnParallelLinear
-        # These modules have both column-parallel weights (weight, bias) 
+        # These modules have both column-parallel weights (weight, bias)
         # and replicated layer norm weights (layer_norm_weight, layer_norm_bias)
         if module_type == "TELayerNormColumnParallelLinear":
             # Check the actual parameter name to determine the correct parallelism type
-            if megatron_param_name and (megatron_param_name.endswith("layer_norm_weight") or 
-                                       megatron_param_name.endswith("layer_norm_bias")):
+            if megatron_param_name and (
+                megatron_param_name.endswith("layer_norm_weight") or megatron_param_name.endswith("layer_norm_bias")
+            ):
                 return "replicated"
             # All other parameters (weight, bias) are column-parallel
             return "column"
@@ -883,7 +884,7 @@ class AutoMapping(MegatronParamMapping[torch.Tensor]):
             else:
                 # Receive from owning rank
                 self._detected_type = self.broadcast_obj_from_pp_rank(None)
-            
+
             self._mapping = self._get_or_create_mapping(self._detected_type)
 
         return self._mapping.megatron_to_hf(megatron_weights, megatron_module, megatron_param_name)
