@@ -22,13 +22,13 @@ from megatron.bridge.models.model_bridge import MegatronModelBridge
 from megatron.bridge.models.param_mapping import (
     GatedMLPMapping,
     QKVMapping,
-    TPAwareMapping,
+    AutoMapping,
 )
 from megatron.bridge.models.qwen.qwen2_provider import Qwen2ModelProvider
 
 
 @MegatronModelBridge.register_bridge(source=Qwen2ForCausalLM, target=GPTModel)
-class Qwen2CausalBridge(MegatronModelBridge):
+class Qwen2Bridge(MegatronModelBridge):
     """
     Megatron Hub Bridge for Qwen2 Causal LM.
 
@@ -67,7 +67,6 @@ class Qwen2CausalBridge(MegatronModelBridge):
         )
 
         provider.gradient_accumulation_fusion = False
-        provider.variable_seq_lengths = True
 
         return provider
 
@@ -76,26 +75,26 @@ class Qwen2CausalBridge(MegatronModelBridge):
             # ------------------------------------------------------------------
             # Embedding & output projection – column-parallel
             # ------------------------------------------------------------------
-            TPAwareMapping(
+            AutoMapping(
                 megatron_param="embedding.word_embeddings.weight",
                 hf_param="model.embed_tokens.weight",
             ),
-            TPAwareMapping(
+            AutoMapping(
                 megatron_param="output_layer.weight",
                 hf_param="lm_head.weight",
             ),
             # ------------------------------------------------------------------
             # LayerNorm (replicated across TP ranks)
             # ------------------------------------------------------------------
-            TPAwareMapping(
+            AutoMapping(
                 megatron_param="decoder.final_layernorm.weight",
                 hf_param="model.norm.weight",
             ),
-            TPAwareMapping(
+            AutoMapping(
                 megatron_param="decoder.layers.*.self_attention.linear_qkv.layer_norm_weight",
                 hf_param="model.layers.*.input_layernorm.weight",
             ),
-            TPAwareMapping(
+            AutoMapping(
                 megatron_param="decoder.layers.*.mlp.linear_fc1.layer_norm_weight",
                 hf_param="model.layers.*.post_attention_layernorm.weight",
             ),
@@ -115,7 +114,7 @@ class Qwen2CausalBridge(MegatronModelBridge):
                 k="model.layers.*.self_attn.k_proj.bias",
                 v="model.layers.*.self_attn.v_proj.bias",
             ),
-            TPAwareMapping(
+            AutoMapping(
                 megatron_param="decoder.layers.*.self_attention.linear_proj.weight",
                 hf_param="model.layers.*.self_attn.o_proj.weight",
             ),
@@ -127,7 +126,7 @@ class Qwen2CausalBridge(MegatronModelBridge):
                 gate="model.layers.*.mlp.gate_proj.weight",
                 up="model.layers.*.mlp.up_proj.weight",
             ),
-            TPAwareMapping(
+            AutoMapping(
                 megatron_param="decoder.layers.*.mlp.linear_fc2.weight",
                 hf_param="model.layers.*.mlp.down_proj.weight",
             ),
