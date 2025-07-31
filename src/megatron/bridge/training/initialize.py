@@ -334,7 +334,10 @@ def _initialize_distributed(
 
         # Manually set the device ids.
         if device_count > 0:
-            torch.cuda.set_device(get_local_rank_preinit())
+            if dist_config.external_gpu_device_mapping:
+                torch.cuda.set_device(0)
+            else:
+                torch.cuda.set_device(get_local_rank_preinit())
 
         # Call the init process
         init_process_group_kwargs = {
@@ -345,7 +348,10 @@ def _initialize_distributed(
         }
 
         torch.distributed.init_process_group(**init_process_group_kwargs)
-        torch.distributed.barrier(device_ids=[get_local_rank_preinit()])
+        if dist_config.external_gpu_device_mapping:
+            torch.distributed.barrier(device_ids=[0])
+        else:
+            torch.distributed.barrier(device_ids=[get_local_rank_preinit()])
 
     # Set the tensor model-parallel, pipeline model-parallel, and
     # data-parallel communicators.
@@ -354,10 +360,10 @@ def _initialize_distributed(
             print("model parallel is already initialized")
         else:
             parallel_state.initialize_model_parallel(
-                model_config.tensor_model_parallel_size,
-                model_config.pipeline_model_parallel_size,
-                model_config.virtual_pipeline_model_parallel_size,
-                model_config.pipeline_model_parallel_split_rank,
+                tensor_model_parallel_size=model_config.tensor_model_parallel_size,
+                pipeline_model_parallel_size=model_config.pipeline_model_parallel_size,
+                virtual_pipeline_model_parallel_size=model_config.virtual_pipeline_model_parallel_size,
+                pipeline_model_parallel_comm_backend=model_config.pipeline_model_parallel_comm_backend,
                 context_parallel_size=model_config.context_parallel_size,
                 hierarchical_context_parallel_sizes=model_config.hierarchical_context_parallel_sizes,
                 expert_model_parallel_size=model_config.expert_model_parallel_size,
@@ -366,8 +372,6 @@ def _initialize_distributed(
                 distributed_timeout_minutes=dist_config.distributed_timeout_minutes,
                 nccl_communicator_config_path=dist_config.nccl_communicator_config_path,
                 order="tp-cp-ep-dp-pp" if not dist_config.use_tp_pp_dp_mapping else "tp-pp-dp",
-                encoder_tensor_model_parallel_size=getattr(model_config, "encoder_tensor_model_parallel_size", 0),
-                encoder_pipeline_model_parallel_size=getattr(model_config, "encoder_pipeline_model_parallel_size", 0),
                 get_embedding_ranks=get_embedding_ranks,
                 get_position_embedding_ranks=get_position_embedding_ranks,
                 create_gloo_process_groups=dist_config.use_gloo_process_groups,

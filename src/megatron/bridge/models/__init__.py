@@ -14,7 +14,6 @@
 
 # Import model providers for easy access
 from megatron.bridge.models.auto_bridge import AutoBridge
-from megatron.bridge.models.causal_bridge import CausalLMBridge
 from megatron.bridge.models.gpt_provider import GPTModelProvider
 from megatron.bridge.models.llama import (
     CodeLlamaModelProvider7B,
@@ -39,15 +38,15 @@ from megatron.bridge.models.llama import (
     LlamaModelProvider,
 )
 from megatron.bridge.models.mapping_registry import MegatronMappingRegistry
-from megatron.bridge.models.model_bridge import MegatronModelBridge, WeightDistributionMode
+from megatron.bridge.models.model_bridge import MegatronModelBridge
 from megatron.bridge.models.param_mapping import (
+    AutoMapping,
     ColumnParallelMapping,
     GatedMLPMapping,
     MegatronParamMapping,
     QKVMapping,
     ReplicatedMapping,
     RowParallelMapping,
-    TPAwareMapping,
 )
 from megatron.bridge.models.qwen import (
     Qwen2ModelProvider,
@@ -68,17 +67,15 @@ from megatron.bridge.models.t5_provider import T5ModelProvider
 
 __all__ = [
     "AutoBridge",
-    "CausalLMBridge",
     "MegatronMappingRegistry",
     "MegatronModelBridge",
-    "WeightDistributionMode",
     "ColumnParallelMapping",
     "GatedMLPMapping",
     "MegatronParamMapping",
     "QKVMapping",
     "ReplicatedMapping",
     "RowParallelMapping",
-    "TPAwareMapping",
+    "AutoMapping",
     "GPTModelProvider",
     "T5ModelProvider",
     "LlamaModelProvider",

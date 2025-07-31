@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import logging
 import os
 from pathlib import Path
 from shutil import rmtree
@@ -18,49 +19,11 @@ from unittest.mock import patch
 
 import pytest
 
-
-def pytest_addoption(parser):
-    """
-    Additional command-line arguments passed to pytest.
-    For now:
-        --cpu: use CPU during testing (DEFAULT: GPU)
-        --use_local_test_data: use local test data/skip downloading from URL/GitHub (DEFAULT: False)
-    """
-    parser.addoption(
-        "--cpu", action="store_true", help="pass that argument to use CPU during testing (DEFAULT: False = GPU)"
-    )
-    parser.addoption(
-        "--with_downloads",
-        action="store_true",
-        help="pass this argument to active tests which download models from the cloud.",
-    )
+from tests.unit_tests.download_unit_tests_dataset import get_oldest_release_and_assets
 
 
-@pytest.fixture
-def device(request):
-    """Simple fixture returning string denoting the device [CPU | GPU]"""
-    if request.config.getoption("--cpu"):
-        return "CPU"
-    else:
-        return "GPU"
-
-
-@pytest.fixture(autouse=True)
-def run_only_on_device_fixture(request, device):
-    """Fixture to skip tests based on the device"""
-    if request.node.get_closest_marker("run_only_on"):
-        if request.node.get_closest_marker("run_only_on").args[0] != device:
-            pytest.skip("skipped on this device: {}".format(device))
-
-
-@pytest.fixture(autouse=True)
-def downloads_weights(request, device):
-    """Fixture to validate if the with_downloads flag is passed if necessary"""
-    if request.node.get_closest_marker("with_downloads"):
-        if not request.config.getoption("--with_downloads"):
-            pytest.skip(
-                "To run this test, pass --with_downloads option. It will download (and cache) models from cloud."
-            )
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 @pytest.fixture(autouse=True)
@@ -78,6 +41,36 @@ def cleanup_local_folder():
         rmtree("./nemo_experiments", ignore_errors=True)
 
 
+@pytest.fixture(scope="session", autouse=True)
+def ensure_test_data(tmp_path_factory):
+    """Ensure test data is available in a temporary directory by downloading if necessary."""
+    data_path = tmp_path_factory.mktemp("test_data")
+
+    # Check if data directory exists and has content
+    if not any(data_path.iterdir()):
+        logger.info(f"Test data not found at {data_path}. Downloading...")
+
+        try:
+            # Download assets to data_path
+            get_oldest_release_and_assets(assets_dir=str(data_path))
+
+            logger.info("Test data downloaded successfully.")
+
+        except ImportError as e:
+            logger.info(f"Failed to import download function: {e}")
+        except ValueError as e:
+            logger.error(e)
+            pytest.exit(f"Failed to download test data: {e}", returncode=1)
+            # Don't fail the tests, just warn
+        except Exception as e:
+            logger.info(f"Failed to download test data: {e}")
+            # Don't fail the tests, just warn
+    else:
+        logger.info(f"Test data already available at {data_path}")
+
+    yield data_path
+
+
 @pytest.fixture(autouse=True)
 def reset_env_vars():
     """Reset environment variables"""
@@ -90,23 +83,6 @@ def reset_env_vars():
     # After the test, restore the original environment
     os.environ.clear()
     os.environ.update(original_env)
-
-
-def pytest_configure(config):
-    """
-    Initial configuration of conftest.
-    The function checks if test_data.tar.gz is present in tests/.data.
-    If so, compares its size with github's test_data.tar.gz.
-    If file absent or sizes not equal, function downloads the archive from github and unpacks it.
-    """
-    config.addinivalue_line(
-        "markers",
-        "run_only_on(device): runs the test only on a given device [CPU | GPU]",
-    )
-    config.addinivalue_line(
-        "markers",
-        "with_downloads: runs the test using data present in tests/.data",
-    )
 
 
 @pytest.fixture(autouse=True)
