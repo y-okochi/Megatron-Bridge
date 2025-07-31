@@ -14,7 +14,7 @@
 
 import torch
 from megatron.core.models.gpt.gpt_model import GPTModel
-from transformers import Qwen3MoEForCausalLM
+from transformers import Qwen3MoeForCausalLM
 
 from megatron.bridge.models.hf_pretrained.causal_lm import PreTrainedCausalLM
 from megatron.bridge.models.mapping_registry import MegatronMappingRegistry
@@ -27,12 +27,12 @@ from megatron.bridge.models.param_mapping import (
 from megatron.bridge.models.qwen.qwen_provider import Qwen3MoEModelProvider
 
 
-@MegatronModelBridge.register_bridge(source=Qwen3MoEForCausalLM, target=GPTModel)
-class Qwen3MoECausalBridge(MegatronModelBridge):
+@MegatronModelBridge.register_bridge(source=Qwen3MoeForCausalLM, target=GPTModel)
+class Qwen3MoEBridge(MegatronModelBridge):
     """
     Megatron Hub Bridge for Qwen3 MoE Causal LM.
 
-    This bridge handles the conversion between HuggingFace Qwen3MoEForCausalLM
+    This bridge handles the conversion between HuggingFace Qwen3MoeForCausalLM
     and Megatron-Core GPTModel formats. Qwen3 MoE models use mixture of experts
     architecture with QK layernorm.
 
