@@ -686,6 +686,10 @@ class ReplicatedMapping(MegatronParamMapping[torch.Tensor]):
         if self.tp_size == 1:
             return hf_weights
 
+        # TODO(yuya): router.weight is on device cpu, need to check.
+        if target_device.index != torch.cuda.current_device():
+            hf_weights = hf_weights.to(torch.cuda.current_device())
+
         # All ranks need the full weight
         if self.tp_rank > 0:
             # Create empty tensor of correct shape
