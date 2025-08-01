@@ -184,7 +184,7 @@ def get_transformer_layer_offset(config: TransformerConfig, pipeline_rank: int =
 
 
 def get_module_and_param_from_name(
-        models: List[MegatronModule], vp_stage: Optional[int], param_name: str, return_shape: bool = False
+        models: List[MegatronModule], vp_stage: Optional[int], param_name: str,
 ) -> Tuple[torch.nn.Module, torch.Tensor] | Tuple[torch.nn.Module, torch.Tensor, Tuple]:
     """
     Get parameter from specific VP stage, ensuring that parameter
@@ -194,11 +194,9 @@ def get_module_and_param_from_name(
         models: List of Megatron model instances
         vp_stage: Virtual pipeline stage index (None for single stage)
         param_name: Dot-separated parameter name
-        return_shape: If True, also returns the parameter shape
 
     Returns:
         Tuple of (module, parameter) where module owns the parameter
-        If return_shape=True, returns (module, parameter, shape)
 
     Raises:
         ValueError: If vp_stage is out of range or parameter doesn't exist
@@ -223,6 +221,4 @@ def get_module_and_param_from_name(
     except AttributeError as e:
         raise ValueError(f"Parameter '{param_name}' not found in model at VP stage {vp_stage}") from e
 
-    if return_shape:
-        return module, param, param.shape
     return module, param
