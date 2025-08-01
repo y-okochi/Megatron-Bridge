@@ -13,10 +13,12 @@
 # limitations under the License.
 
 
-from typing import Optional
+from typing import Optional, List, Tuple
 
 import torch
 from megatron.core.transformer.transformer_config import TransformerConfig
+from megatron.core.transformer.module import MegatronModule
+from megatron.bridge.utils.common_utils import unwrap_model
 from rich.table import Table
 
 
@@ -179,3 +181,48 @@ def get_transformer_layer_offset(config: TransformerConfig, pipeline_rank: int =
     else:
         offset = 0
     return offset
+
+
+def get_module_and_param_from_name(
+        models: List[MegatronModule], vp_stage: Optional[int], param_name: str, return_shape: bool = False
+) -> Tuple[torch.nn.Module, torch.Tensor] | Tuple[torch.nn.Module, torch.Tensor, Tuple]:
+    """
+    Get parameter from specific VP stage, ensuring that parameter
+    attributes are preserved.
+
+    Args:
+        models: List of Megatron model instances
+        vp_stage: Virtual pipeline stage index (None for single stage)
+        param_name: Dot-separated parameter name
+        return_shape: If True, also returns the parameter shape
+
+    Returns:
+        Tuple of (module, parameter) where module owns the parameter
+        If return_shape=True, returns (module, parameter, shape)
+
+    Raises:
+        ValueError: If vp_stage is out of range or parameter doesn't exist
+    """
+
+    if vp_stage is None:
+        model = models[0]
+    else:
+        if vp_stage >= len(models):
+            raise ValueError(f"VP stage {vp_stage} out of range (max: {len(models) - 1})")
+        model = models[vp_stage]
+
+    param = unwrap_model(model)
+    module = param
+    splitted_name = param_name.split(".")
+
+    try:
+        for i, part in enumerate(splitted_name):
+            param = getattr(param, part)
+            if i < len(splitted_name) - 1:
+                module = getattr(module, part)
+    except AttributeError as e:
+        raise ValueError(f"Parameter '{param_name}' not found in model at VP stage {vp_stage}") from e
+
+    if return_shape:
+        return module, param, param.shape
+    return module, param

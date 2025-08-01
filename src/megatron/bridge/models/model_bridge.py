@@ -42,7 +42,7 @@ from megatron.bridge.models.decorators.dispatch import dispatch
 from megatron.bridge.models.mapping_registry import MegatronMappingRegistry
 from megatron.bridge.models.model_provider import ModelProviderProtocol
 from megatron.bridge.models.param_mapping import MegatronParamMapping
-from megatron.bridge.models.utils import get_transformer_layer_offset
+from megatron.bridge.models.utils import get_transformer_layer_offset, get_module_and_param_from_name
 from megatron.bridge.utils.common_utils import unwrap_model
 
 
@@ -152,7 +152,7 @@ class WeightConversionTask(Generic[MappingT]):
         return self.mapping.megatron_to_hf(megatron_weights, megatron_module, self.param_name)
 
 
-def _adjust_layer_number_to_global(name: str, layer_offset: int) -> str:
+def _adjust_local_name_to_global(name: str, layer_offset: int) -> str:
     """Adjust layer number from local to global numbering."""
     if "layers." not in name:
         return name
@@ -519,7 +519,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
                 local_weights = None
                 local_module = None
                 if task.pp_rank == mpu.get_pipeline_model_parallel_rank():
-                    local_module, local_weights = self._get_param_and_module_from_vp(
+                    local_module, local_weights = get_module_and_param_from_name(
                         megatron_model, task.vp_stage, task.param_name
                     )
 
@@ -719,46 +719,6 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         all_param_infos = sum(gathered_param_infos, [])
         return all_param_infos
 
-    def _get_param_and_module_from_vp(
-        self, models: List[MegatronModule], vp_stage: Optional[int], param_name: str
-    ) -> Tuple[torch.nn.Module, torch.Tensor]:
-        """
-        Get parameter from specific VP stage, ensuring that parameter
-        attributes are preserved.
-
-        Args:
-            models: List of Megatron model instances
-            vp_stage: Virtual pipeline stage index (None for single stage)
-            param_name: Dot-separated parameter name
-
-        Returns:
-            Tuple of (module, parameter) where module owns the parameter
-
-        Raises:
-            ValueError: If vp_stage is out of range or parameter doesn't exist
-        """
-
-        if vp_stage is None:
-            model = models[0]
-        else:
-            if vp_stage >= len(models):
-                raise ValueError(f"VP stage {vp_stage} out of range (max: {len(models) - 1})")
-            model = models[vp_stage]
-
-        param = unwrap_model(model)
-        module = param
-        splitted_name = param_name.split(".")
-
-        try:
-            for i, part in enumerate(splitted_name):
-                param = getattr(param, part)
-                if i < len(splitted_name) - 1:
-                    module = getattr(module, part)
-        except AttributeError as e:
-            raise ValueError(f"Parameter '{param_name}' not found in model at VP stage {vp_stage}") from e
-
-        return module, param
-
     def _build_plan_hf_to_megatron(
         self, hf_pretrained: HFPreTrained, megatron_model: List[MegatronModel]
     ) -> Iterable[WeightConversionTask]:
@@ -782,7 +742,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
                     continue
 
                 local_name = self._unwrap_name(local_name)
-                global_name = _adjust_layer_number_to_global(local_name, layer_offset)
+                global_name = _adjust_local_name_to_global(local_name, layer_offset)
                 mapping = mapping_registry.megatron_to_hf_lookup(global_name)
 
                 if not mapping:
@@ -804,7 +764,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
                         )
                         continue
 
-                local_module, local_weights = self._get_param_and_module_from_vp(megatron_model, vp_stage, local_name)
+                local_module, local_weights = get_module_and_param_from_name(megatron_model, vp_stage, local_name)
 
                 yield WeightConversionTask(
                     pp_rank=pp_rank,
@@ -861,7 +821,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         for pp_rank, vp_stage, local_name in self._collect_all_params_info(megatron_model):
             layer_offset = get_transformer_layer_offset(model_config, pipeline_rank=pp_rank, vp_stage=vp_stage)
             local_name = self._unwrap_name(local_name)
-            global_name = _adjust_layer_number_to_global(local_name, layer_offset)
+            global_name = _adjust_local_name_to_global(local_name, layer_offset)
             param_locations[global_name].append((pp_rank, vp_stage, local_name))
 
         for hf_key in hf_keys:

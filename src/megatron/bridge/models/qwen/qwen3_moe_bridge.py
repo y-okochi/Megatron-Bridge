@@ -16,11 +16,12 @@ import torch
 from megatron.core.models.gpt.gpt_model import GPTModel
 from transformers import Qwen3MoeForCausalLM
 
+from megatron.bridge.models import GatedMLPMapping
 from megatron.bridge.models.hf_pretrained.causal_lm import PreTrainedCausalLM
 from megatron.bridge.models.mapping_registry import MegatronMappingRegistry
 from megatron.bridge.models.model_bridge import MegatronModelBridge
 from megatron.bridge.models.param_mapping import (
-    MOEMapping,
+    MoEMapping,
     QKVMapping,
     AutoMapping,
 )
@@ -108,21 +109,30 @@ class Qwen3MoEBridge(MegatronModelBridge):
                     v="model.layers.*.self_attn.v_proj.weight",
                     megatron_param="decoder.layers.*.self_attention.linear_qkv.weight",
                 ),
-                # MoE Experts: Map expert gate projections
-                MOEMapping(
+                GatedMLPMapping(
+                    gate="model.layers.*.mlp.experts.*.gate_proj.weight",
+                    up="model.layers.*.mlp.experts.*.up_proj.weight",
                     megatron_param="decoder.layers.*.mlp.experts.linear_fc1.weight*",
-                    hf_param="model.layers.*.mlp.experts.*.gate_proj.weight",
                 ),
-                # MoE Experts: Map expert up projections
-                MOEMapping(
-                    megatron_param="decoder.layers.*.mlp.experts.linear_fc1.weight*",
-                    hf_param="model.layers.*.mlp.experts.*.up_proj.weight",
-                ),
-                # MoE Experts: Map expert down projections
-                MOEMapping(
-                    megatron_param="decoder.layers.*.mlp.experts.linear_fc2.weight*",
+                AutoMapping(
                     hf_param="model.layers.*.mlp.experts.*.down_proj.weight",
+                    megatron_param="decoder.layers.*.mlp.experts.linear_fc2.weight*",
                 ),
+                # # MoE Experts: Map expert gate projections
+                # MoEMapping(
+                #     megatron_param="decoder.layers.*.mlp.experts.linear_fc1.weight*",
+                #     hf_param="model.layers.*.mlp.experts.*.gate_proj.weight",
+                # ),
+                # # MoE Experts: Map expert up projections
+                # MoEMapping(
+                #     megatron_param="decoder.layers.*.mlp.experts.linear_fc1.weight*",
+                #     hf_param="model.layers.*.mlp.experts.*.up_proj.weight",
+                # ),
+                # # MoE Experts: Map expert down projections
+                # MoEMapping(
+                #     megatron_param="decoder.layers.*.mlp.experts.linear_fc2.weight*",
+                #     hf_param="model.layers.*.mlp.experts.*.down_proj.weight",
+                # ),
             ]
         )
 
