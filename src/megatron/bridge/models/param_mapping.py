@@ -24,6 +24,7 @@ from megatron.core.transformer.transformer_config import TransformerConfig
 
 from megatron.bridge.models.utils import get_module_and_param_from_name
 
+
 WeightType = TypeVar("WeightType", torch.Tensor, Dict[str, torch.Tensor])
 
 
@@ -622,13 +623,17 @@ class RowParallelMapping(MegatronParamMapping[torch.Tensor]):
             if hf_weights.ndim == 1:
                 full_size = hf_weights.shape[0]
                 if full_size % self.tp_size != 0:
-                    raise ValueError(f"Cannot evenly split dimension 0 size {full_size} across {self.tp_size} TP ranks")
+                    raise ValueError(
+                        f"Cannot evenly split dimension 0 size {full_size} across {self.tp_size} TP ranks"
+                    )
                 splits = torch.chunk(hf_weights, self.tp_size, dim=0)
             else:
                 assert hf_weights.ndim == 2
                 full_size = hf_weights.shape[1]
                 if full_size % self.tp_size != 0:
-                    raise ValueError(f"Cannot evenly split dimension 0 size {full_size} across {self.tp_size} TP ranks")
+                    raise ValueError(
+                        f"Cannot evenly split dimension 0 size {full_size} across {self.tp_size} TP ranks"
+                    )
                 splits = torch.chunk(hf_weights, self.tp_size, dim=1)
 
         else:

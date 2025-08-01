@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import abc
 import logging
+import re
 from collections import defaultdict
 from dataclasses import dataclass
 from typing import (
@@ -33,8 +33,13 @@ from typing import (
 )
 
 import torch
+from megatron.core import parallel_state
 from megatron.core import parallel_state as mpu
 from megatron.core.transformer.module import MegatronModule
+from megatron.core.transformer.transformer_config import TransformerConfig
+from megatron.core.utils import (
+    get_pg_size,
+)
 from rich.progress import BarColumn, Progress, TextColumn, TimeRemainingColumn
 from transformers.modeling_utils import PreTrainedModel
 
@@ -42,7 +47,7 @@ from megatron.bridge.models.decorators.dispatch import dispatch
 from megatron.bridge.models.mapping_registry import MegatronMappingRegistry
 from megatron.bridge.models.model_provider import ModelProviderProtocol
 from megatron.bridge.models.param_mapping import MegatronParamMapping
-from megatron.bridge.models.utils import get_transformer_layer_offset, get_module_and_param_from_name
+from megatron.bridge.models.utils import get_module_and_param_from_name
 from megatron.bridge.utils.common_utils import unwrap_model
 
 
@@ -152,19 +157,41 @@ class WeightConversionTask(Generic[MappingT]):
         return self.mapping.megatron_to_hf(megatron_weights, megatron_module, self.param_name)
 
 
-def _adjust_local_name_to_global(name: str, layer_offset: int) -> str:
-    """Adjust layer number from local to global numbering."""
-    if "layers." not in name:
-        return name
+def _megatron_local_name_to_global(
+    models: MegatronModule | List[MegatronModule],
+    config: TransformerConfig,
+    param_name: str,
+    vp_stage: Optional[int] = None,
+) -> str:
+    """Adjust layer number and expert number from local to global numbering."""
+    # PP
+    pp_group = parallel_state.get_pipeline_model_parallel_group()
+    if "layers." in param_name and get_pg_size(pp_group) > 1:
+        match = re.match(r"^(.+?\.layers\.\d+)", param_name)
+        assert match is not None
+        layer_prefix = match.group(1)
+        _, layer_module = get_module_and_param_from_name(models=models, param_name=layer_prefix, vp_stage=vp_stage)
 
-    local_layer_number = int(name.split("layers.")[1].split(".")[0])
-    global_layer_number = local_layer_number + layer_offset
-    name = name.replace(
-        f"layers.{local_layer_number}.",
-        f"layers.{global_layer_number}.",
-    )
+        local_layer_number = int(param_name.split("layers.")[1].split(".")[0])
+        global_layer_number = layer_module.layer_number - 1
+        param_name = param_name.replace(
+            f"layers.{local_layer_number}.",
+            f"layers.{global_layer_number}.",
+        )
 
-    return name
+    # EP
+    ep_group = parallel_state.get_expert_model_parallel_group()
+    if ".mlp.experts.linear_fc" in param_name and get_pg_size(ep_group) > 1:
+        num_experts = config.num_moe_experts
+        num_experts_per_rank = num_experts // ep_group.size()
+        local_expert_number = param_name.split(".weight")[-1]
+        global_expert_number = num_experts_per_rank * ep_group.rank()
+        param_name = param_name.replace(
+            f".weight{local_expert_number}.",
+            f".weight{global_expert_number}.",
+        )
+
+    return param_name
 
 
 class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronModel]):
@@ -520,7 +547,9 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
                 local_module = None
                 if task.pp_rank == mpu.get_pipeline_model_parallel_rank():
                     local_module, local_weights = get_module_and_param_from_name(
-                        megatron_model, task.param_name, task.vp_stage,
+                        megatron_model,
+                        task.param_name,
+                        task.vp_stage,
                     )
 
                 kv_pairs = task.megatron_to_hf(local_weights, local_module)
@@ -736,13 +765,12 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         model_config = unwrap_model(megatron_model)[0].config
         pp_rank = mpu.get_pipeline_model_parallel_rank()
         for vp_stage, model in enumerate(megatron_model):
-            layer_offset = get_transformer_layer_offset(model_config, pipeline_rank=pp_rank, vp_stage=vp_stage)
             for local_name, _ in model.named_parameters():
                 if "_extra_state" in local_name:
                     continue
 
                 local_name = self._unwrap_name(local_name)
-                global_name = _adjust_local_name_to_global(local_name, layer_offset)
+                global_name = _megatron_local_name_to_global(megatron_model, model_config, local_name, vp_stage)
                 mapping = mapping_registry.megatron_to_hf_lookup(global_name)
 
                 if not mapping:
@@ -819,9 +847,8 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
 
         param_locations = defaultdict(list)
         for pp_rank, vp_stage, local_name in self._collect_all_params_info(megatron_model):
-            layer_offset = get_transformer_layer_offset(model_config, pipeline_rank=pp_rank, vp_stage=vp_stage)
             local_name = self._unwrap_name(local_name)
-            global_name = _adjust_local_name_to_global(local_name, layer_offset)
+            global_name = _megatron_local_name_to_global(megatron_model, model_config, local_name, vp_stage)
             param_locations[global_name].append((pp_rank, vp_stage, local_name))
 
         for hf_key in hf_keys:

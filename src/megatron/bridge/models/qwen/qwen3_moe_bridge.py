@@ -21,9 +21,8 @@ from megatron.bridge.models.hf_pretrained.causal_lm import PreTrainedCausalLM
 from megatron.bridge.models.mapping_registry import MegatronMappingRegistry
 from megatron.bridge.models.model_bridge import MegatronModelBridge
 from megatron.bridge.models.param_mapping import (
-    MoEMapping,
-    QKVMapping,
     AutoMapping,
+    QKVMapping,
 )
 from megatron.bridge.models.qwen.qwen_provider import Qwen3MoEModelProvider
 
