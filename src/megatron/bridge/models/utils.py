@@ -184,16 +184,18 @@ def get_transformer_layer_offset(config: TransformerConfig, pipeline_rank: int =
 
 
 def get_module_and_param_from_name(
-        models: List[MegatronModule], vp_stage: Optional[int], param_name: str,
+        models: MegatronModule | List[MegatronModule],
+        param_name: str,
+        vp_stage: Optional[int] = None,
 ) -> Tuple[torch.nn.Module, torch.Tensor] | Tuple[torch.nn.Module, torch.Tensor, Tuple]:
     """
     Get parameter from specific VP stage, ensuring that parameter
     attributes are preserved.
 
     Args:
-        models: List of Megatron model instances
+        models: List of Megatron model instances or a submodule
         vp_stage: Virtual pipeline stage index (None for single stage)
-        param_name: Dot-separated parameter name
+        param_name: Dot-separated parameter name (can be absolute or relative to models)
 
     Returns:
         Tuple of (module, parameter) where module owns the parameter
@@ -202,23 +204,45 @@ def get_module_and_param_from_name(
         ValueError: If vp_stage is out of range or parameter doesn't exist
     """
 
-    if vp_stage is None:
-        model = models[0]
+    if isinstance(models, list):
+        if vp_stage is None:
+            model = models[0]
+        else:
+            if vp_stage >= len(models):
+                raise ValueError(f"VP stage {vp_stage} out of range (max: {len(models) - 1})")
+            model = models[vp_stage]
     else:
-        if vp_stage >= len(models):
-            raise ValueError(f"VP stage {vp_stage} out of range (max: {len(models) - 1})")
-        model = models[vp_stage]
+        model = models
 
-    param = unwrap_model(model)
-    module = param
+    module = unwrap_model(model)
     splitted_name = param_name.split(".")
 
-    try:
-        for i, part in enumerate(splitted_name):
+    # Try to find the parameter using the given parts
+    def try_get_param(parts):
+        param = module
+        temp_module = module
+        
+        for i, part in enumerate(parts):
+            if not hasattr(param, part):
+                return None
             param = getattr(param, part)
-            if i < len(splitted_name) - 1:
-                module = getattr(module, part)
-    except AttributeError as e:
-        raise ValueError(f"Parameter '{param_name}' not found in model at VP stage {vp_stage}") from e
+            if i < len(parts) - 1:
+                temp_module = getattr(temp_module, part)
+        
+        return temp_module, param
 
-    return module, param
+    # First try the full parameter name (current behavior)
+    result = try_get_param(splitted_name)
+    if result is not None:
+        return result
+
+    # If full name doesn't work, try suffixes of the parameter name
+    # This handles cases where models is a submodule but param_name is absolute
+    for start_idx in range(1, len(splitted_name)):
+        suffix_parts = splitted_name[start_idx:]
+        result = try_get_param(suffix_parts)
+        if result is not None:
+            return result
+
+    # If no approach works, raise an error
+    raise ValueError(f"Parameter '{param_name}' not found in model at VP stage {vp_stage}")

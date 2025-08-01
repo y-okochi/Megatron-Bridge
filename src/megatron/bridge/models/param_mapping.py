@@ -22,6 +22,7 @@ import torch.nn as nn
 from megatron.core import mpu
 from megatron.core.transformer.transformer_config import TransformerConfig
 
+from megatron.bridge.models.utils import get_module_and_param_from_name
 
 WeightType = TypeVar("WeightType", torch.Tensor, Dict[str, torch.Tensor])
 
@@ -530,7 +531,7 @@ class ColumnParallelMapping(MegatronParamMapping[torch.Tensor]):
         if self.tp_size == 1:
             return hf_weights
 
-        target_param, output_shape = _get_target_param_and_shape(self.megatron_param, megatron_module)
+        _, target_param = get_module_and_param_from_name(megatron_module, self.megatron_param)
 
         # On rank 0, check for divisibility and split
         if self.tp_rank == 0:
@@ -550,7 +551,7 @@ class ColumnParallelMapping(MegatronParamMapping[torch.Tensor]):
         # Scatter to all ranks. Each rank gets its sharded shape from its module.
         return self.scatter_to_tp_ranks(
             splits,
-            output_shape,
+            target_param.shape,
             target_param.dtype,
             target_param.device,
         )
@@ -609,7 +610,7 @@ class RowParallelMapping(MegatronParamMapping[torch.Tensor]):
         if self.tp_size == 1:
             return hf_weights
 
-        target_param, output_shape = _get_target_param_and_shape(self.megatron_param, megatron_module)
+        _, target_param = get_module_and_param_from_name(megatron_module, self.megatron_param)
 
         # On rank 0, check for divisibility and split
         if self.tp_rank == 0:
@@ -636,7 +637,7 @@ class RowParallelMapping(MegatronParamMapping[torch.Tensor]):
         # Scatter to all ranks. Each rank gets its sharded shape from its module.
         return self.scatter_to_tp_ranks(
             splits,
-            output_shape,
+            target_param.shape,
             target_param.dtype,
             target_param.device,
         )
@@ -1097,7 +1098,7 @@ class GatedMLPMapping(MegatronParamMapping[Dict[str, torch.Tensor]]):
             return torch.cat([hf_weights["gate"], hf_weights["up"]], dim=0)
 
         # Get target parameter info from megatron module
-        target_param, output_shape = _get_target_param_and_shape(self.megatron_param, megatron_module)
+        _, target_param = get_module_and_param_from_name(megatron_module, self.megatron_param)
 
         # On rank 0, split gate and up separately, then concatenate corresponding pieces
         if self.tp_rank == 0:
@@ -1127,7 +1128,7 @@ class GatedMLPMapping(MegatronParamMapping[Dict[str, torch.Tensor]]):
         # Scatter the concatenated shards to each rank
         return self.scatter_to_tp_ranks(
             splits,
-            output_shape,
+            target_param.shape,
             target_param.dtype,
             target_param.device,
         )
@@ -1408,35 +1409,6 @@ class MoEMapping(MegatronParamMapping[torch.Tensor]):
         if self.ep_size > 1:
             return mpu.get_expert_model_parallel_group()
         return None
-
-
-def _get_target_param_and_shape(megatron_param: str, megatron_module: nn.Module) -> tuple[torch.Tensor, tuple]:
-    """Get the target parameter pointer and its shape based on the parameter name."""
-    param_name_lower = megatron_param.lower()
-
-    # Define parameter mapping: (param_name, expected_ndim)
-    param_configs = [
-        ("bias", 1),
-        ("weight", 2),
-    ]
-
-    for param_name, expected_ndim in param_configs:
-        if param_name in param_name_lower:
-            local_name = megatron_param.split(".")[-1]
-            if hasattr(megatron_module, local_name):
-                target_param = getattr(megatron_module, local_name)
-                if isinstance(target_param, torch.Tensor) and target_param.ndim == expected_ndim:
-                    return target_param, target_param.shape
-                else:
-                    raise ValueError(
-                        f"Parameter {local_name} exists but has wrong type or dimensions (expected ndim == {expected_ndim}, got {target_param.ndim if isinstance(target_param, torch.Tensor) else 'not a tensor'})"
-                    )
-            else:
-                raise ValueError(
-                    f"Parameter name suggests {local_name} but module {megatron_module} has no {param_name}"
-                )
-
-    raise ValueError(f"Could not determine parameter type for {megatron_param}")
 
 
 def merge_qkv_biases(config: TransformerConfig, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor) -> torch.Tensor:

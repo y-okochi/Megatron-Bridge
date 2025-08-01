@@ -520,7 +520,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
                 local_module = None
                 if task.pp_rank == mpu.get_pipeline_model_parallel_rank():
                     local_module, local_weights = get_module_and_param_from_name(
-                        megatron_model, task.vp_stage, task.param_name
+                        megatron_model, task.param_name, task.vp_stage,
                     )
 
                 kv_pairs = task.megatron_to_hf(local_weights, local_module)
@@ -764,7 +764,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
                         )
                         continue
 
-                local_module, local_weights = get_module_and_param_from_name(megatron_model, vp_stage, local_name)
+                local_module, local_weights = get_module_and_param_from_name(megatron_model, local_name, vp_stage)
 
                 yield WeightConversionTask(
                     pp_rank=pp_rank,
