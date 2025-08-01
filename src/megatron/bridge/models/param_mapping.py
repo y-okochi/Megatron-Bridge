@@ -609,22 +609,36 @@ class RowParallelMapping(MegatronParamMapping[torch.Tensor]):
         if self.tp_size == 1:
             return hf_weights
 
+        target_param, output_shape = _get_target_param_and_shape(self.megatron_param, megatron_module)
+
         # On rank 0, check for divisibility and split
         if self.tp_rank == 0:
-            full_size = hf_weights.shape[1]
-            if full_size % self.tp_size != 0:
-                raise ValueError(f"Cannot evenly split dimension 1 size {full_size} across {self.tp_size} TP ranks")
-            splits = torch.chunk(hf_weights, self.tp_size, dim=1)
+            if hf_weights is None:
+                raise ValueError("hf_weights should not be None on rank 0")
+
+            # For bias (1D), we still split along dim 0
+            # For weight (2D), we split along dim 1
+            if hf_weights.ndim == 1:
+                full_size = hf_weights.shape[0]
+                if full_size % self.tp_size != 0:
+                    raise ValueError(f"Cannot evenly split dimension 0 size {full_size} across {self.tp_size} TP ranks")
+                splits = torch.chunk(hf_weights, self.tp_size, dim=0)
+            else:
+                assert hf_weights.ndim == 2
+                full_size = hf_weights.shape[1]
+                if full_size % self.tp_size != 0:
+                    raise ValueError(f"Cannot evenly split dimension 0 size {full_size} across {self.tp_size} TP ranks")
+                splits = torch.chunk(hf_weights, self.tp_size, dim=1)
+
         else:
             splits = None
 
         # Scatter to all ranks. Each rank gets its sharded shape from its module.
-        output_shape = megatron_module.weight.shape
         return self.scatter_to_tp_ranks(
             splits,
             output_shape,
-            megatron_module.weight.dtype,
-            megatron_module.weight.device,
+            target_param.dtype,
+            target_param.device,
         )
 
     def megatron_to_hf(
@@ -747,11 +761,13 @@ class AutoMapping(MegatronParamMapping[torch.Tensor]):
             "ColumnParallelLinear",
             "TEColumnParallelLinear",
             "TELayerNormColumnParallelLinear",
+            "TEColumnParallelGroupedLinear",
             "VocabParallelEmbedding",
         },
         "row": {
             "RowParallelLinear",
             "TERowParallelLinear",
+            "TERowParallelGroupedLinear",
         },
         "replicated": {
             # Normalization layers
@@ -765,6 +781,7 @@ class AutoMapping(MegatronParamMapping[torch.Tensor]):
             "IdentityOp",
             "DotProductAttention",
             "TEDotProductAttention",
+            "TopKRouter",
         },
     }
 
@@ -1402,17 +1419,18 @@ def _get_target_param_and_shape(megatron_param: str, megatron_module: nn.Module)
 
     for param_name, expected_ndim in param_configs:
         if param_name in param_name_lower:
-            if hasattr(megatron_module, param_name):
-                target_param = getattr(megatron_module, param_name)
+            local_name = megatron_param.split(".")[-1]
+            if hasattr(megatron_module, local_name):
+                target_param = getattr(megatron_module, local_name)
                 if isinstance(target_param, torch.Tensor) and target_param.ndim == expected_ndim:
                     return target_param, target_param.shape
                 else:
                     raise ValueError(
-                        f"Parameter {param_name} exists but has wrong type or dimensions (expected ndim == {expected_ndim}, got {target_param.ndim if isinstance(target_param, torch.Tensor) else 'not a tensor'})"
+                        f"Parameter {local_name} exists but has wrong type or dimensions (expected ndim == {expected_ndim}, got {target_param.ndim if isinstance(target_param, torch.Tensor) else 'not a tensor'})"
                     )
             else:
                 raise ValueError(
-                    f"Parameter name suggests {param_name} but module {megatron_module} has no {param_name}"
+                    f"Parameter name suggests {local_name} but module {megatron_module} has no {param_name}"
                 )
 
     raise ValueError(f"Could not determine parameter type for {megatron_param}")
