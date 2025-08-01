@@ -189,7 +189,12 @@ class Qwen3ModelProvider(Qwen2ModelProvider):
     Qwen3 differs from Qwen2 by using QK layernorm.
     """
 
-    qk_layernorm: bool = True  # Qwen3 uses QK layernorm
+    add_qkv_bias: bool = False
+    qk_layernorm: bool = True
+    kv_channels: Optional[int] = 128
+    num_query_groups: int = 8
+    max_position_embeddings: int = 40960
+    vocab_size: int = 151936
 
 
 @dataclass
@@ -268,20 +273,20 @@ class Qwen3ModelProvider110B(Qwen3ModelProvider):
 
 
 @dataclass
-class Qwen3MoEModelProvider(Qwen2ModelProvider):
+class Qwen3MoEModelProvider(Qwen3ModelProvider):
     """Base configuration for Qwen3 MoE models.
 
     Qwen3 MoE models use mixture of experts architecture with QK layernorm.
     """
 
-    qk_layernorm: bool = True  # Qwen3 MoE uses QK layernorm
-    num_moe_experts: int = None  # Number of experts
-    moe_router_topk: int = None  # Number of experts activated per token (num_experts_per_tok in HF)
-    moe_ffn_hidden_size: int = None  # Expert FFN hidden size (moe_intermediate_size in HF)
-    moe_aux_loss_coeff: float = 0.001  # Auxiliary loss coefficient for load balancing
-    moe_grouped_gemm: bool = True  # Use grouped GEMM for efficiency
-    moe_router_load_balancing_type: str = "aux_loss"  # Load balancing type
-    moe_token_dispatcher_type: str = "alltoall"  # Token dispatcher type
+    num_moe_experts: int = 128
+    moe_router_load_balancing_type: str = "aux_loss"
+    moe_aux_loss_coeff: float = 1e-3
+    moe_router_topk: int = 8
+    moe_router_pre_softmax: bool = False
+    moe_grouped_gemm: bool = True
+    moe_token_dispatcher_type: str = "alltoall"
+    moe_permute_fusion: bool = True
 
 
 @dataclass
