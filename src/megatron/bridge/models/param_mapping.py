@@ -1186,7 +1186,7 @@ class GatedMLPMapping(MegatronParamMapping[Dict[str, torch.Tensor]]):
         )
 
 
-class MOEMapping(MegatronParamMapping[torch.Tensor]):
+class MoEMapping(MegatronParamMapping[torch.Tensor]):
     """Mapping for **Mixture of Experts (MoE)** weight distribution.
 
     MoE models distribute expert weights across Expert Parallel (EP) ranks.
@@ -1251,7 +1251,6 @@ class MOEMapping(MegatronParamMapping[torch.Tensor]):
             # Now delegate TP distribution to the TP mapping
             return self._tp_mapping.hf_to_megatron(hf_weights, megatron_module, megatron_param_name)
         else:
-            # This rank doesn't own this expert
             return None
 
     def megatron_to_hf(
