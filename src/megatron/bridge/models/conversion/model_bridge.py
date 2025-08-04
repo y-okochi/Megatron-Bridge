@@ -307,6 +307,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         torch.distributed.all_gather_object(gathered_global_param_names, global_param_names, group=pp_group)
 
         # flatten the list, sort it and remove duplicates
+        # the order matters here, casually re-order will cause a hang.
         gathered_global_param_names = sorted(list(set(sum(gathered_global_param_names, []))))
 
         # Cache the result
