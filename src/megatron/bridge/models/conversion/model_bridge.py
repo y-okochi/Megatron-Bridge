@@ -15,18 +15,15 @@
 import abc
 import logging
 import re
-from collections import defaultdict
 from dataclasses import dataclass
 from typing import (
     Callable,
-    Dict,
     Generic,
     Iterable,
     List,
     Mapping,
     NamedTuple,
     Optional,
-    Tuple,
     Type,
     TypeVar,
     Union,
@@ -34,7 +31,6 @@ from typing import (
 
 import torch
 from megatron.core import parallel_state
-from megatron.core import parallel_state as mpu
 from megatron.core.transformer.module import MegatronModule
 from megatron.core.transformer.transformer_config import TransformerConfig
 from megatron.core.utils import (
@@ -45,9 +41,9 @@ from transformers.modeling_utils import PreTrainedModel
 
 from megatron.bridge.models.conversion.mapping_registry import MegatronMappingRegistry
 from megatron.bridge.models.conversion.param_mapping import MegatronParamMapping
+from megatron.bridge.models.conversion.utils import get_module_and_param_from_name
 from megatron.bridge.models.decorators.dispatch import dispatch
 from megatron.bridge.models.model_provider import ModelProviderMixin
-from megatron.bridge.models.utils import get_module_and_param_from_name
 from megatron.bridge.utils.common_utils import unwrap_model
 
 
@@ -55,7 +51,7 @@ logger = logging.getLogger(__name__)
 
 MappingT = TypeVar("MappingT", bound=MegatronParamMapping)
 HFPreTrained = TypeVar("HFPreTrained")
-ModelProviderTarget = TypeVar("ModelProviderTarget", bound=ModelProviderProtocol)
+ModelProviderTarget = TypeVar("ModelProviderTarget", bound=ModelProviderMixin)
 MegatronModel = TypeVar("MegatronModel", bound=MegatronModule)
 _BridgeImplClass = TypeVar("_BridgeImplClass", bound="MegatronModelBridge")
 
@@ -279,7 +275,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
     def _all_megatron_global_param_names(self, megatron_model: Union[MegatronModel, List[MegatronModel]]) -> List[str]:
         """Get all parameter names across all pipeline parallel ranks."""
         # Cache the result after first call
-        if hasattr(self, '_cached_param_names'):
+        if hasattr(self, "_cached_param_names"):
             return self._cached_param_names
 
         # Compute the result
@@ -293,14 +289,18 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         for vp_stage, model in enumerate(models_list):
             for local_param_name, _ in model.named_parameters():
                 local_param_name = self._unwrap_name(local_param_name)
-                global_param_name = _megatron_local_name_to_global(models_list, model_config, local_param_name, vp_stage)
+                global_param_name = _megatron_local_name_to_global(
+                    models_list, model_config, local_param_name, vp_stage
+                )
                 global_param_names.append(global_param_name)
 
             # Process state_dict for expert_bias parameters for this specific model and vp_stage
             for local_param_name in model.state_dict().keys():
                 if "_extra_state" not in local_param_name and "expert_bias" in local_param_name:
                     local_param_name = self._unwrap_name(local_param_name)
-                    global_param_name = _megatron_local_name_to_global(models_list, model_config, local_param_name, vp_stage)
+                    global_param_name = _megatron_local_name_to_global(
+                        models_list, model_config, local_param_name, vp_stage
+                    )
                     global_param_names.append(global_param_name)
 
         gathered_global_param_names = [None] * pp_group.size()
@@ -313,7 +313,6 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         self._cached_param_names = gathered_global_param_names
 
         return self._cached_param_names
-
 
     def load_weights_hf_to_megatron(
         self, hf_pretrained: HFPreTrained, megatron_model: Union[MegatronModel, List[MegatronModel]]
@@ -535,8 +534,9 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
             )
 
             for task in megatron_to_hf_tasks:
-
-                converted_weights_dict = task.mapping.megatron_to_hf(task.param_weight, task.megatron_module, task.param_name)
+                converted_weights_dict = task.mapping.megatron_to_hf(
+                    task.param_weight, task.megatron_module, task.param_name
+                )
 
                 # All ranks get the full tensor
                 for name, tensor in converted_weights_dict.items():
@@ -686,7 +686,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         model_config = unwrapped_model.config
         if model_config.share_embeddings_and_output_weights and model_config.pipeline_model_parallel_size > 1:
             # Broadcast embeddings and output weights from rank 0 to embedding group
-            embd_group = mpu.get_embedding_group()
+            embd_group = parallel_state.get_embedding_group()
             embd_group_ranks = torch.distributed.get_process_group_ranks(embd_group)
             if embd_group is not None and torch.distributed.get_rank() in embd_group_ranks:
                 # Get embeddings and output weights from rank 0
@@ -719,7 +719,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
 
         mapping_registry = self.mapping_registry()
         model_config = unwrap_model(megatron_model)[0].config
-        pp_rank = mpu.get_pipeline_model_parallel_rank()
+        pp_rank = parallel_state.get_pipeline_model_parallel_rank()
         global_names = self._all_megatron_global_param_names(megatron_model)
         global_names_index_dict = {name: idx for idx, name in enumerate(global_names)}
 
@@ -745,13 +745,9 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
                         logger.warning(f"WARNING: Can't find {mapping.hf_param} in hf_keys")
                         continue
                 else:
-                    missing_params = [
-                        hf_param for hf_param in mapping.hf_param.values() if hf_param not in hf_keys
-                    ]
+                    missing_params = [hf_param for hf_param in mapping.hf_param.values() if hf_param not in hf_keys]
                     if missing_params:
-                        logger.warning(
-                            f"WARNING: Can't find the following HF parameters in hf_keys: {missing_params}"
-                        )
+                        logger.warning(f"WARNING: Can't find the following HF parameters in hf_keys: {missing_params}")
                         continue
 
                 local_module, local_weights = get_module_and_param_from_name(megatron_model, local_name, vp_stage)
@@ -782,7 +778,6 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
                     )
 
             return tasks
-
 
     @classmethod
     def register_bridge(

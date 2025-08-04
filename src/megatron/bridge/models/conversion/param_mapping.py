@@ -22,7 +22,7 @@ import torch.nn as nn
 from megatron.core import mpu
 from megatron.core.transformer.transformer_config import TransformerConfig
 
-from megatron.bridge.models.utils import get_module_and_param_from_name
+from megatron.bridge.models.conversion.utils import get_module_and_param_from_name
 
 
 WeightType = TypeVar("WeightType", torch.Tensor, Dict[str, torch.Tensor])

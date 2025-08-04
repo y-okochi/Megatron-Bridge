@@ -17,7 +17,6 @@ from typing import List, Optional, Tuple
 
 import torch
 from megatron.core.transformer.module import MegatronModule
-from megatron.core.transformer.transformer_config import TransformerConfig
 from rich.table import Table
 
 from megatron.bridge.utils.common_utils import unwrap_model
