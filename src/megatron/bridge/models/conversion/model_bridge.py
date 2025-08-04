@@ -43,10 +43,10 @@ from megatron.core.utils import (
 from rich.progress import BarColumn, Progress, TextColumn, TimeRemainingColumn
 from transformers.modeling_utils import PreTrainedModel
 
+from megatron.bridge.models.conversion.mapping_registry import MegatronMappingRegistry
+from megatron.bridge.models.conversion.param_mapping import MegatronParamMapping
 from megatron.bridge.models.decorators.dispatch import dispatch
-from megatron.bridge.models.mapping_registry import MegatronMappingRegistry
-from megatron.bridge.models.model_provider import ModelProviderProtocol
-from megatron.bridge.models.param_mapping import MegatronParamMapping
+from megatron.bridge.models.model_provider import ModelProviderMixin
 from megatron.bridge.models.utils import get_module_and_param_from_name
 from megatron.bridge.utils.common_utils import unwrap_model
 
@@ -281,15 +281,15 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         # Cache the result after first call
         if hasattr(self, '_cached_param_names'):
             return self._cached_param_names
-        
+
         # Compute the result
         pp_group = parallel_state.get_pipeline_model_parallel_group()
         model_config = unwrap_model(megatron_model)[0].config
         global_param_names = []
-        
+
         # Ensure megatron_model is a list for consistent handling
         models_list = megatron_model if isinstance(megatron_model, list) else [megatron_model]
-        
+
         for vp_stage, model in enumerate(models_list):
             for local_param_name, _ in model.named_parameters():
                 local_param_name = self._unwrap_name(local_param_name)
@@ -302,16 +302,16 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
                     local_param_name = self._unwrap_name(local_param_name)
                     global_param_name = _megatron_local_name_to_global(models_list, model_config, local_param_name, vp_stage)
                     global_param_names.append(global_param_name)
-        
+
         gathered_global_param_names = [None] * pp_group.size()
         torch.distributed.all_gather_object(gathered_global_param_names, global_param_names, group=pp_group)
 
         # flatten the list, sort it and remove duplicates
         gathered_global_param_names = sorted(list(set(sum(gathered_global_param_names, []))))
-        
+
         # Cache the result
         self._cached_param_names = gathered_global_param_names
-        
+
         return self._cached_param_names
 
 

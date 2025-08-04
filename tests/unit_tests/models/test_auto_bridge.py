@@ -16,14 +16,14 @@
 Unit tests for AutoBridge automatic bridge selection and bridge functionality.
 """
 
-from unittest.mock import Mock, mock_open, patch
+from unittest.mock import Mock, patch
 
 import pytest
 import torch
 from transformers import LlamaConfig
 from transformers.configuration_utils import PretrainedConfig
 
-from megatron.bridge.models.auto_bridge import AutoBridge
+from megatron.bridge.models.conversion.auto_bridge import AutoBridge
 from megatron.bridge.models.gpt_provider import GPTModelProvider
 from megatron.bridge.models.hf_pretrained.causal_lm import PreTrainedCausalLM
 
@@ -108,7 +108,7 @@ class TestAutoBridge:
 
     def test_from_hf_pretrained_with_unsupported_model(self, bert_config):
         """Test AutoBridge raises ValueError for unsupported models."""
-        with patch("megatron.bridge.models.auto_bridge.AutoConfig") as mock_auto_config:
+        with patch("megatron.bridge.models.conversion.auto_bridge.AutoConfig") as mock_auto_config:
             # Setup mocks
             mock_auto_config.from_pretrained.return_value = bert_config
 
@@ -121,7 +121,7 @@ class TestAutoBridge:
 
     def test_from_pretrained_config_load_failure(self):
         """Test AutoBridge handles config loading failures gracefully."""
-        with patch("megatron.bridge.models.auto_bridge.AutoConfig") as mock_auto_config:
+        with patch("megatron.bridge.models.conversion.auto_bridge.AutoConfig") as mock_auto_config:
             # Setup mock to raise exception
             mock_auto_config.from_pretrained.side_effect = Exception("Config not found")
 
@@ -134,7 +134,7 @@ class TestAutoBridge:
 
     def test_can_handle_supported_model(self, llama_config_mock):
         """Test can_handle returns True for supported models."""
-        with patch("megatron.bridge.models.auto_bridge.AutoConfig") as mock_auto_config:
+        with patch("megatron.bridge.models.conversion.auto_bridge.AutoConfig") as mock_auto_config:
             mock_auto_config.from_pretrained.return_value = llama_config_mock
 
             assert AutoBridge.can_handle("meta-llama/Llama-3-8B") is True
@@ -142,14 +142,14 @@ class TestAutoBridge:
 
     def test_can_handle_unsupported_model(self, bert_config):
         """Test can_handle returns False for unsupported models."""
-        with patch("megatron.bridge.models.auto_bridge.AutoConfig") as mock_auto_config:
+        with patch("megatron.bridge.models.conversion.auto_bridge.AutoConfig") as mock_auto_config:
             mock_auto_config.from_pretrained.return_value = bert_config
 
             assert AutoBridge.can_handle("bert-base-uncased") is False
 
     def test_can_handle_invalid_path(self):
         """Test can_handle returns False for invalid paths."""
-        with patch("megatron.bridge.models.auto_bridge.AutoConfig") as mock_auto_config:
+        with patch("megatron.bridge.models.conversion.auto_bridge.AutoConfig") as mock_auto_config:
             mock_auto_config.from_pretrained.side_effect = Exception("Not found")
 
             assert AutoBridge.can_handle("invalid/path") is False
@@ -164,11 +164,13 @@ class TestAutoBridge:
         mock_config.architectures = ["GPT2LMHeadModel"]  # Use a real architecture
         mock_model.config = mock_config
 
-        with patch("megatron.bridge.models.auto_bridge.PreTrainedCausalLM.from_pretrained") as mock_from_pretrained:
+        with patch(
+            "megatron.bridge.models.conversion.auto_bridge.PreTrainedCausalLM.from_pretrained"
+        ) as mock_from_pretrained:
             # Set up the from_pretrained class method properly
             mock_from_pretrained.return_value = mock_model
 
-            with patch("megatron.bridge.models.auto_bridge.AutoConfig") as mock_autoconfig:
+            with patch("megatron.bridge.models.conversion.auto_bridge.AutoConfig") as mock_autoconfig:
                 mock_autoconfig.from_pretrained.return_value = mock_config
 
                 # Skip architecture validation for this test
@@ -190,11 +192,13 @@ class TestAutoBridge:
         mock_config.architectures = ["GPT2LMHeadModel"]
         mock_model.config = mock_config
 
-        with patch("megatron.bridge.models.auto_bridge.PreTrainedCausalLM.from_pretrained") as mock_from_pretrained:
+        with patch(
+            "megatron.bridge.models.conversion.auto_bridge.PreTrainedCausalLM.from_pretrained"
+        ) as mock_from_pretrained:
             # Set up the from_pretrained class method properly
             mock_from_pretrained.return_value = mock_model
 
-            with patch("megatron.bridge.models.auto_bridge.AutoConfig") as mock_autoconfig:
+            with patch("megatron.bridge.models.conversion.auto_bridge.AutoConfig") as mock_autoconfig:
                 mock_autoconfig.from_pretrained.return_value = mock_config
 
                 # Skip architecture validation for this test
@@ -373,7 +377,7 @@ class TestAutoBridge:
         """Test listing supported models."""
         # Since this method looks at internal dispatch registry,
         # we'll just test that it returns a list
-        with patch("megatron.bridge.models.auto_bridge.model_bridge") as mock_bridge:
+        with patch("megatron.bridge.models.conversion.auto_bridge.model_bridge") as mock_bridge:
             # Mock to avoid AttributeError
             mock_bridge.get_model_bridge = Mock()
             mock_bridge.get_model_bridge._exact_types = {}
@@ -417,7 +421,7 @@ class TestAutoBridge:
 
             # Now patch the from_pretrained method
             with patch(
-                "megatron.bridge.models.auto_bridge.PreTrainedCausalLM.from_pretrained"
+                "megatron.bridge.models.conversion.auto_bridge.PreTrainedCausalLM.from_pretrained"
             ) as mock_from_pretrained:
                 mock_loaded_model = Mock(spec=PreTrainedCausalLM)
                 mock_from_pretrained.return_value = mock_loaded_model
@@ -449,7 +453,7 @@ class TestAutoBridge:
         mock_hf_model.state = Mock()
         mock_hf_model.state.source = Mock(spec=["save_generator"])
 
-        from megatron.bridge.models.state import SafeTensorsStateSource
+        from megatron.bridge.models.hf_pretrained.state import SafeTensorsStateSource
 
         mock_hf_model.state.source = Mock(spec=SafeTensorsStateSource)
         mock_hf_model.state.source.save_generator = Mock()
@@ -496,12 +500,12 @@ class TestAutoBridge:
 
         # Mock the export process
         with patch(
-            "megatron.bridge.models.auto_bridge.model_bridge.stream_weights_megatron_to_hf"
+            "megatron.bridge.models.conversion.auto_bridge.model_bridge.stream_weights_megatron_to_hf"
         ) as mock_bridge_state:
             mock_weight_iter = [("weight1", torch.randn(10, 10)), ("weight2", torch.randn(5, 5))]
             mock_bridge_state.return_value = iter(mock_weight_iter)
 
-            with patch("megatron.bridge.models.auto_bridge.transformers") as mock_transformers:
+            with patch("megatron.bridge.models.conversion.auto_bridge.transformers") as mock_transformers:
                 mock_arch_class = Mock()
                 mock_transformers.LlamaForCausalLM = mock_arch_class
 
@@ -524,7 +528,7 @@ class TestAutoBridge:
         mock_hf_model.config = Mock()
         mock_hf_model.config.architectures = ["LlamaForCausalLM"]
 
-        with patch("megatron.bridge.models.auto_bridge.transformers") as mock_transformers:
+        with patch("megatron.bridge.models.conversion.auto_bridge.transformers") as mock_transformers:
             mock_arch_class = Mock()
             mock_transformers.LlamaForCausalLM = mock_arch_class
 
@@ -567,7 +571,7 @@ class TestAutoBridge:
         bridge.hf_pretrained = mock_hf_model
 
         # Mock transformers to not have the CustomForCausalLM attribute
-        with patch("megatron.bridge.models.auto_bridge.transformers") as mock_transformers:
+        with patch("megatron.bridge.models.conversion.auto_bridge.transformers") as mock_transformers:
             # Configure mock to raise AttributeError when accessing CustomForCausalLM
             del mock_transformers.CustomForCausalLM
 
@@ -608,7 +612,7 @@ class TestAutoBridge:
         assert bridge.hf_pretrained == mock_hf_model
 
         # Test methods that might use device
-        with patch("megatron.bridge.models.auto_bridge.transformers") as mock_transformers:
+        with patch("megatron.bridge.models.conversion.auto_bridge.transformers") as mock_transformers:
             mock_transformers.GPT2ForCausalLM = Mock()
 
             # These operations should work on CPU
@@ -617,9 +621,9 @@ class TestAutoBridge:
 
     def test_kwargs_passed_through(self, gpt2_config):
         """Test that all kwargs are properly passed to the underlying loader."""
-        with patch("megatron.bridge.models.auto_bridge.AutoConfig") as mock_auto_config:
+        with patch("megatron.bridge.models.conversion.auto_bridge.AutoConfig") as mock_auto_config:
             with patch(
-                "megatron.bridge.models.auto_bridge.PreTrainedCausalLM.from_pretrained"
+                "megatron.bridge.models.conversion.auto_bridge.PreTrainedCausalLM.from_pretrained"
             ) as mock_from_pretrained:
                 with patch.object(AutoBridge, "_validate_config"):
                     mock_auto_config.from_pretrained.return_value = gpt2_config
@@ -781,34 +785,21 @@ class TestAutoBridge:
         bridge.hf_pretrained = mock_hf_model
 
         with patch("megatron.bridge.training.model_load_save.load_megatron_model") as mock_load_megatron_model:
-            with patch("megatron.bridge.utils.instantiate_utils.instantiate") as mock_instantiate:
-                with patch("yaml.safe_load") as mock_yaml_load:
-                    with patch("builtins.open", mock_open(read_data="model:\n  _target_: some.model")):
-                        from pathlib import Path
+            from pathlib import Path
 
-                        # Mock path.exists() to return True for the config file
-                        with patch.object(Path, "exists") as mock_exists:
-                            with patch.object(Path, "iterdir") as mock_iterdir:
-                                # Setup mocks
-                                mock_model = Mock()
-                                mock_load_megatron_model.return_value = mock_model
+            with patch.object(Path, "iterdir") as mock_iterdir:
+                # Setup mocks
+                mock_model = Mock()
+                mock_load_megatron_model.return_value = mock_model
 
-                                # Mock iterdir to return empty list (no iter_ folders)
-                                mock_iterdir.return_value = []
+                # Mock iterdir to return empty list (no iter_ folders)
+                mock_iterdir.return_value = []
 
-                                # Mock exists to return True for config file
-                                mock_exists.return_value = True
+                result = bridge.load_megatron_model("./checkpoint_path")
 
-                                mock_yaml_config = {"model": {"_target_": "some.model"}}
-                                mock_yaml_load.return_value = mock_yaml_config
-                                mock_instantiate.return_value = Mock()
-
-                                result = bridge.load_megatron_model("./checkpoint_path")
-
-                                assert result == [mock_model]
-                                mock_load_megatron_model.assert_called_once()
-                                mock_exists.assert_called_once()
-                                mock_iterdir.assert_called_once()
+                assert result == [mock_model]
+                mock_load_megatron_model.assert_called_once()
+                mock_iterdir.assert_called_once()
 
     def test_load_megatron_model_with_iter_folder(self):
         """Test load_megatron_model with iter_ folders."""
@@ -818,62 +809,29 @@ class TestAutoBridge:
         bridge.hf_pretrained = mock_hf_model
 
         with patch("megatron.bridge.training.model_load_save.load_megatron_model") as mock_load_megatron_model:
-            with patch("megatron.bridge.utils.instantiate_utils.instantiate") as mock_instantiate:
-                with patch("yaml.safe_load") as mock_yaml_load:
-                    with patch("builtins.open", mock_open(read_data="model:\n  _target_: some.model")):
-                        from pathlib import Path
+            from pathlib import Path
 
-                        # Create mock folder objects
-                        mock_iter_folder_1 = Mock()
-                        mock_iter_folder_1.is_dir.return_value = True
-                        mock_iter_folder_1.name = "iter_0000010"
+            # Create mock folder objects
+            mock_iter_folder_1 = Mock()
+            mock_iter_folder_1.is_dir.return_value = True
+            mock_iter_folder_1.name = "iter_0000010"
 
-                        mock_iter_folder_2 = Mock()
-                        mock_iter_folder_2.is_dir.return_value = True
-                        mock_iter_folder_2.name = "iter_0000020"
+            mock_iter_folder_2 = Mock()
+            mock_iter_folder_2.is_dir.return_value = True
+            mock_iter_folder_2.name = "iter_0000020"
 
-                        # Mock path.exists() and iterdir()
-                        with patch.object(Path, "exists") as mock_exists:
-                            with patch.object(Path, "iterdir") as mock_iterdir:
-                                # Setup mocks
-                                mock_model = Mock()
-                                mock_load_megatron_model.return_value = mock_model
-
-                                # Mock iterdir to return the iter folders
-                                mock_iterdir.return_value = [mock_iter_folder_1, mock_iter_folder_2]
-
-                                # Mock exists to return True for config file
-                                mock_exists.return_value = True
-
-                                mock_yaml_config = {"model": {"_target_": "some.model"}}
-                                mock_yaml_load.return_value = mock_yaml_config
-                                mock_instantiate.return_value = Mock()
-
-                                result = bridge.load_megatron_model("./checkpoint_path")
-
-                                assert result == [mock_model]
-                                mock_load_megatron_model.assert_called_once()
-                                mock_exists.assert_called_once()
-                                mock_iterdir.assert_called_once()
-                                # Should use the latest iteration (iter_0000020)
-
-    def test_load_megatron_model_missing_config(self):
-        """Test load_megatron_model with missing config file."""
-        mock_hf_model = Mock(spec=PreTrainedCausalLM)
-
-        bridge = AutoBridge.__new__(AutoBridge)
-        bridge.hf_pretrained = mock_hf_model
-
-        from pathlib import Path
-
-        # Mock path.exists() to return False for the config file and iterdir() to return empty list
-        with patch.object(Path, "exists") as mock_exists:
+            # Mock path.iterdir()
             with patch.object(Path, "iterdir") as mock_iterdir:
-                # Mock iterdir to return empty list (no iter_ folders)
-                mock_iterdir.return_value = []
+                # Setup mocks
+                mock_model = Mock()
+                mock_load_megatron_model.return_value = mock_model
 
-                # Mock exists to return False for config file (missing)
-                mock_exists.return_value = False
+                # Mock iterdir to return the iter folders
+                mock_iterdir.return_value = [mock_iter_folder_1, mock_iter_folder_2]
 
-                with pytest.raises(FileNotFoundError, match="Checkpoint config file .* does not exist"):
-                    bridge.load_megatron_model("./checkpoint_path")
+                result = bridge.load_megatron_model("./checkpoint_path")
+
+                assert result == [mock_model]
+                mock_load_megatron_model.assert_called_once()
+                mock_iterdir.assert_called_once()
+                # Should use the latest iteration (iter_0000020)

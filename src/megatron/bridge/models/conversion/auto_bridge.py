@@ -19,22 +19,21 @@ from typing import TYPE_CHECKING, Any, Generic, Iterable, Type, TypeVar, Union
 
 import torch.distributed
 import transformers
-import yaml
 from megatron.core.transformer.module import MegatronModule
 from megatron.core.transformer.transformer_config import MLATransformerConfig, TransformerConfig
 from transformers import AutoConfig
 from transformers.configuration_utils import PretrainedConfig
 from typing_extensions import Unpack
 
-from megatron.bridge.models import model_bridge
+from megatron.bridge.models.conversion import model_bridge
 from megatron.bridge.models.gpt_provider import GPTModelProvider
 from megatron.bridge.models.hf_pretrained.causal_lm import PreTrainedCausalLM
-from megatron.bridge.models.model_provider_mixin import GetModelKwargs, ModelProviderMixin
-from megatron.bridge.models.state import SafeTensorsStateSource
+from megatron.bridge.models.hf_pretrained.state import SafeTensorsStateSource
+from megatron.bridge.models.model_provider import GetModelKwargs, ModelProviderMixin
 
 
 if TYPE_CHECKING:
-    from megatron.bridge.models.model_bridge import HFWeightTuple, MegatronModelBridge
+    from megatron.bridge.models.conversion.model_bridge import HFWeightTuple, MegatronModelBridge
 
 
 MegatronModelT = TypeVar("MegatronModelT", bound=MegatronModule)
@@ -497,7 +496,6 @@ class AutoBridge(Generic[MegatronModelT]):
         """
         try:
             from megatron.bridge.training.model_load_save import load_megatron_model
-            from megatron.bridge.utils.instantiate_utils import instantiate
         except ImportError:
             raise ImportError("megatron.bridge.training is not available.")
 
@@ -518,22 +516,9 @@ class AutoBridge(Generic[MegatronModelT]):
             checkpoint_path = checkpoint_path / latest_iter.name
         # else: checkpoint_path remains as the input path (no iter folders found)
 
-        config_file = checkpoint_path / "run_config.yaml"
-
-        if not config_file.exists():
-            raise FileNotFoundError(f"Checkpoint config file {config_file} does not exist")
-
-        # Load the configuration
-        with open(config_file, "r") as stream:
-            config = yaml.safe_load(stream)
-
-        model_config = config["model"]
-        model_config = instantiate(model_config)
-
         # Load the state dict
         model = load_megatron_model(
-            checkpoint_path,
-            model_cfg=model_config,
+            str(checkpoint_path),
             use_cpu_init=True,
         )
         return model if isinstance(model, list) else [model]
@@ -813,7 +798,7 @@ class AutoBridge(Generic[MegatronModelT]):
                         f"2. Implement the required methods (provider_bridge, mapping_registry)\n"
                         f"3. Register it with @MegatronModelBridge.register_bridge decorator\n\n"
                         f"Example implementation:\n"
-                        f"  from megatron.bridge.models.model_bridge import MegatronModelBridge\n"
+                        f"  from megatron.bridge.models.conversion.model_bridge import MegatronModelBridge\n"
                         f"  from transformers import {architecture}\n"
                         f"  from megatron.core.models.gpt import GPTModel\n\n"
                         f"  @MegatronModelBridge.register_bridge(source={architecture}, target=GPTModel)\n"
@@ -825,7 +810,7 @@ class AutoBridge(Generic[MegatronModelT]):
                         f"          # Return a MegatronMappingRegistry with weight mappings\n"
                         f"          ...\n\n"
                         f"For reference implementations, see:\n"
-                        f"  • src/megatron/bridge/models/llama/llama_causal_bridge.py\n"
+                        f"  • src/megatron/bridge/models/llama/llama_bridge.py\n"
                         f"  • src/megatron/bridge/models/qwen/qwen_2_causal_bridge.py"
                     ) from None
             except AttributeError:
