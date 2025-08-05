@@ -130,7 +130,7 @@ def _megatron_local_name_to_global(
     if ".mlp.experts.linear_fc" in param_name and get_pg_size(ep_group) > 1:
         num_experts = config.num_moe_experts
         num_experts_per_rank = num_experts // ep_group.size()
-        local_expert_number = param_name.split(".weight")[-1]
+        local_expert_number = param_name.split(".weight")[-1] or param_name.split(".bias")[-1]
         global_expert_number = num_experts_per_rank * ep_group.rank()
         param_name = param_name.replace(
             f".weight{local_expert_number}.",
@@ -731,7 +731,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
 
     def _build_conversion_tasks(
         self, hf_pretrained: HFPreTrained, megatron_model: List[MegatronModel]
-    ) -> Iterable[WeightConversionTask]:
+    ) -> List[None | WeightConversionTask]:
         """Construct the conversion tasks between HF and megatron.
 
         The algorithm walks over every parameter of every destination model,
@@ -791,23 +791,23 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
                     mapping=mapping,
                 )
 
-            # Fill the remaining ones
-            for idx, global_name in enumerate(global_names):
-                mapping = mapping_registry.megatron_to_hf_lookup(global_name)
-                if tasks[idx] is None:
-                    # This is an exception here we pass in global name
-                    # we are not using global_name to extract module and weights
-                    # only use it for param mapping auto dispatch checks
-                    tasks[idx] = WeightConversionTask(
-                        pp_rank=pp_rank,
-                        vp_stage=None,
-                        param_name=global_name,
-                        megatron_module=None,
-                        param_weight=None,
-                        mapping=mapping,
-                    )
+        # Fill the remaining ones
+        for idx, global_name in enumerate(global_names):
+            mapping = mapping_registry.megatron_to_hf_lookup(global_name)
+            if tasks[idx] is None:
+                # This is an exception here we pass in global name
+                # we are not using global_name to extract module and weights
+                # only use it for param mapping auto dispatch checks
+                tasks[idx] = WeightConversionTask(
+                    pp_rank=pp_rank,
+                    vp_stage=None,
+                    param_name=global_name,
+                    megatron_module=None,
+                    param_weight=None,
+                    mapping=mapping,
+                )
 
-            return tasks
+        return tasks
 
     @classmethod
     def register_bridge(
