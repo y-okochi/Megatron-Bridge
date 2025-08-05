@@ -21,7 +21,10 @@ import torch.distributed
 import torch.nn as nn
 from megatron.core import mpu
 from megatron.core.transformer.transformer_config import TransformerConfig
-
+from megatron.core.utils import (
+    get_pg_rank,
+    get_pg_size,
+)
 from megatron.bridge.models.conversion.utils import get_module_and_param_from_name
 
 
@@ -83,6 +86,7 @@ class MegatronParamMapping(ABC, Generic[WeightType]):
         self.megatron_param = megatron_param
         self.hf_param = hf_param
         self._validate_patterns()
+        self.ep_group = mpu.get_expert_model_parallel_group()
 
     def _resolve_names(self, captures: Tuple[str, ...]) -> Tuple[str, Union[str, Dict[str, str]]]:
         resolved_megatron_param = self.megatron_param
@@ -450,6 +454,61 @@ class MegatronParamMapping(ABC, Generic[WeightType]):
             return mpu.get_pipeline_model_parallel_group()
         return None
 
+    def _gather_expert_parallel_weights(
+        self,
+        megatron_weights: Optional[torch.Tensor],
+        model_config: Optional[TransformerConfig],
+        hf_param_name: Optional[str] = None,
+        megatron_param_name: Optional[str] = None,
+    ) -> Dict[str, torch.Tensor]:
+        """Handle expert parallel weight gathering for MoE models.
+        
+        This method handles the gathering of expert weights across expert parallel 
+        ranks. It should only be called when the parameter is confirmed to be an 
+        expert weight.
+        
+        Args:
+            megatron_weights (Optional[torch.Tensor]): The local expert weight tensor.
+            megatron_module (Optional[nn.Module]): The megatron module containing config.
+            megatron_param_name (Optional[str]): The local megatron parameter name.
+            
+        Returns:
+            Dict[str, torch.Tensor]: Dictionary of expert weights mapped to HF parameter names.
+        """
+        if megatron_weights is None:
+            return {}
+    
+        ep_size = get_pg_size(self.ep_group)
+        num_experts = model_config.num_moe_experts
+        num_experts_per_rank = num_experts // ep_size
+        
+        # Extract local expert number from parameter name
+        # Handle both .weight and .bias suffixes
+        local_expert_number = None
+        if ".weight" in megatron_param_name:
+            local_expert_number = megatron_param_name.split(".weight")[-1]
+        elif ".bias" in megatron_param_name:
+            local_expert_number = megatron_param_name.split(".bias")[-1]
+        
+        if local_expert_number is None:
+            return {}
+            
+        # Compute global expert numbers for all EP ranks
+        gathered_expert_numbers = [
+            str(int(local_expert_number) + num_experts_per_rank * i) 
+            for i in range(ep_size)
+        ]
+        
+        # Gather weights from all EP ranks
+        gathered_weights = [torch.empty_like(megatron_weights) for _ in range(ep_size)]
+        torch.distributed.all_gather(gathered_weights, megatron_weights, group=self.ep_group)
+        
+        # Return dictionary mapping HF parameter names to weights
+        return {
+            str(hf_param_name).replace(f"experts.{local_expert_number}", f"experts.{expert_number}"): gathered_weights[i]
+            for i, expert_number in enumerate(gathered_expert_numbers)
+        }
+
 
 class DirectMapping(MegatronParamMapping[torch.Tensor]):
     """Direct 1:1 weight mapping with no transformation or tensor parallelism."""
@@ -475,6 +534,12 @@ class DirectMapping(MegatronParamMapping[torch.Tensor]):
 
         if megatron_weights is None:
             return {}
+
+        # Handle expert parallel weights
+        if ".mlp.experts.linear_fc" in megatron_param_name:
+            return self._gather_expert_parallel_weights(
+                megatron_weights, megatron_module.config, self.hf_param, megatron_param_name
+            )
 
         return {str(self.hf_param): megatron_weights}
 
@@ -571,13 +636,19 @@ class ColumnParallelMapping(MegatronParamMapping[torch.Tensor]):
             return {}
 
         if self.tp_size == 1:
-            return {str(self.hf_param): megatron_weights}
+            full_weights = megatron_weights
+        else:
+            # Gather from all TP ranks
+            gathered = self.gather_from_tp_ranks(megatron_weights)
+            full_weights = torch.cat(gathered, dim=0)
 
-        # Gather from all TP ranks
-        gathered = self.gather_from_tp_ranks(megatron_weights)
-
-        full_weight = torch.cat(gathered, dim=0)
-        return {str(self.hf_param): full_weight}
+        # Handle expert parallel weights
+        if ".mlp.experts.linear_fc" in megatron_param_name:
+            return self._gather_expert_parallel_weights(
+                full_weights, megatron_module.config, self.hf_param, megatron_param_name
+            )
+        
+        return {str(self.hf_param): full_weights}
 
 
 class RowParallelMapping(MegatronParamMapping[torch.Tensor]):
@@ -656,17 +727,23 @@ class RowParallelMapping(MegatronParamMapping[torch.Tensor]):
         """Gather from all TP ranks and concatenate."""
         # Handle cross-PP broadcast
         megatron_weights = self.broadcast_from_pp_rank(megatron_weights)
-
+            
         if megatron_weights is None:
             return {}
 
         if self.tp_size == 1:
-            merged = megatron_weights
+            full_weights = megatron_weights
         else:
             gathered = self.gather_from_tp_ranks(megatron_weights)
-            merged = torch.cat(gathered, dim=1)
+            full_weights = torch.cat(gathered, dim=1)
 
-        return {str(self.hf_param): merged}
+        # Handle expert parallel weights
+        if ".mlp.experts.linear_fc" in megatron_param_name:
+            return self._gather_expert_parallel_weights(
+                full_weights, megatron_module.config, self.hf_param, megatron_param_name
+            )
+
+        return {str(self.hf_param): full_weights}
 
 
 class ReplicatedMapping(MegatronParamMapping[torch.Tensor]):
@@ -716,6 +793,12 @@ class ReplicatedMapping(MegatronParamMapping[torch.Tensor]):
 
         if megatron_weights is None:
             return {}
+
+        # Handle expert parallel weights
+        if megatron_param_name and ".mlp.experts.linear_fc" in megatron_param_name:
+            return self._gather_expert_parallel_weights(
+                megatron_weights, megatron_module.config, self.hf_param, megatron_param_name
+            )
 
         return {str(self.hf_param): megatron_weights}
 
@@ -1155,6 +1238,8 @@ class GatedMLPMapping(MegatronParamMapping[Dict[str, torch.Tensor]]):
         if self.tp_size == 1:
             # No TP, just split the concatenated tensor
             fused_mlp = megatron_weights
+            gate, up = torch.chunk(fused_mlp, 2, dim=0)
+
         else:
             # Gather shards from all TP ranks
             gathered_shards = self.gather_from_tp_ranks(megatron_weights)
@@ -1170,15 +1255,19 @@ class GatedMLPMapping(MegatronParamMapping[Dict[str, torch.Tensor]]):
                 up_parts.append(up_shard)
 
             # Concatenate all gate parts and all up parts separately
-            full_gate = torch.cat(gate_parts, dim=0)
-            full_up = torch.cat(up_parts, dim=0)
+            gate = torch.cat(gate_parts, dim=0)
+            up = torch.cat(up_parts, dim=0)
 
-            # Concatenate gate and up to get the full tensor
-            fused_mlp = torch.cat([full_gate, full_up], dim=0)
+        # Handle expert parallel weights
+        if ".mlp.experts.linear_fc" in megatron_param_name:
+            gathered_gate_weights_dict = self._gather_expert_parallel_weights(
+                gate, megatron_module.config, self.hf_param["gate"], megatron_param_name
+            )
+            gathered_up_weights_dict = self._gather_expert_parallel_weights(
+                up, megatron_module.config, self.hf_param["up"], megatron_param_name
+            )
+            return {**gathered_gate_weights_dict, **gathered_up_weights_dict}
 
-        # Split the concatenated tensor in half along dim 0
-        # This works for both bias (1D) and weight (2D) tensors
-        gate, up = torch.chunk(fused_mlp, 2, dim=0)
         return {self.hf_param["gate"]: gate, self.hf_param["up"]: up}
 
     def resolve(self, captures: Tuple[str, ...]) -> "MegatronParamMapping":
