@@ -518,6 +518,15 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
 
         megatron_to_hf_tasks = self._build_conversion_tasks(hf_pretrained, megatron_model)
 
+        # Check if embeddings are tied
+        model_config = unwrap_model(megatron_model)[0].config
+        megatron_embeddings_tied = model_config.share_embeddings_and_output_weights
+ 
+        if hasattr(hf_pretrained, 'config') and hasattr(hf_pretrained.config, 'tie_word_embeddings'):
+            hf_embeddings_tied = hf_pretrained.config.tie_word_embeddings
+            assert megatron_embeddings_tied == hf_embeddings_tied, "Megatron and HF embeddings must be tied"
+        embeddings_are_tied = megatron_embeddings_tied
+        
         is_main_rank = not torch.distributed.is_initialized() or torch.distributed.get_rank() == 0
         bridge_name = self.__class__.__name__
 
@@ -540,8 +549,28 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
                 )
 
                 # All ranks get the full tensor
-                for name, tensor in converted_weights_dict.items():
-                    yield HFWeightTuple(name, tensor.cpu() if cpu else tensor)
+                for hf_name, tensor in converted_weights_dict.items():
+                    final_tensor = tensor.cpu() if cpu else tensor
+                    
+                    # Handle tied embeddings case
+                    # TODO(yuya): fix this hard coded naming
+                    if embeddings_are_tied and hf_name == "model.embed_tokens.weight":
+                        # Yield the embedding weight
+                        yield HFWeightTuple(hf_name, final_tensor)
+                        
+                        # Also yield as lm_head.weight if it's expected
+                        if hasattr(hf_pretrained, 'state') and hasattr(hf_pretrained.state, 'source'):
+                            expected_keys = hf_pretrained.state.source.get_all_keys()
+                            if "lm_head.weight" in expected_keys:
+                                yield HFWeightTuple("lm_head.weight", final_tensor)
+                    elif embeddings_are_tied and hf_name == "lm_head.weight":
+                        # This should not happen when embeddings are tied - assert error
+                        raise ValueError(
+                            "Encountered lm_head.weight when embeddings are tied. This indicates a mapping error."
+                        )
+                    else:
+                        # Regular case - yield the tensor normally
+                        yield HFWeightTuple(hf_name, final_tensor)
 
                 progress.update(task_id, advance=1)
 
