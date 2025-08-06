@@ -358,8 +358,7 @@ class StateDict(Mapping[str, torch.Tensor]):
         self, 
         generator: Iterable[Tuple[str, torch.Tensor]], 
         output_path: Union[str, Path], 
-        strict: bool = True,
-        simple_mode: bool = False
+        strict: bool = True
     ) -> None:
         """
         Save tensors from a generator to safetensors files.
@@ -369,28 +368,27 @@ class StateDict(Mapping[str, torch.Tensor]):
         Args:
             generator: An iterable of (tensor_name, tensor) tuples.
             output_path: The directory where the safetensor files will be saved.
-            strict: If True, raises errors for missing tensors. Only used in preservation mode.
-            simple_mode: If True, uses simpler saving without detailed validation.
+            strict: If True, raises errors for missing tensors. If False, skips them with warnings.
             
         Raises:
             AttributeError: If the underlying source doesn't support this operation.
         """
         if hasattr(self.source, 'save_tensor_generator'):
-            return self.source.save_tensor_generator(generator, output_path, strict, simple_mode)
+            return self.source.save_tensor_generator(generator, output_path, strict)
         else:
             raise AttributeError("The underlying StateSource does not support save_tensor_generator")
 
     def save_tensors(self, tensor_generator: Iterable[Tuple[str, torch.Tensor]], output_path: Union[str, Path]) -> None:
         """
-        Save tensors using a simple approach (convenience method).
+        Save tensors (convenience method).
         
-        This is equivalent to calling save_tensor_generator(..., simple_mode=True).
+        This is equivalent to calling save_tensor_generator(..., strict=False).
         
         Args:
             tensor_generator: An iterable of (tensor_name, tensor) tuples.
             output_path: The directory where the safetensor files will be saved.
         """
-        return self.save_tensor_generator(tensor_generator, output_path, simple_mode=True)
+        return self.save_tensor_generator(tensor_generator, output_path, strict=False)
 
     def save_tensor_generator_memory_efficient(self, tensor_generator: Iterable[Tuple[str, torch.Tensor]], output_path: Union[str, Path]) -> None:
         """
@@ -409,15 +407,6 @@ class StateDict(Mapping[str, torch.Tensor]):
             return self.source.save_tensor_generator_memory_efficient(tensor_generator, output_path)
         else:
             raise AttributeError("The underlying StateSource does not support save_tensor_generator_memory_efficient")
-
-    # Backward compatibility aliases
-    def save_tensor_generator(self, *args, **kwargs):
-        """Backward compatibility alias for save_tensor_generator."""
-        return self.save_tensor_generator(*args, **kwargs)
-    
-    def save_tensors_memory_efficient(self, *args, **kwargs):
-        """Backward compatibility alias for save_tensor_generator_memory_efficient."""
-        return self.save_tensor_generator_memory_efficient(*args, **kwargs)
 
     def save_index(self, output_path: Union[str, Path]) -> None:
         """
@@ -766,17 +755,20 @@ class SafeTensorsStateSource(StateSource):
         self, 
         generator: Iterable[Tuple[str, torch.Tensor]], 
         output_path: Union[str, Path], 
-        strict: bool = True,
-        simple_mode: bool = False
+        strict: bool = True
     ):
         """
-        Saves tensors from a generator to `.safetensors` files.
+        Saves tensors from a generator to `.safetensors` files, preserving the
+        original sharding structure in a memory-efficient, streaming fashion.
 
-        This method can operate in two modes:
-        1. Preservation mode (default): Preserves the original sharding structure in a 
-           memory-efficient, streaming fashion, with detailed error reporting.
-        2. Simple mode: Uses a simpler approach that either saves to a single file 
-           (for small models) or preserves sharding without strict validation.
+        This method reads the sharding information (which tensor belongs to which
+        file) from the source checkpoint. It then consumes a generator of tensors,
+        buffering them in memory only until a complete file shard can be written to
+        disk. This approach minimizes peak memory usage compared to collecting all
+        tensors first.
+
+        If the original checkpoint had a `model.safetensors.index.json` file, a new
+        one will be created for the saved tensors.
 
         Args:
             generator: An iterable of (tensor_name, tensor) tuples.
@@ -785,9 +777,7 @@ class SafeTensorsStateSource(StateSource):
             strict: If True (default), raises a KeyError if the generator
                     yields a tensor name not found in the original model's
                     sharding structure. If False, it prints a warning and
-                    skips the tensor. Only used in preservation mode.
-            simple_mode: If True, uses a simpler saving approach without strict
-                        validation and detailed reporting.
+                    skips the tensor.
         """
         # In a distributed environment, only rank 0 should write to disk.
         # Other ranks must still exhaust the generator to participate in collectives.
@@ -815,34 +805,7 @@ class SafeTensorsStateSource(StateSource):
                 save_file(buffered_tensors, output_path / "model.safetensors")
             return
 
-        if simple_mode:
-            # Simple mode: preserve sharding but without strict validation
-            filename_to_keys_map = defaultdict(set)
-            for key, filename in key_to_filename_map.items():
-                filename_to_keys_map[filename].add(key)
 
-            states = {}
-            for tensor_name, tensor in generator:
-                states[tensor_name] = tensor.cpu()
-                # Check if any file shard is complete and can be saved
-                for filename, keys_for_file in list(filename_to_keys_map.items()):
-                    if keys_for_file.issubset(states.keys()):
-                        # This shard is complete, save it
-                        tensors_to_save = {k: states[k] for k in keys_for_file}
-                        save_file(tensors_to_save, output_path / filename)
-                        # Remove saved tensors from memory
-                        for k in keys_for_file:
-                            del states[k]
-                        del filename_to_keys_map[filename]
-
-            if states:
-                print(f"Warning: {len(states)} tensors were not saved because their file shards were incomplete")
-
-            # Save index file if it existed originally
-            self.save_index(output_path)
-            return
-
-        # Preservation mode (original implementation with detailed tracking)
         all_expected_keys = set(key_to_filename_map.keys())
         filename_to_keys_map = defaultdict(set)
         for key, filename in key_to_filename_map.items():
