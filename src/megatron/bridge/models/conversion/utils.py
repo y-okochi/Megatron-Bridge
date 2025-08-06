@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
+import re
 from typing import List, Optional, Tuple
 
 import torch
@@ -154,3 +154,24 @@ def get_module_and_param_from_name(
 
     # If no approach works, raise an error
     raise ValueError(f"Parameter '{param_name}' not found in model at VP stage {vp_stage}")
+
+
+def extract_sort_key(param_name: str):
+    """Extract sorting key based on layer and expert numbers."""
+
+    # Extract at most 2 numbers: layer number and expert number
+    # Pattern: *layers.d+.*d+ (layer number and potentially expert number)
+    numbers = []
+    # Find layer number
+    layer_match = re.search(r"layers\.(\d+)", param_name)
+    if layer_match:
+        numbers.append(int(layer_match.group(1)))
+    # Find expert number after bias or weight
+    expert_match = re.search(r"(?:bias|weight)(\d+)", param_name)
+    if expert_match:
+        numbers.append(int(expert_match.group(1)))
+    # Pad to ensure consistent comparison (max 2 numbers)
+    while len(numbers) < 2:
+        numbers.append(-1)
+    numbers = numbers[:2]  # Keep at most 2 numbers
+    return numbers, param_name

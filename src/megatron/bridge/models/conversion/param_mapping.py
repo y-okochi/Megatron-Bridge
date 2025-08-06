@@ -179,7 +179,6 @@ class MegatronParamMapping(ABC, Generic[WeightType]):
         self,
         hf_weights: WeightType,
         megatron_module: nn.Module,
-        megatron_param_name: Optional[str] = None,
     ) -> torch.Tensor:
         """Convert hf_weights TO Megatron format.
 
@@ -191,7 +190,6 @@ class MegatronParamMapping(ABC, Generic[WeightType]):
             hf_weights (WeightType): Source hf_weights in external format.
             megatron_module (nn.Module): Target Megatron module (for config
                 access).
-            megatron_param_name (Optional[str]): Resolved Megatron parameter name.
 
         Returns:
             torch.Tensor: Weight tensor ready for the current TP rank.
@@ -203,7 +201,6 @@ class MegatronParamMapping(ABC, Generic[WeightType]):
         self,
         megatron_weights: Optional[torch.Tensor],
         megatron_module: Optional[nn.Module],
-        megatron_param_name: Optional[str] = None,
     ) -> Dict[str, torch.Tensor]:
         """Convert weights FROM Megatron format.
 
@@ -217,7 +214,6 @@ class MegatronParamMapping(ABC, Generic[WeightType]):
                 rank (None if on different PP rank).
             megatron_module (Optional[nn.Module]): Module for config access
                 (None if on different PP rank).
-            megatron_param_name (Optional[str]): Resolved Megatron parameter name.
 
         Returns:
             Dict[str, torch.Tensor]: Converted weights (empty dict if not on
@@ -477,7 +473,6 @@ class MegatronParamMapping(ABC, Generic[WeightType]):
         megatron_weights: Optional[torch.Tensor],
         megatron_module: Optional[MegatronModule],
         hf_param_name: Optional[str] = None,
-        megatron_param_name: Optional[str] = None,
     ) -> Dict[str, torch.Tensor]:
         """Handle expert parallel weight gathering for MoE models.
 
@@ -488,40 +483,43 @@ class MegatronParamMapping(ABC, Generic[WeightType]):
         Args:
             megatron_weights (Optional[torch.Tensor]): The local expert weight tensor.
             megatron_module (Optional[MegatronModule]): The megatron module containing config.
-            megatron_param_name (Optional[str]): The local megatron parameter name.
 
         Returns:
             Dict[str, torch.Tensor]: Dictionary of expert weights mapped to HF parameter names.
         """
-        assert megatron_weights is not None
-
-        model_config = self._get_config(megatron_module)
-        ep_size = self.ep_size
-        num_experts = model_config.num_moe_experts
-        num_experts_per_rank = num_experts // ep_size
+        if megatron_module is None:
+            num_experts_per_rank = self.broadcast_obj_from_pp_rank(None)
+        else:
+            model_config = self._get_config(megatron_module)
+            num_experts = model_config.num_moe_experts
+            num_experts_per_rank = num_experts // self.ep_size
+            num_experts_per_rank = self.broadcast_obj_from_pp_rank(num_experts_per_rank)
 
         # Extract local expert number from parameter name
         # Handle both .weight and .bias suffixes
         local_expert_number = None
-        if ".weight" in megatron_param_name:
-            local_expert_number = megatron_param_name.split(".weight")[-1]
-        elif ".bias" in megatron_param_name:
-            local_expert_number = megatron_param_name.split(".bias")[-1]
+        if ".weight" in self.megatron_param:
+            global_expert_number = int(self.megatron_param.split(".weight")[-1])
+            local_expert_number = global_expert_number % num_experts_per_rank
+        elif ".bias" in self.megatron_param:
+            global_expert_number = int(self.megatron_param.split(".bias")[-1])
+            local_expert_number = global_expert_number % num_experts_per_rank
 
         # Compute global expert numbers for all EP ranks
         # use regex to replace the local expert number with the global expert number
         gathered_expert_param_names = [
             re.sub(
-                r"experts\.(\d+)", f"experts.{int(local_expert_number) + num_experts_per_rank * i}", str(hf_param_name)
+                r"experts\.(\d+)",
+                f"experts.{int(local_expert_number) + num_experts_per_rank * i}", str(hf_param_name)
             )
-            for i in range(ep_size)
+            for i in range(self.ep_size)
         ]
         assert hf_param_name in gathered_expert_param_names, (
             f"hf_param_name {hf_param_name} not in gathered_expert_param_names {gathered_expert_param_names}"
         )
 
         # Gather weights from all EP ranks
-        gathered_weights = [torch.empty_like(megatron_weights) for _ in range(ep_size)]
+        gathered_weights = [torch.empty_like(megatron_weights) for _ in range(self.ep_size)]
         torch.distributed.all_gather(gathered_weights, megatron_weights, group=self.ep_group)
 
         # Return dictionary mapping HF parameter names to weights
@@ -535,7 +533,6 @@ class DirectMapping(MegatronParamMapping[torch.Tensor]):
         self,
         hf_weights: torch.Tensor,
         megatron_module: nn.Module,
-        megatron_param_name: Optional[str] = None,
     ) -> torch.Tensor:
         """Direct copy - no transformation or distribution."""
         return hf_weights
@@ -544,7 +541,6 @@ class DirectMapping(MegatronParamMapping[torch.Tensor]):
         self,
         megatron_weights: Optional[torch.Tensor],
         megatron_module: Optional[nn.Module],
-        megatron_param_name: Optional[str] = None,
     ) -> Dict[str, torch.Tensor]:
         """Direct copy with PP broadcast."""
         # Handle cross-PP broadcast
@@ -552,10 +548,6 @@ class DirectMapping(MegatronParamMapping[torch.Tensor]):
 
         if megatron_weights is None:
             return {}
-
-        # Handle expert parallel weights
-        if self.is_expert:
-            return self.gather_from_ep_ranks(megatron_weights, megatron_module, self.hf_param, megatron_param_name)
 
         return {str(self.hf_param): megatron_weights}
 
@@ -607,7 +599,6 @@ class ColumnParallelMapping(MegatronParamMapping[torch.Tensor]):
         self,
         hf_weights: torch.Tensor,
         megatron_module: nn.Module,
-        megatron_param_name: Optional[str] = None,
     ) -> torch.Tensor:
         """Split weight along dim 0 and distribute to TP ranks."""
         if self.tp_size == 1:
@@ -642,7 +633,6 @@ class ColumnParallelMapping(MegatronParamMapping[torch.Tensor]):
         self,
         megatron_weights: Optional[torch.Tensor],
         megatron_module: Optional[nn.Module],
-        megatron_param_name: Optional[str] = None,
     ) -> Dict[str, torch.Tensor]:
         """Gather from all TP ranks and concatenate."""
         # Handle cross-PP broadcast
@@ -658,9 +648,8 @@ class ColumnParallelMapping(MegatronParamMapping[torch.Tensor]):
             gathered = self.gather_from_tp_ranks(megatron_weights)
             full_weights = torch.cat(gathered, dim=0)
 
-        # Handle expert parallel weights
         if self.is_expert:
-            return self.gather_from_ep_ranks(full_weights, megatron_module, self.hf_param, megatron_param_name)
+            return self.gather_from_ep_ranks(full_weights, megatron_module, self.hf_param)
 
         return {str(self.hf_param): full_weights}
 
@@ -690,7 +679,6 @@ class RowParallelMapping(MegatronParamMapping[torch.Tensor]):
         self,
         hf_weights: torch.Tensor,
         megatron_module: nn.Module,
-        megatron_param_name: Optional[str] = None,
     ) -> torch.Tensor:
         """Split weight along dim 1 and distribute to TP ranks."""
         if self.tp_size == 1:
@@ -736,7 +724,6 @@ class RowParallelMapping(MegatronParamMapping[torch.Tensor]):
         self,
         megatron_weights: Optional[torch.Tensor],
         megatron_module: Optional[nn.Module],
-        megatron_param_name: Optional[str] = None,
     ) -> Dict[str, torch.Tensor]:
         """Gather from all TP ranks and concatenate."""
         # Handle cross-PP broadcast
@@ -751,9 +738,8 @@ class RowParallelMapping(MegatronParamMapping[torch.Tensor]):
             gathered = self.gather_from_tp_ranks(megatron_weights)
             full_weights = torch.cat(gathered, dim=1)
 
-        # Handle expert parallel weights
         if self.is_expert:
-            return self.gather_from_ep_ranks(full_weights, megatron_module, self.hf_param, megatron_param_name)
+            return self.gather_from_ep_ranks(full_weights, megatron_module, self.hf_param)
 
         return {str(self.hf_param): full_weights}
 
@@ -773,7 +759,6 @@ class ReplicatedMapping(MegatronParamMapping[torch.Tensor]):
         self,
         hf_weights: torch.Tensor,
         megatron_module: nn.Module,
-        megatron_param_name: Optional[str] = None,
     ) -> torch.Tensor:
         """Replicate weight to all TP ranks."""
         target_device = megatron_module.weight.device
@@ -797,7 +782,6 @@ class ReplicatedMapping(MegatronParamMapping[torch.Tensor]):
         self,
         megatron_weights: Optional[torch.Tensor],
         megatron_module: Optional[nn.Module],
-        megatron_param_name: Optional[str] = None,
     ) -> Dict[str, torch.Tensor]:
         """Return weight only from rank 0 to avoid duplication."""
         # Handle cross-PP broadcast
@@ -806,9 +790,8 @@ class ReplicatedMapping(MegatronParamMapping[torch.Tensor]):
         if megatron_weights is None:
             return {}
 
-        # Handle expert parallel weights
         if self.is_expert:
-            return self.gather_from_ep_ranks(megatron_weights, megatron_module, self.hf_param, megatron_param_name)
+            return self.gather_from_ep_ranks(megatron_weights, megatron_module, self.hf_param)
 
         return {str(self.hf_param): megatron_weights}
 
@@ -923,7 +906,7 @@ class AutoMapping(MegatronParamMapping[torch.Tensor]):
         else:
             raise ValueError(f"Unknown parallelism type: {parallelism_type}")
 
-    def _detect_parallelism_type(self, module: nn.Module, megatron_param_name: str) -> str:
+    def _detect_parallelism_type(self, module: nn.Module) -> str:
         """Detect parallelism type from module."""
         module_type = type(module).__name__
 
@@ -932,8 +915,8 @@ class AutoMapping(MegatronParamMapping[torch.Tensor]):
         # and replicated layer norm weights (layer_norm_weight, layer_norm_bias)
         if module_type == "TELayerNormColumnParallelLinear":
             # Check the actual parameter name to determine the correct parallelism type
-            if megatron_param_name and (
-                megatron_param_name.endswith("layer_norm_weight") or megatron_param_name.endswith("layer_norm_bias")
+            if self.megatron_param and (
+                self.megatron_param.endswith("layer_norm_weight") or self.megatron_param.endswith("layer_norm_bias")
             ):
                 return "replicated"
             # All other parameters (weight, bias) are column-parallel
@@ -976,29 +959,27 @@ class AutoMapping(MegatronParamMapping[torch.Tensor]):
         self,
         hf_weights: torch.Tensor,
         megatron_module: nn.Module,
-        megatron_param_name: Optional[str] = None,
     ) -> torch.Tensor:
         """Delegate to appropriate mapping based on module type."""
         # Detect type and create delegate on first use
         if self._mapping is None:
-            self._detected_type = self._detect_parallelism_type(megatron_module, megatron_param_name)
+            self._detected_type = self._detect_parallelism_type(megatron_module)
             self._mapping = self._get_or_create_mapping(self._detected_type)
 
-        return self._mapping.hf_to_megatron(hf_weights, megatron_module, megatron_param_name)
+        return self._mapping.hf_to_megatron(hf_weights, megatron_module)
 
     def megatron_to_hf(
         self,
         megatron_weights: Optional[torch.Tensor],
         megatron_module: Optional[nn.Module],
-        megatron_param_name: Optional[str] = None,
     ) -> Dict[str, torch.Tensor]:
         """Delegate to appropriate mapping based on module type."""
         # Need to determine type even if module is None (different PP rank)
-        assert megatron_param_name is not None, "`megatron_param_name` is required for AutoMapping."
+        assert self.megatron_param is not None, "`megatron_param` is required for AutoMapping."
 
         if self._mapping is None:
             if megatron_module is not None:
-                self._detected_type = self._detect_parallelism_type(megatron_module, megatron_param_name)
+                self._detected_type = self._detect_parallelism_type(megatron_module)
                 # Broadcast to other ranks
                 self._detected_type = self.broadcast_obj_from_pp_rank(self._detected_type)
             else:
@@ -1007,7 +988,7 @@ class AutoMapping(MegatronParamMapping[torch.Tensor]):
 
             self._mapping = self._get_or_create_mapping(self._detected_type)
 
-        return self._mapping.megatron_to_hf(megatron_weights, megatron_module, megatron_param_name)
+        return self._mapping.megatron_to_hf(megatron_weights, megatron_module)
 
 
 class QKVMapping(MegatronParamMapping[Dict[str, torch.Tensor]]):
@@ -1078,7 +1059,6 @@ class QKVMapping(MegatronParamMapping[Dict[str, torch.Tensor]]):
         self,
         hf_weights: Dict[str, torch.Tensor],
         megatron_module: nn.Module,
-        megatron_param_name: Optional[str] = None,
     ) -> torch.Tensor:
         """Merge Q, K, V into interleaved format and distribute."""
         if self.tp_rank == 0:
@@ -1095,13 +1075,12 @@ class QKVMapping(MegatronParamMapping[Dict[str, torch.Tensor]]):
             merged = None
 
         # Delegate the actual sharding/broadcasting to the TP-aware mapping.
-        return self._tp_mapping.hf_to_megatron(merged, megatron_module, megatron_param_name)
+        return self._tp_mapping.hf_to_megatron(merged, megatron_module)
 
     def megatron_to_hf(
         self,
         megatron_weights: Optional[torch.Tensor],
         megatron_module: Optional[nn.Module],
-        megatron_param_name: Optional[str] = None,
     ) -> Dict[str, torch.Tensor]:
         """Gather QKV shards and split into Q, K, V."""
         # ------------------------------------------------------------------
@@ -1112,11 +1091,11 @@ class QKVMapping(MegatronParamMapping[Dict[str, torch.Tensor]]):
         if megatron_module is None:
             config = self.broadcast_obj_from_pp_rank(None)
         else:
-            cfg_local = self._get_config(megatron_module)
-            config = self.broadcast_obj_from_pp_rank(cfg_local)
+            config = self._get_config(megatron_module)
+            config = self.broadcast_obj_from_pp_rank(config)
 
         # Delegate TP/PP gathering.
-        packed_dict = self._tp_mapping.megatron_to_hf(megatron_weights, megatron_module, megatron_param_name)
+        packed_dict = self._tp_mapping.megatron_to_hf(megatron_weights, megatron_module)
 
         if not packed_dict:
             return {}
@@ -1188,7 +1167,6 @@ class GatedMLPMapping(MegatronParamMapping[Dict[str, torch.Tensor]]):
         self,
         hf_weights: Dict[str, torch.Tensor],
         megatron_module: nn.Module,
-        megatron_param_name: Optional[str] = None,
     ) -> torch.Tensor:
         """Split gate and up separately, then concatenate corresponding shards."""
         # For single TP, just concatenate and return
@@ -1235,7 +1213,6 @@ class GatedMLPMapping(MegatronParamMapping[Dict[str, torch.Tensor]]):
         self,
         megatron_weights: Optional[torch.Tensor],
         megatron_module: Optional[nn.Module],
-        megatron_param_name: Optional[str] = None,
     ) -> Dict[str, torch.Tensor]:
         """Gather concatenated shards and split into gate and up."""
         # Handle cross-PP broadcast first
@@ -1268,13 +1245,12 @@ class GatedMLPMapping(MegatronParamMapping[Dict[str, torch.Tensor]]):
             gate = torch.cat(gate_parts, dim=0)
             up = torch.cat(up_parts, dim=0)
 
-        # Handle expert parallel weights
         if self.is_expert:
             gathered_gate_weights_dict = self.gather_from_ep_ranks(
-                gate, megatron_module, self.hf_param["gate"], megatron_param_name
+                gate, megatron_module, self.hf_param["gate"]
             )
             gathered_up_weights_dict = self.gather_from_ep_ranks(
-                up, megatron_module, self.hf_param["up"], megatron_param_name
+                up, megatron_module, self.hf_param["up"]
             )
             return {**gathered_gate_weights_dict, **gathered_up_weights_dict}
 

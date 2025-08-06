@@ -44,6 +44,7 @@ from megatron.bridge.models.conversion.param_mapping import MegatronParamMapping
 from megatron.bridge.models.conversion.utils import get_module_and_param_from_name
 from megatron.bridge.models.decorators.dispatch import dispatch
 from megatron.bridge.models.model_provider import ModelProviderMixin
+from megatron.bridge.models.conversion.utils import extract_sort_key
 from megatron.bridge.utils.common_utils import unwrap_model
 
 
@@ -321,27 +322,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         # e.g. decoder.layers.0.mlp.experts.linear_fc1.weight100
         flattened_names = list(set(sum(gathered_global_param_names, [])))
 
-        def _extract_sort_key(param_name: str):
-            """Extract sorting key based on layer and expert numbers."""
-
-            # Extract at most 2 numbers: layer number and expert number
-            # Pattern: *layers.d+.*d+ (layer number and potentially expert number)
-            numbers = []
-            # Find layer number
-            layer_match = re.search(r"layers\.(\d+)", param_name)
-            if layer_match:
-                numbers.append(int(layer_match.group(1)))
-            # Find expert number after bias or weight
-            expert_match = re.search(r"(?:bias|weight)(\d+)", param_name)
-            if expert_match:
-                numbers.append(int(expert_match.group(1)))
-            # Pad to ensure consistent comparison (max 2 numbers)
-            while len(numbers) < 2:
-                numbers.append(-1)
-            numbers = numbers[:2]  # Keep at most 2 numbers
-            return numbers, param_name
-
-        gathered_global_param_names = sorted(flattened_names, key=_extract_sort_key)
+        gathered_global_param_names = sorted(flattened_names, key=extract_sort_key)
 
         # Cache the result
         self._cached_param_names = gathered_global_param_names
@@ -425,7 +406,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
                     hf_weights = {k: hf_state_dict[v] for k, v in task.mapping.hf_param.items()}
 
                 # 2) Delegate conversion & distribution to the bridge
-                converted_weights = task.mapping.hf_to_megatron(hf_weights, task.megatron_module, task.param_name)
+                converted_weights = task.mapping.hf_to_megatron(hf_weights, task.megatron_module)
 
                 # 3) Copy into Megatron param if this rank received a shard
                 if converted_weights is not None:
@@ -496,7 +477,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
             else:
                 hf_weights = {k: hf_state_dict[v] for k, v in task.mapping.hf_param.items()}
 
-            local_weights = task.mapping.hf_to_megatron(hf_weights, task.megatron_module, task.param_name)
+            local_weights = task.mapping.hf_to_megatron(hf_weights, task.megatron_module)
             if local_weights is not None:
                 # Assert that vp_stage is not None for HF->Megatron tasks
                 yield MegatronWeightTuple(task.param_name, local_weights, task.vp_stage)
@@ -580,7 +561,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
 
             for task in megatron_to_hf_tasks:
                 converted_weights_dict = task.mapping.megatron_to_hf(
-                    task.param_weight, task.megatron_module, task.param_name
+                    task.param_weight, task.megatron_module
                 )
 
                 # All ranks get the full tensor
