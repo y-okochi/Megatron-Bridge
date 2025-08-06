@@ -41,10 +41,9 @@ from transformers.modeling_utils import PreTrainedModel
 
 from megatron.bridge.models.conversion.mapping_registry import MegatronMappingRegistry
 from megatron.bridge.models.conversion.param_mapping import MegatronParamMapping
-from megatron.bridge.models.conversion.utils import get_module_and_param_from_name
+from megatron.bridge.models.conversion.utils import extract_sort_key, get_module_and_param_from_name
 from megatron.bridge.models.decorators.dispatch import dispatch
 from megatron.bridge.models.model_provider import ModelProviderMixin
-from megatron.bridge.models.conversion.utils import extract_sort_key
 from megatron.bridge.utils.common_utils import unwrap_model
 
 
@@ -560,9 +559,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
             )
 
             for task in megatron_to_hf_tasks:
-                converted_weights_dict = task.mapping.megatron_to_hf(
-                    task.param_weight, task.megatron_module
-                )
+                converted_weights_dict = task.mapping.megatron_to_hf(task.param_weight, task.megatron_module)
 
                 # All ranks get the full tensor
                 for hf_name, tensor in converted_weights_dict.items():

@@ -90,10 +90,17 @@ class MegatronParamMapping(ABC, Generic[WeightType]):
         self.hf_param = hf_param
         self._validate_patterns()
 
-        self.tp_group = mpu.get_tensor_model_parallel_group()
         self.pp_group = mpu.get_pipeline_model_parallel_group()
         self.ep_group = mpu.get_expert_model_parallel_group()
-        self.etp_group = mpu.get_expert_tensor_parallel_group()
+        self._tp_group = mpu.get_tensor_model_parallel_group()
+        self._etp_group = mpu.get_expert_tensor_parallel_group()
+
+    @property
+    def tp_group(self):
+        """Get the tensor model parallel group."""
+        if self.is_expert:
+            return self._etp_group
+        return self._tp_group
 
     @property
     def tp_rank(self) -> int:
@@ -472,7 +479,7 @@ class MegatronParamMapping(ABC, Generic[WeightType]):
         self,
         megatron_weights: Optional[torch.Tensor],
         megatron_module: Optional[MegatronModule],
-        hf_param_name: Optional[str] = None,
+        hf_param_name: Optional[str],
     ) -> Dict[str, torch.Tensor]:
         """Handle expert parallel weight gathering for MoE models.
 
@@ -509,8 +516,7 @@ class MegatronParamMapping(ABC, Generic[WeightType]):
         # use regex to replace the local expert number with the global expert number
         gathered_expert_param_names = [
             re.sub(
-                r"experts\.(\d+)",
-                f"experts.{int(local_expert_number) + num_experts_per_rank * i}", str(hf_param_name)
+                r"experts\.(\d+)", f"experts.{int(local_expert_number) + num_experts_per_rank * i}", str(hf_param_name)
             )
             for i in range(self.ep_size)
         ]
@@ -1246,12 +1252,8 @@ class GatedMLPMapping(MegatronParamMapping[Dict[str, torch.Tensor]]):
             up = torch.cat(up_parts, dim=0)
 
         if self.is_expert:
-            gathered_gate_weights_dict = self.gather_from_ep_ranks(
-                gate, megatron_module, self.hf_param["gate"]
-            )
-            gathered_up_weights_dict = self.gather_from_ep_ranks(
-                up, megatron_module, self.hf_param["up"]
-            )
+            gathered_gate_weights_dict = self.gather_from_ep_ranks(gate, megatron_module, self.hf_param["gate"])
+            gathered_up_weights_dict = self.gather_from_ep_ranks(up, megatron_module, self.hf_param["up"])
             return {**gathered_gate_weights_dict, **gathered_up_weights_dict}
 
         return {self.hf_param["gate"]: gate, self.hf_param["up"]: up}

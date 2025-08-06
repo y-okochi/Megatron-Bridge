@@ -60,6 +60,7 @@ def main(
     tp: int = 1,
     pp: int = 1,
     ep: int = 1,
+    etp: int = 1,
     megatron_save_path: str | None = None,
     megatron_load_path: str | None = None,
 ) -> None:
@@ -82,6 +83,7 @@ def main(
         model_provider.tensor_model_parallel_size = tp
         model_provider.pipeline_model_parallel_size = pp
         model_provider.expert_model_parallel_size = ep
+        model_provider.expert_tensor_parallel_size = etp
         model_provider.initialize_model_parallel(seed=0)
         megatron_model = bridge.load_megatron_model(megatron_load_path, wrap_with_ddp=False)
         megatron_model = [m.cuda() for m in megatron_model]
@@ -151,6 +153,8 @@ if __name__ == "__main__":
     parser.add_argument("--tp", type=int, default=1, help="Tensor parallelism size")
     parser.add_argument("--pp", type=int, default=1, help="Pipeline parallelism size")
     parser.add_argument("--ep", type=int, default=1, help="Expert parallelism size")
+    parser.add_argument("--etp", type=int, default=1, help="Expert tensor parallelism size")
+
     parser.add_argument(
         "--megatron-save-path",
         type=str,
@@ -165,7 +169,14 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     main(
-        args.hf_model_id, args.output_dir, args.tp, args.pp, args.ep, args.megatron_save_path, args.megatron_load_path
+        args.hf_model_id,
+        args.output_dir,
+        args.tp,
+        args.pp,
+        args.ep,
+        args.etp,
+        args.megatron_save_path,
+        args.megatron_load_path,
     )
 
     if torch.distributed.is_initialized():
