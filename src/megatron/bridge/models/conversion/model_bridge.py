@@ -280,7 +280,9 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         """
         raise NotImplementedError("Subclass must implement mapping_registry method")
 
-    def _megatron_global_param_names_all_pp_ranks(self, megatron_model: Union[MegatronModel, List[MegatronModel]]) -> List[str]:
+    def _megatron_global_param_names_all_pp_ranks(
+        self, megatron_model: Union[MegatronModel, List[MegatronModel]]
+    ) -> List[str]:
         """Get all parameter names across all pipeline parallel ranks."""
         # Cache the result after first call
         if hasattr(self, "_cached_param_names"):
@@ -318,7 +320,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         # the order matters here, casually re-order will cause a hang.
         # e.g. decoder.layers.0.mlp.experts.linear_fc1.weight100
         flattened_names = list(set(sum(gathered_global_param_names, [])))
-        
+
         def _extract_sort_key(param_name: str):
             """Extract sorting key based on layer and expert numbers."""
 
@@ -326,11 +328,11 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
             # Pattern: *layers.d+.*d+ (layer number and potentially expert number)
             numbers = []
             # Find layer number
-            layer_match = re.search(r'layers\.(\d+)', param_name)
+            layer_match = re.search(r"layers\.(\d+)", param_name)
             if layer_match:
                 numbers.append(int(layer_match.group(1)))
             # Find expert number after bias or weight
-            expert_match = re.search(r'(?:bias|weight)(\d+)', param_name)
+            expert_match = re.search(r"(?:bias|weight)(\d+)", param_name)
             if expert_match:
                 numbers.append(int(expert_match.group(1)))
             # Pad to ensure consistent comparison (max 2 numbers)
@@ -338,7 +340,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
                 numbers.append(-1)
             numbers = numbers[:2]  # Keep at most 2 numbers
             return numbers, param_name
-        
+
         gathered_global_param_names = sorted(flattened_names, key=_extract_sort_key)
 
         # Cache the result
@@ -555,11 +557,11 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         if parallel_state.get_pipeline_model_parallel_world_size() == 1:
             model_config = unwrap_model(megatron_model)[0].config
             megatron_embeddings_tied = model_config.share_embeddings_and_output_weights
-            if hasattr(hf_pretrained, 'config') and hasattr(hf_pretrained.config, 'tie_word_embeddings'):
+            if hasattr(hf_pretrained, "config") and hasattr(hf_pretrained.config, "tie_word_embeddings"):
                 hf_embeddings_tied = hf_pretrained.config.tie_word_embeddings
                 assert megatron_embeddings_tied == hf_embeddings_tied, "Megatron and HF embeddings must be tied"
             embeddings_are_tied = megatron_embeddings_tied
-        
+
         is_main_rank = not torch.distributed.is_initialized() or torch.distributed.get_rank() == 0
         bridge_name = self.__class__.__name__
 
@@ -584,15 +586,15 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
                 # All ranks get the full tensor
                 for hf_name, tensor in converted_weights_dict.items():
                     final_tensor = tensor.cpu() if cpu else tensor
-                    
+
                     # Handle tied embeddings case
                     # TODO(yuya): fix this hard coded naming
                     if embeddings_are_tied and hf_name == "model.embed_tokens.weight":
                         # Yield the embedding weight
                         yield HFWeightTuple(hf_name, final_tensor)
-                        
+
                         # Also yield as lm_head.weight if it's expected
-                        if hasattr(hf_pretrained, 'state') and hasattr(hf_pretrained.state, 'source'):
+                        if hasattr(hf_pretrained, "state") and hasattr(hf_pretrained.state, "source"):
                             expected_keys = hf_pretrained.state.source.get_all_keys()
                             if "lm_head.weight" in expected_keys:
                                 yield HFWeightTuple("lm_head.weight", final_tensor)

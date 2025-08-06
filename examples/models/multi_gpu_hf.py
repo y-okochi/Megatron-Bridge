@@ -106,7 +106,6 @@ def main(
         table.add_column("Device")
         table.add_column("Matches Original", justify="center")
 
-
     if is_rank_0:
         console.print(f"[yellow]Tensor parallel size: {model_provider.tensor_model_parallel_size}[/yellow]")
         console.print(f"[yellow]Pipeline parallel size: {model_provider.pipeline_model_parallel_size}[/yellow]")
@@ -165,7 +164,9 @@ if __name__ == "__main__":
         help="Path to load the model in Megatron checkpoint format. If provided, model will not start from HF checkpoint.",
     )
     args = parser.parse_args()
-    main(args.hf_model_id, args.output_dir, args.tp, args.pp, args.ep, args.megatron_save_path, args.megatron_load_path)
+    main(
+        args.hf_model_id, args.output_dir, args.tp, args.pp, args.ep, args.megatron_save_path, args.megatron_load_path
+    )
 
     if torch.distributed.is_initialized():
         torch.distributed.destroy_process_group()
