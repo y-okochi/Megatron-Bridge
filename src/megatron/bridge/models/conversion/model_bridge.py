@@ -130,13 +130,21 @@ def _megatron_local_name_to_global(
     if ".mlp.experts.linear_fc" in param_name and get_pg_size(ep_group) > 1:
         num_experts = config.num_moe_experts
         num_experts_per_rank = num_experts // ep_group.size()
-        local_expert_number = param_name.split(".weight")[-1] or param_name.split(".bias")[-1]
-        global_expert_number = num_experts_per_rank * ep_group.rank()
-        param_name = param_name.replace(
-            f".weight{local_expert_number}.",
-            f".weight{global_expert_number}.",
-        )
-
+        # Handle weight and bias parameters separately
+        if ".weight" in param_name:
+            local_expert_number = int(param_name.split(".weight")[-1])
+            global_expert_number = num_experts_per_rank * ep_group.rank() + local_expert_number
+            param_name = param_name.replace(
+                f".weight{local_expert_number}",
+                f".weight{global_expert_number}",
+            )
+        elif ".bias" in param_name:
+            local_expert_number = int(param_name.split(".bias")[-1])
+            global_expert_number = num_experts_per_rank * ep_group.rank() + local_expert_number
+            param_name = param_name.replace(
+                f".bias{local_expert_number}",
+                f".bias{global_expert_number}",
+            )
     return param_name
 
 

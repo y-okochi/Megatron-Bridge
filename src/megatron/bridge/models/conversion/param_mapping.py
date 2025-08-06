@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import re
 import json
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Generic, List, Optional, Tuple, TypeVar, Union
@@ -454,7 +455,7 @@ class MegatronParamMapping(ABC, Generic[WeightType]):
             return mpu.get_pipeline_model_parallel_group()
         return None
 
-    def _gather_expert_parallel_weights(
+    def _gather_from_ep_ranks(
         self,
         megatron_weights: Optional[torch.Tensor],
         model_config: Optional[TransformerConfig],
@@ -479,6 +480,7 @@ class MegatronParamMapping(ABC, Generic[WeightType]):
             return {}
     
         ep_size = get_pg_size(self.ep_group)
+        ep_rank = get_pg_rank(self.ep_group)
         num_experts = model_config.num_moe_experts
         num_experts_per_rank = num_experts // ep_size
         
@@ -494,19 +496,22 @@ class MegatronParamMapping(ABC, Generic[WeightType]):
             return {}
             
         # Compute global expert numbers for all EP ranks
-        gathered_expert_numbers = [
-            str(int(local_expert_number) + num_experts_per_rank * i) 
+        # use regex to replace the local expert number with the global expert number
+        gathered_expert_param_names = [
+            re.sub(r"experts\.(\d+)", f"experts.{int(local_expert_number) + num_experts_per_rank * i}", str(hf_param_name))
             for i in range(ep_size)
         ]
-        
+        assert hf_param_name in gathered_expert_param_names, f"hf_param_name {hf_param_name} not in gathered_expert_param_names {gathered_expert_param_names}"
+
         # Gather weights from all EP ranks
         gathered_weights = [torch.empty_like(megatron_weights) for _ in range(ep_size)]
         torch.distributed.all_gather(gathered_weights, megatron_weights, group=self.ep_group)
-        
+        assert torch.allclose(gathered_weights[ep_rank], megatron_weights), f"ep_rank {ep_rank}'s gathered weights are not close to local weights"
+
         # Return dictionary mapping HF parameter names to weights
         return {
-            str(hf_param_name).replace(f"experts.{local_expert_number}", f"experts.{expert_number}"): gathered_weights[i]
-            for i, expert_number in enumerate(gathered_expert_numbers)
+            param_name: gathered_weights[i]
+            for i, param_name in enumerate(gathered_expert_param_names)
         }
 
 
@@ -537,7 +542,7 @@ class DirectMapping(MegatronParamMapping[torch.Tensor]):
 
         # Handle expert parallel weights
         if ".mlp.experts.linear_fc" in megatron_param_name:
-            return self._gather_expert_parallel_weights(
+            return self._gather_from_ep_ranks(
                 megatron_weights, megatron_module.config, self.hf_param, megatron_param_name
             )
 
@@ -644,7 +649,7 @@ class ColumnParallelMapping(MegatronParamMapping[torch.Tensor]):
 
         # Handle expert parallel weights
         if ".mlp.experts.linear_fc" in megatron_param_name:
-            return self._gather_expert_parallel_weights(
+            return self._gather_from_ep_ranks(
                 full_weights, megatron_module.config, self.hf_param, megatron_param_name
             )
         
@@ -739,7 +744,7 @@ class RowParallelMapping(MegatronParamMapping[torch.Tensor]):
 
         # Handle expert parallel weights
         if ".mlp.experts.linear_fc" in megatron_param_name:
-            return self._gather_expert_parallel_weights(
+            return self._gather_from_ep_ranks(
                 full_weights, megatron_module.config, self.hf_param, megatron_param_name
             )
 
@@ -796,7 +801,7 @@ class ReplicatedMapping(MegatronParamMapping[torch.Tensor]):
 
         # Handle expert parallel weights
         if megatron_param_name and ".mlp.experts.linear_fc" in megatron_param_name:
-            return self._gather_expert_parallel_weights(
+            return self._gather_from_ep_ranks(
                 megatron_weights, megatron_module.config, self.hf_param, megatron_param_name
             )
 
@@ -1260,10 +1265,10 @@ class GatedMLPMapping(MegatronParamMapping[Dict[str, torch.Tensor]]):
 
         # Handle expert parallel weights
         if ".mlp.experts.linear_fc" in megatron_param_name:
-            gathered_gate_weights_dict = self._gather_expert_parallel_weights(
+            gathered_gate_weights_dict = self._gather_from_ep_ranks(
                 gate, megatron_module.config, self.hf_param["gate"], megatron_param_name
             )
-            gathered_up_weights_dict = self._gather_expert_parallel_weights(
+            gathered_up_weights_dict = self._gather_from_ep_ranks(
                 up, megatron_module.config, self.hf_param["up"], megatron_param_name
             )
             return {**gathered_gate_weights_dict, **gathered_up_weights_dict}
