@@ -328,6 +328,35 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
 
         return self._cached_param_names
 
+    def _with_progress_tracking(self, tasks, description: str, show_progress: bool = True):
+        """Helper method to wrap an iterable with progress tracking.
+
+        Args:
+            tasks: Iterable of tasks to process
+            description: Description for the progress bar
+            show_progress: Whether to show progress (defaults to True)
+
+        Yields:
+            Items from the tasks iterable while updating progress
+        """
+        is_main_rank = not torch.distributed.is_initialized() or torch.distributed.get_rank() == 0
+        bridge_name = self.__class__.__name__
+
+        with Progress(
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+            TimeRemainingColumn(),
+            TextColumn("({task.completed}/{task.total})"),
+            TextColumn("{task.fields[bridge]}"),
+            disable=not (is_main_rank and show_progress),
+        ) as progress:
+            task_id = progress.add_task(description, total=len(tasks), bridge=bridge_name)
+
+            for task in tasks:
+                yield task
+                progress.update(task_id, advance=1)
+
     def load_weights_hf_to_megatron(
         self, hf_pretrained: HFPreTrained, megatron_model: Union[MegatronModel, List[MegatronModel]]
     ) -> List[MegatronModel]:
@@ -376,54 +405,36 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
             megatron_model = [megatron_model]
 
         hf_to_megatron_tasks = self._build_conversion_tasks(hf_pretrained, megatron_model)
-
         hf_state_dict: Mapping[str, torch.Tensor] = hf_pretrained.state if hasattr(hf_pretrained, "state") else {}
 
-        is_main_rank = not torch.distributed.is_initialized() or torch.distributed.get_rank() == 0
-        bridge_name = self.__class__.__name__
+        description = f"Loading from {hf_pretrained.model_name_or_path}"
+        for task in self._with_progress_tracking(hf_to_megatron_tasks, description):
+            if task.megatron_module is None:
+                continue
+            # 1) Fetch source tensor(s) from HF state dict
+            if isinstance(task.mapping.hf_param, str):
+                hf_weights = hf_state_dict[task.mapping.hf_param]
+            else:
+                hf_weights = {k: hf_state_dict[v] for k, v in task.mapping.hf_param.items()}
 
-        with Progress(
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
-            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-            TimeRemainingColumn(),
-            TextColumn("({task.completed}/{task.total})"),
-            TextColumn("{task.fields[bridge]}"),
-            disable=not is_main_rank,
-        ) as progress:
-            task_id = progress.add_task(
-                f"Loading from {hf_pretrained.model_name_or_path}", total=len(hf_to_megatron_tasks), bridge=bridge_name
-            )
+            # 2) Delegate conversion & distribution to the bridge
+            converted_weights = task.mapping.hf_to_megatron(hf_weights, task.megatron_module)
 
-            for task in hf_to_megatron_tasks:
-                if task.megatron_module is None:
-                    continue
-                # 1) Fetch source tensor(s) from HF state dict
-                if isinstance(task.mapping.hf_param, str):
-                    hf_weights = hf_state_dict[task.mapping.hf_param]
-                else:
-                    hf_weights = {k: hf_state_dict[v] for k, v in task.mapping.hf_param.items()}
+            # 3) Copy into Megatron param if this rank received a shard
+            if converted_weights is not None:
+                # Assert that param_weight is not None for HF->Megatron tasks
+                assert task.param_weight is not None, "param_weight is required for HF->Megatron conversion"
 
-                # 2) Delegate conversion & distribution to the bridge
-                converted_weights = task.mapping.hf_to_megatron(hf_weights, task.megatron_module)
-
-                # 3) Copy into Megatron param if this rank received a shard
-                if converted_weights is not None:
-                    # Assert that param_weight is not None for HF->Megatron tasks
-                    assert task.param_weight is not None, "param_weight is required for HF->Megatron conversion"
-
-                    # Check shape compatibility before copying
-                    if converted_weights.shape != task.param_weight.shape:
-                        raise ValueError(
-                            f"Shape mismatch for megatron param {task.mapping.megatron_param}:\n"
-                            f"  Expected shape: {task.param_weight.shape}\n"
-                            f"  Got shape: {converted_weights.shape}\n"
-                            f"  Bridge type: {type(task.mapping).__name__}\n"
-                            f"  HF mapping: {task.mapping.hf_param}"
-                        )
-                    task.param_weight.data.copy_(converted_weights)
-
-                progress.update(task_id, advance=1)
+                # Check shape compatibility before copying
+                if converted_weights.shape != task.param_weight.shape:
+                    raise ValueError(
+                        f"Shape mismatch for megatron param {task.mapping.megatron_param}:\n"
+                        f"  Expected shape: {task.param_weight.shape}\n"
+                        f"  Got shape: {converted_weights.shape}\n"
+                        f"  Bridge type: {type(task.mapping).__name__}\n"
+                        f"  HF mapping: {task.mapping.hf_param}"
+                    )
+                task.param_weight.data.copy_(converted_weights)
 
         self._broadcast_shared_embeddings(megatron_model)
         return megatron_model
@@ -476,10 +487,10 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
             else:
                 hf_weights = {k: hf_state_dict[v] for k, v in task.mapping.hf_param.items()}
 
-            local_weights = task.mapping.hf_to_megatron(hf_weights, task.megatron_module)
-            if local_weights is not None:
+            converted_weights = task.mapping.hf_to_megatron(hf_weights, task.megatron_module)
+            if converted_weights is not None:
                 # Assert that vp_stage is not None for HF->Megatron tasks
-                yield MegatronWeightTuple(task.param_name, local_weights, task.vp_stage)
+                yield MegatronWeightTuple(task.param_name, converted_weights, task.vp_stage)
 
     def stream_weights_megatron_to_hf(
         self,
@@ -542,50 +553,32 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
                 assert megatron_embeddings_tied == hf_embeddings_tied, "Megatron and HF embeddings must be tied"
             embeddings_are_tied = megatron_embeddings_tied
 
-        is_main_rank = not torch.distributed.is_initialized() or torch.distributed.get_rank() == 0
-        bridge_name = self.__class__.__name__
+        for task in self._with_progress_tracking(megatron_to_hf_tasks, "Converting to HuggingFace", show_progress):
+            converted_weights_dict = task.mapping.megatron_to_hf(task.param_weight, task.megatron_module)
 
-        with Progress(
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
-            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-            TimeRemainingColumn(),
-            TextColumn("({task.completed}/{task.total})"),
-            TextColumn("{task.fields[bridge]}"),
-            disable=not (is_main_rank and show_progress),
-        ) as progress:
-            task_id = progress.add_task(
-                "Converting to HuggingFace", total=len(megatron_to_hf_tasks), bridge=bridge_name
-            )
+            # All ranks get the full tensor
+            for hf_name, tensor in converted_weights_dict.items():
+                final_tensor = tensor.cpu() if cpu else tensor
 
-            for task in megatron_to_hf_tasks:
-                converted_weights_dict = task.mapping.megatron_to_hf(task.param_weight, task.megatron_module)
+                # Handle tied embeddings case
+                # TODO(yuya): fix this hard coded naming
+                if embeddings_are_tied and hf_name == "model.embed_tokens.weight":
+                    # Yield the embedding weight
+                    yield HFWeightTuple(hf_name, final_tensor)
 
-                # All ranks get the full tensor
-                for hf_name, tensor in converted_weights_dict.items():
-                    final_tensor = tensor.cpu() if cpu else tensor
-
-                    # Handle tied embeddings case
-                    # TODO(yuya): fix this hard coded naming
-                    if embeddings_are_tied and hf_name == "model.embed_tokens.weight":
-                        # Yield the embedding weight
-                        yield HFWeightTuple(hf_name, final_tensor)
-
-                        # Also yield as lm_head.weight if it's expected
-                        if hasattr(hf_pretrained, "state") and hasattr(hf_pretrained.state, "source"):
-                            expected_keys = hf_pretrained.state.source.get_all_keys()
-                            if "lm_head.weight" in expected_keys:
-                                yield HFWeightTuple("lm_head.weight", final_tensor)
-                    elif embeddings_are_tied and hf_name == "lm_head.weight":
-                        # This should not happen when embeddings are tied - assert error
-                        raise ValueError(
-                            "Encountered lm_head.weight when embeddings are tied. This indicates a mapping error."
-                        )
-                    else:
-                        # Regular case - yield the tensor normally
-                        yield HFWeightTuple(hf_name, final_tensor)
-
-                progress.update(task_id, advance=1)
+                    # Also yield as lm_head.weight if it's expected
+                    if hasattr(hf_pretrained, "state") and hasattr(hf_pretrained.state, "source"):
+                        expected_keys = hf_pretrained.state.source.get_all_keys()
+                        if "lm_head.weight" in expected_keys:
+                            yield HFWeightTuple("lm_head.weight", final_tensor)
+                elif embeddings_are_tied and hf_name == "lm_head.weight":
+                    # This should not happen when embeddings are tied - assert error
+                    raise ValueError(
+                        "Encountered lm_head.weight when embeddings are tied. This indicates a mapping error."
+                    )
+                else:
+                    # Regular case - yield the tensor normally
+                    yield HFWeightTuple(hf_name, final_tensor)
 
     def dtype_from_hf(self, config, default=None):
         """Extract torch dtype from a HuggingFace config.
