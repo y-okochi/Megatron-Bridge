@@ -61,6 +61,7 @@ def main(
     pp: int = 1,
     ep: int = 1,
     megatron_save_path: str | None = None,
+    megatron_load_path: str | None = None,
 ) -> None:
     """Perform round-trip conversion between HuggingFace and Megatron-LM models on multiple GPUs."""
     if os.environ.get("WORLD_SIZE") is None:
@@ -76,11 +77,22 @@ def main(
 
     bridge = AutoBridge.from_hf_pretrained(hf_model_id)
 
-    model_provider = bridge.to_megatron_provider(load_weights=True)
-    model_provider.tensor_model_parallel_size = tp
-    model_provider.pipeline_model_parallel_size = pp
-    model_provider.expert_model_parallel_size = ep
-    model_provider.initialize_model_parallel(seed=0)
+    if megatron_load_path:
+        model_provider = bridge.to_megatron_provider(load_weights=False)
+        model_provider.tensor_model_parallel_size = tp
+        model_provider.pipeline_model_parallel_size = pp
+        model_provider.expert_model_parallel_size = ep
+        model_provider.initialize_model_parallel(seed=0)
+        megatron_model = bridge.load_megatron_model(megatron_load_path, wrap_with_ddp=False)
+        megatron_model = [m.cuda() for m in megatron_model]
+
+    else:
+        model_provider = bridge.to_megatron_provider(load_weights=True)
+        model_provider.tensor_model_parallel_size = tp
+        model_provider.pipeline_model_parallel_size = pp
+        model_provider.expert_model_parallel_size = ep
+        model_provider.initialize_model_parallel(seed=0)
+        megatron_model = model_provider(wrap_with_ddp=False)
 
     # Now we can check for rank
     is_rank_0 = torch.distributed.get_rank() == 0
@@ -94,14 +106,12 @@ def main(
         table.add_column("Device")
         table.add_column("Matches Original", justify="center")
 
-    megatron_model = model_provider(wrap_with_ddp=False)
 
-    # Debug: Print model info
     if is_rank_0:
         console.print(f"[yellow]Tensor parallel size: {model_provider.tensor_model_parallel_size}[/yellow]")
         console.print(f"[yellow]Pipeline parallel size: {model_provider.pipeline_model_parallel_size}[/yellow]")
 
-    for name, param in bridge(megatron_model, show_progress=False):
+    for name, param in bridge.export_hf_weights(megatron_model, show_progress=False):
         if is_rank_0:
             original_param = bridge.hf_pretrained.state[name]
             match = torch.allclose(
@@ -148,9 +158,14 @@ if __name__ == "__main__":
         default=None,
         help="Path to save the model in Megatron checkpoint format. If not provided, model will not be saved in Megatron format.",
     )
-
+    parser.add_argument(
+        "--megatron-load-path",
+        type=str,
+        default=None,
+        help="Path to load the model in Megatron checkpoint format. If provided, model will not start from HF checkpoint.",
+    )
     args = parser.parse_args()
-    main(args.hf_model_id, args.output_dir, args.tp, args.pp, args.ep, args.megatron_save_path)
+    main(args.hf_model_id, args.output_dir, args.tp, args.pp, args.ep, args.megatron_save_path, args.megatron_load_path)
 
     if torch.distributed.is_initialized():
         torch.distributed.destroy_process_group()

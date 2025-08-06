@@ -316,7 +316,30 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
 
         # flatten the list, sort it and remove duplicates
         # the order matters here, casually re-order will cause a hang.
-        gathered_global_param_names = sorted(list(set(sum(gathered_global_param_names, []))))
+        # e.g. decoder.layers.0.mlp.experts.linear_fc1.weight100
+        flattened_names = list(set(sum(gathered_global_param_names, [])))
+        
+        def _extract_sort_key(param_name: str):
+            """Extract sorting key based on layer and expert numbers."""
+
+            # Extract at most 2 numbers: layer number and expert number
+            # Pattern: *layers.d+.*d+ (layer number and potentially expert number)
+            numbers = []
+            # Find layer number
+            layer_match = re.search(r'layers\.(\d+)', param_name)
+            if layer_match:
+                numbers.append(int(layer_match.group(1)))
+            # Find expert number after bias or weight
+            expert_match = re.search(r'(?:bias|weight)(\d+)', param_name)
+            if expert_match:
+                numbers.append(int(expert_match.group(1)))
+            # Pad to ensure consistent comparison (max 2 numbers)
+            while len(numbers) < 2:
+                numbers.append(-1)
+            numbers = numbers[:2]  # Keep at most 2 numbers
+            return numbers, param_name
+        
+        gathered_global_param_names = sorted(flattened_names, key=_extract_sort_key)
 
         # Cache the result
         self._cached_param_names = gathered_global_param_names
@@ -527,13 +550,15 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         megatron_to_hf_tasks = self._build_conversion_tasks(hf_pretrained, megatron_model)
 
         # Check if embeddings are tied
-        model_config = unwrap_model(megatron_model)[0].config
-        megatron_embeddings_tied = model_config.share_embeddings_and_output_weights
- 
-        if hasattr(hf_pretrained, 'config') and hasattr(hf_pretrained.config, 'tie_word_embeddings'):
-            hf_embeddings_tied = hf_pretrained.config.tie_word_embeddings
-            assert megatron_embeddings_tied == hf_embeddings_tied, "Megatron and HF embeddings must be tied"
-        embeddings_are_tied = megatron_embeddings_tied
+        embeddings_are_tied = False
+        # Output layer not exists in named params only if pp_group.size()=1
+        if parallel_state.get_pipeline_model_parallel_world_size() == 1:
+            model_config = unwrap_model(megatron_model)[0].config
+            megatron_embeddings_tied = model_config.share_embeddings_and_output_weights
+            if hasattr(hf_pretrained, 'config') and hasattr(hf_pretrained.config, 'tie_word_embeddings'):
+                hf_embeddings_tied = hf_pretrained.config.tie_word_embeddings
+                assert megatron_embeddings_tied == hf_embeddings_tied, "Megatron and HF embeddings must be tied"
+            embeddings_are_tied = megatron_embeddings_tied
         
         is_main_rank = not torch.distributed.is_initialized() or torch.distributed.get_rank() == 0
         bridge_name = self.__class__.__name__

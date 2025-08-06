@@ -131,6 +131,7 @@ def main(args) -> None:
         model_provider = bridge.to_megatron_provider(load_weights=True)
         model_provider.tensor_model_parallel_size = tp
         model_provider.pipeline_model_parallel_size = pp
+        model_provider.expert_model_parallel_size = ep
         model_provider.pipeline_dtype = torch.bfloat16
         model_provider.initialize_model_parallel(seed=0)
         model = model_provider(wrap_with_ddp=False)
