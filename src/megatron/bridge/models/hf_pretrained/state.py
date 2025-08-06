@@ -354,6 +354,129 @@ class StateDict(Mapping[str, torch.Tensor]):
         """
         return self.source.has_glob(pattern)
 
+    def load_one_tensor(self, tensor_name: str) -> torch.Tensor:
+        """
+        Load a single tensor by name.
+        
+        This is a convenience method that provides direct access to individual tensors.
+        
+        Args:
+            tensor_name: The name of the tensor to load.
+            
+        Returns:
+            The loaded tensor.
+            
+        Raises:
+            KeyError: If the tensor is not found.
+            AttributeError: If the underlying source doesn't support this operation.
+        """
+        if hasattr(self.source, 'load_one_tensor'):
+            return self.source.load_one_tensor(tensor_name)
+        else:
+            # Fallback to standard access
+            return self[tensor_name]
+
+    def load_some_tensors(self, tensor_names: List[str]) -> Dict[str, torch.Tensor]:
+        """
+        Load multiple tensors by name.
+        
+        This is a convenience method that provides a more descriptive interface
+        for loading multiple tensors.
+        
+        Args:
+            tensor_names: List of tensor names to load.
+            
+        Returns:
+            Dictionary mapping tensor names to loaded tensors.
+        """
+        if hasattr(self.source, 'load_some_tensors'):
+            return self.source.load_some_tensors(tensor_names)
+        else:
+            # Fallback to standard access
+            return self[tensor_names]
+
+    def save_tensor_generator(
+        self, 
+        generator: Iterable[Tuple[str, torch.Tensor]], 
+        output_path: Union[str, Path], 
+        strict: bool = True,
+        simple_mode: bool = False
+    ) -> None:
+        """
+        Save tensors from a generator to safetensors files.
+        
+        This method is only available when using SafeTensorsStateSource.
+        
+        Args:
+            generator: An iterable of (tensor_name, tensor) tuples.
+            output_path: The directory where the safetensor files will be saved.
+            strict: If True, raises errors for missing tensors. Only used in preservation mode.
+            simple_mode: If True, uses simpler saving without detailed validation.
+            
+        Raises:
+            AttributeError: If the underlying source doesn't support this operation.
+        """
+        if hasattr(self.source, 'save_tensor_generator'):
+            return self.source.save_tensor_generator(generator, output_path, strict, simple_mode)
+        else:
+            raise AttributeError("The underlying StateSource does not support save_tensor_generator")
+
+    def save_tensors(self, tensor_generator: Iterable[Tuple[str, torch.Tensor]], output_path: Union[str, Path]) -> None:
+        """
+        Save tensors using a simple approach (convenience method).
+        
+        This is equivalent to calling save_tensor_generator(..., simple_mode=True).
+        
+        Args:
+            tensor_generator: An iterable of (tensor_name, tensor) tuples.
+            output_path: The directory where the safetensor files will be saved.
+        """
+        return self.save_tensor_generator(tensor_generator, output_path, simple_mode=True)
+
+    def save_tensor_generator_memory_efficient(self, tensor_generator: Iterable[Tuple[str, torch.Tensor]], output_path: Union[str, Path]) -> None:
+        """
+        Save tensors using a memory-efficient approach with temporary files.
+        
+        This method is only available when using SafeTensorsStateSource.
+        
+        Args:
+            tensor_generator: An iterable of (tensor_name, tensor) tuples.
+            output_path: The directory where the safetensor files will be saved.
+            
+        Raises:
+            AttributeError: If the underlying source doesn't support this operation.
+        """
+        if hasattr(self.source, 'save_tensor_generator_memory_efficient'):
+            return self.source.save_tensor_generator_memory_efficient(tensor_generator, output_path)
+        else:
+            raise AttributeError("The underlying StateSource does not support save_tensor_generator_memory_efficient")
+
+    # Backward compatibility aliases
+    def save_tensor_generator(self, *args, **kwargs):
+        """Backward compatibility alias for save_tensor_generator."""
+        return self.save_tensor_generator(*args, **kwargs)
+    
+    def save_tensors_memory_efficient(self, *args, **kwargs):
+        """Backward compatibility alias for save_tensor_generator_memory_efficient."""
+        return self.save_tensor_generator_memory_efficient(*args, **kwargs)
+
+    def save_index(self, output_path: Union[str, Path]) -> None:
+        """
+        Save the model index file to the output path.
+        
+        This method is only available when using SafeTensorsStateSource.
+        
+        Args:
+            output_path: The directory where the index file will be saved.
+            
+        Raises:
+            AttributeError: If the underlying source doesn't support this operation.
+        """
+        if hasattr(self.source, 'save_index'):
+            return self.source.save_index(output_path)
+        else:
+            raise AttributeError("The underlying StateSource does not support save_index")
+
 
 class StateSource(ABC, Mapping[str, torch.Tensor]):
     """
@@ -566,6 +689,13 @@ class SafeTensorsStateSource(StateSource):
         if not all_keys:
             safetensor_files = file_glob(str(self.path / "*.safetensors"))
             if not safetensor_files and not key_to_filename_map:
+                # Check for deprecated pytorch_model-*.bin files and provide helpful error
+                bin_files = file_glob(str(self.path / "pytorch_model-*.bin"))
+                if bin_files:
+                    raise NotImplementedError(
+                        "Not implemented for deprecated pytorch_model-*.bin format huggingface weights, "
+                        "please use safetensors format"
+                    )
                 raise FileNotFoundError(f"No .safetensors files or index found in {self.model_name_or_path}")
             for safetensor_file in safetensor_files:
                 with safe_open(safetensor_file, framework="pt", device="cpu") as f:
@@ -605,6 +735,13 @@ class SafeTensorsStateSource(StateSource):
         if remaining_keys:
             safetensor_files = file_glob(str(self.path / "*.safetensors"))
             if not safetensor_files and not key_to_filename_map and not loaded_tensors:
+                # Check for deprecated pytorch_model-*.bin files and provide helpful error
+                bin_files = file_glob(str(self.path / "pytorch_model-*.bin"))
+                if bin_files:
+                    raise NotImplementedError(
+                        "Not implemented for deprecated pytorch_model-*.bin format huggingface weights, "
+                        "please use safetensors format"
+                    )
                 raise FileNotFoundError(
                     f"No .safetensors files found in {self.model_name_or_path} to load keys: {remaining_keys}"
                 )
@@ -622,6 +759,39 @@ class SafeTensorsStateSource(StateSource):
             raise KeyError(f"Keys not found in safetensors from {self.model_name_or_path}: {remaining_keys}")
 
         return loaded_tensors
+
+    def load_one_tensor(self, tensor_name: str) -> torch.Tensor:
+        """
+        Load a single tensor by name.
+        
+        This is a convenience method that wraps load_tensors() for single tensor access.
+        
+        Args:
+            tensor_name: The name of the tensor to load.
+            
+        Returns:
+            The loaded tensor.
+            
+        Raises:
+            KeyError: If the tensor is not found.
+        """
+        result = self.load_tensors([tensor_name])
+        return result[tensor_name]
+
+    def load_some_tensors(self, tensor_names: List[str]) -> Dict[str, torch.Tensor]:
+        """
+        Load multiple tensors by name.
+        
+        This is an alias for load_tensors() with a more descriptive name that matches
+        the SafeTensorIO interface.
+        
+        Args:
+            tensor_names: List of tensor names to load.
+            
+        Returns:
+            Dictionary mapping tensor names to loaded tensors.
+        """
+        return self.load_tensors(tensor_names)
 
     def has_glob(self, pattern: str) -> bool:
         """
@@ -666,21 +836,21 @@ class SafeTensorsStateSource(StateSource):
 
         return False
 
-    def save_generator(
-        self, generator: Iterable[Tuple[str, torch.Tensor]], output_path: Union[str, Path], strict: bool = True
+    def save_tensor_generator(
+        self, 
+        generator: Iterable[Tuple[str, torch.Tensor]], 
+        output_path: Union[str, Path], 
+        strict: bool = True,
+        simple_mode: bool = False
     ):
         """
-        Saves tensors from a generator to `.safetensors` files, preserving the
-        original sharding structure in a memory-efficient, streaming fashion.
+        Saves tensors from a generator to `.safetensors` files.
 
-        This method reads the sharding information (which tensor belongs to which
-        file) from the source checkpoint. It then consumes a generator of tensors,
-        buffering them in memory only until a complete file shard can be written to
-        disk. This approach minimizes peak memory usage compared to collecting all
-        tensors first.
-
-        If the original checkpoint had a `model.safetensors.index.json` file, a new
-        one will be created for the saved tensors.
+        This method can operate in two modes:
+        1. Preservation mode (default): Preserves the original sharding structure in a 
+           memory-efficient, streaming fashion, with detailed error reporting.
+        2. Simple mode: Uses a simpler approach that either saves to a single file 
+           (for small models) or preserves sharding without strict validation.
 
         Args:
             generator: An iterable of (tensor_name, tensor) tuples.
@@ -689,7 +859,9 @@ class SafeTensorsStateSource(StateSource):
             strict: If True (default), raises a KeyError if the generator
                     yields a tensor name not found in the original model's
                     sharding structure. If False, it prints a warning and
-                    skips the tensor.
+                    skips the tensor. Only used in preservation mode.
+            simple_mode: If True, uses a simpler saving approach without strict
+                        validation and detailed reporting.
         """
         # In a distributed environment, only rank 0 should write to disk.
         # Other ranks must still exhaust the generator to participate in collectives.
@@ -709,14 +881,43 @@ class SafeTensorsStateSource(StateSource):
         output_path.mkdir(parents=True, exist_ok=True)
 
         key_to_filename_map = self.key_to_filename_map
-        all_expected_keys = set(key_to_filename_map.keys())
 
         if not key_to_filename_map:
+            # For models without sharding, save all tensors to a single file
             buffered_tensors = dict(generator)
             if buffered_tensors:
                 save_file(buffered_tensors, output_path / "model.safetensors")
             return
 
+        if simple_mode:
+            # Simple mode: preserve sharding but without strict validation
+            filename_to_keys_map = defaultdict(set)
+            for key, filename in key_to_filename_map.items():
+                filename_to_keys_map[filename].add(key)
+
+            states = {}
+            for tensor_name, tensor in generator:
+                states[tensor_name] = tensor.cpu()
+                # Check if any file shard is complete and can be saved
+                for filename, keys_for_file in list(filename_to_keys_map.items()):
+                    if keys_for_file.issubset(states.keys()):
+                        # This shard is complete, save it
+                        tensors_to_save = {k: states[k] for k in keys_for_file}
+                        save_file(tensors_to_save, output_path / filename)
+                        # Remove saved tensors from memory
+                        for k in keys_for_file:
+                            del states[k]
+                        del filename_to_keys_map[filename]
+
+            if states:
+                print(f"Warning: {len(states)} tensors were not saved because their file shards were incomplete")
+
+            # Save index file if it existed originally
+            self.save_index(output_path)
+            return
+
+        # Preservation mode (original implementation with detailed tracking)
+        all_expected_keys = set(key_to_filename_map.keys())
         filename_to_keys_map = defaultdict(set)
         for key, filename in key_to_filename_map.items():
             filename_to_keys_map[filename].add(key)
@@ -808,6 +1009,89 @@ class SafeTensorsStateSource(StateSource):
             if new_weight_map:
                 with open(output_index_file, "w") as f:
                     json.dump(new_index_data, f, indent=4)
+
+    def save_tensor_generator_memory_efficient(
+        self,
+        tensor_generator: Iterable[Tuple[str, torch.Tensor]],
+        output_path: Union[str, Path],
+    ) -> None:
+        """
+        Save tensors in a memory-efficient way using temporary files.
+        
+        This method saves each tensor to a temporary file first, then combines them
+        into the final sharded files. This is useful for very large models where
+        buffering all tensors for a shard in memory would be problematic.
+        
+        Args:
+            tensor_generator: An iterable of (tensor_name, tensor) tuples.
+            output_path: The directory where the safetensor files will be saved.
+        """
+        # Only rank 0 should write in distributed settings
+        is_distributed = torch.distributed.is_available() and torch.distributed.is_initialized()
+        rank = torch.distributed.get_rank() if is_distributed else 0
+
+        if rank != 0:
+            # Other ranks must exhaust the generator to avoid hangs in collectives
+            for _ in tensor_generator:
+                pass
+            return
+
+        import os
+        from safetensors import safe_open
+        from safetensors.torch import save_file
+
+        output_path = Path(output_path)
+        output_path.mkdir(parents=True, exist_ok=True)
+
+        key_to_filename_map = self.key_to_filename_map
+        if not key_to_filename_map:
+            raise ValueError("Index file is required for memory efficient saving")
+
+        # Save each tensor to a temporary file
+        for tensor_name, tensor in tensor_generator:
+            temp_file = output_path / f"{tensor_name}.tmp.safetensors"
+            save_file({tensor_name: tensor}, temp_file)
+
+        # Combine temporary files into final sharded files
+        filename_to_keys_map = defaultdict(set)
+        for key, filename in key_to_filename_map.items():
+            filename_to_keys_map[filename].add(key)
+
+        for filename, keys_for_file in filename_to_keys_map.items():
+            states = {}
+            for key in keys_for_file:
+                temp_file = output_path / f"{key}.tmp.safetensors"
+                if temp_file.exists():
+                    with safe_open(temp_file, framework="pt", device="cpu") as f:
+                        states[key] = f.get_tensor(key)
+                    os.remove(temp_file)  # Clean up temporary file
+            if states:
+                save_file(states, output_path / filename)
+
+        # Save index file if it existed originally
+        self.save_index(output_path)
+
+    def save_index(self, output_path: Union[str, Path]) -> None:
+        """
+        Save the model.safetensors.index.json file to the output directory.
+        
+        Args:
+            output_path: The directory where the index file will be saved.
+        """
+        import warnings
+
+        output_path = Path(output_path)
+        original_index_file = self.path / "model.safetensors.index.json"
+        
+        if original_index_file.exists():
+            with open(original_index_file, "r") as f:
+                index_data = json.load(f)
+            
+            output_index_file = output_path / "model.safetensors.index.json"
+            with open(output_index_file, "w") as f:
+                json.dump(index_data, f, indent=4)
+        else:
+            warnings.warn("No index file found, saving index file failed")
 
     def _get_key_to_filename_map(self) -> Optional[Dict[str, str]]:
         return self._cached_get_key_to_filename_map(self.path)

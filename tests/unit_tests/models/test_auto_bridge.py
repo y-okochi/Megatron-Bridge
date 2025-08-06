@@ -451,12 +451,12 @@ class TestAutoBridge:
         mock_hf_model = Mock(spec=PreTrainedCausalLM)
         mock_hf_model.save_artifacts = Mock()
         mock_hf_model.state = Mock()
-        mock_hf_model.state.source = Mock(spec=["save_generator"])
+        mock_hf_model.state.source = Mock(spec=["save_tensor_generator"])
 
         from megatron.bridge.models.hf_pretrained.state import SafeTensorsStateSource
 
         mock_hf_model.state.source = Mock(spec=SafeTensorsStateSource)
-        mock_hf_model.state.source.save_generator = Mock()
+        mock_hf_model.state.source.save_tensor_generator = Mock()
 
         mock_megatron_model = [Mock()]
 
