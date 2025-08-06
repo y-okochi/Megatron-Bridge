@@ -354,47 +354,6 @@ class StateDict(Mapping[str, torch.Tensor]):
         """
         return self.source.has_glob(pattern)
 
-    def load_one_tensor(self, tensor_name: str) -> torch.Tensor:
-        """
-        Load a single tensor by name.
-        
-        This is a convenience method that provides direct access to individual tensors.
-        
-        Args:
-            tensor_name: The name of the tensor to load.
-            
-        Returns:
-            The loaded tensor.
-            
-        Raises:
-            KeyError: If the tensor is not found.
-            AttributeError: If the underlying source doesn't support this operation.
-        """
-        if hasattr(self.source, 'load_one_tensor'):
-            return self.source.load_one_tensor(tensor_name)
-        else:
-            # Fallback to standard access
-            return self[tensor_name]
-
-    def load_some_tensors(self, tensor_names: List[str]) -> Dict[str, torch.Tensor]:
-        """
-        Load multiple tensors by name.
-        
-        This is a convenience method that provides a more descriptive interface
-        for loading multiple tensors.
-        
-        Args:
-            tensor_names: List of tensor names to load.
-            
-        Returns:
-            Dictionary mapping tensor names to loaded tensors.
-        """
-        if hasattr(self.source, 'load_some_tensors'):
-            return self.source.load_some_tensors(tensor_names)
-        else:
-            # Fallback to standard access
-            return self[tensor_names]
-
     def save_tensor_generator(
         self, 
         generator: Iterable[Tuple[str, torch.Tensor]], 
@@ -759,39 +718,6 @@ class SafeTensorsStateSource(StateSource):
             raise KeyError(f"Keys not found in safetensors from {self.model_name_or_path}: {remaining_keys}")
 
         return loaded_tensors
-
-    def load_one_tensor(self, tensor_name: str) -> torch.Tensor:
-        """
-        Load a single tensor by name.
-        
-        This is a convenience method that wraps load_tensors() for single tensor access.
-        
-        Args:
-            tensor_name: The name of the tensor to load.
-            
-        Returns:
-            The loaded tensor.
-            
-        Raises:
-            KeyError: If the tensor is not found.
-        """
-        result = self.load_tensors([tensor_name])
-        return result[tensor_name]
-
-    def load_some_tensors(self, tensor_names: List[str]) -> Dict[str, torch.Tensor]:
-        """
-        Load multiple tensors by name.
-        
-        This is an alias for load_tensors() with a more descriptive name that matches
-        the SafeTensorIO interface.
-        
-        Args:
-            tensor_names: List of tensor names to load.
-            
-        Returns:
-            Dictionary mapping tensor names to loaded tensors.
-        """
-        return self.load_tensors(tensor_names)
 
     def has_glob(self, pattern: str) -> bool:
         """
