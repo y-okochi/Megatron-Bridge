@@ -22,7 +22,7 @@ from megatron.core.transformer.module import MegatronModule
 from megatron.core.transformer.transformer_config import TransformerConfig
 
 from megatron.bridge.models.model_provider import (
-    ModelProviderProtocol,
+    ModelProviderMixin,
     _create_model,
     _ddp_wrap,
     _print_num_params,
@@ -126,9 +126,10 @@ class TestCreateModel:
         mock_parallel_state.get_pipeline_model_parallel_world_size.return_value = 1
         mock_parallel_state.get_virtual_pipeline_model_parallel_world_size.return_value = None
 
-        # Create mock model
+        # Create mock model and provider
         mock_model = MockMegatronModule()
-        model_provider = Mock(return_value=mock_model)
+        model_provider = Mock()
+        model_provider.provide = Mock(return_value=mock_model)
 
         result = _create_model(model_provider, ModelType.encoder_and_decoder)
 
@@ -137,7 +138,7 @@ class TestCreateModel:
         assert len(result) == 1
         assert result[0] is mock_model
         assert mock_model.model_type == ModelType.encoder_and_decoder
-        model_provider.assert_called_once_with()  # No pre/post process args
+        model_provider.provide.assert_called_once_with()  # No pre/post process args
 
     @patch("megatron.bridge.models.model_provider.parallel_state")
     @patch("megatron.bridge.models.model_provider.tensor_parallel")
@@ -149,9 +150,10 @@ class TestCreateModel:
         mock_parallel_state.get_pipeline_model_parallel_rank.return_value = 2
         mock_parallel_state.get_pipeline_model_parallel_decoder_start.return_value = 2
 
-        # Create mock model
+        # Create mock model and provider
         mock_model = MockMegatronModule()
-        model_provider = Mock(return_value=mock_model)
+        model_provider = Mock()
+        model_provider.provide = Mock(return_value=mock_model)
 
         result = _create_model(model_provider, ModelType.encoder_and_decoder)
 
@@ -160,7 +162,7 @@ class TestCreateModel:
         assert len(result) == 1
         assert result[0] is mock_model
         assert mock_model.model_type == ModelType.encoder_and_decoder
-        model_provider.assert_called_once_with()
+        model_provider.provide.assert_called_once_with()
 
     @patch("megatron.bridge.models.model_provider.parallel_state")
     @patch("megatron.bridge.models.model_provider.tensor_parallel")
@@ -174,7 +176,7 @@ class TestCreateModel:
 
         # Create mock model with parameters
         mock_model = MockMegatronModule()
-        model_provider = Mock(return_value=mock_model)
+        model_provider = MockModelProvider(mock_model)
 
         _create_model(model_provider, ModelType.encoder_or_decoder)
 
@@ -364,9 +366,7 @@ class TestGetModel:
 
         # Assertions
         assert len(result) == 1
-        mock_create_model.assert_called_once_with(
-            model_provider, ModelType.encoder_or_decoder, init_model_with_meta_device=None
-        )
+        mock_create_model.assert_called_once_with(model_provider, ModelType.encoder_or_decoder)
         mock_print_params.assert_called_once()
         mock_ddp_wrap.assert_called_once()
 
@@ -409,8 +409,7 @@ class TestGetModel:
         get_model(model_provider, ddp_config, fp16=True)
 
         # Assertions
-        assert config.fp16
-        mock_float16_module.assert_called_once_with(config, model)
+        assert model_provider.fp16
 
     @patch("megatron.bridge.models.model_provider._create_model")
     @patch("megatron.bridge.models.model_provider._print_num_params")
@@ -567,51 +566,6 @@ class TestGetModel:
         mock_ddp_wrap.assert_called_once()
         # Ensure the wrapped model is the one returned from the hook
         assert mock_ddp_wrap.call_args[0][0] == [hooked_model]
-
-
-class TestModelProviderProtocol:
-    """Test cases for ModelProviderProtocol."""
-
-    def test_protocol_implementation(self):
-        """Test that a class properly implements ModelProviderProtocol."""
-
-        class ValidProvider:
-            def get_model(
-                self,
-                ddp_config: DistributedDataParallelConfig,
-                model_type=ModelType.encoder_or_decoder,
-                overlap_param_gather_with_optimizer_step: bool = False,
-                fp16: bool | None = None,
-                bf16: bool | None = None,
-                use_torch_fsdp2: bool = False,
-                wrap_with_ddp: bool = True,
-                data_parallel_random_init: bool = True,
-                use_cpu_initialization: None | bool = False,
-            ):
-                return []
-
-        provider = ValidProvider()
-        assert isinstance(provider, ModelProviderProtocol)
-
-    def test_protocol_missing_method(self):
-        """Test that a class without get_model doesn't implement protocol."""
-
-        class InvalidProvider:
-            pass
-
-        provider = InvalidProvider()
-        assert not isinstance(provider, ModelProviderProtocol)
-
-    def test_protocol_wrong_signature(self):
-        """Test that a class with wrong get_model signature doesn't implement protocol."""
-
-        class WrongSignatureProvider:
-            def get_model(self):  # Missing required parameters
-                return []
-
-        provider = WrongSignatureProvider()
-        # Protocol checking is based on method name, not signature in runtime_checkable
-        assert isinstance(provider, ModelProviderProtocol)
 
 
 class TestEdgeCases:

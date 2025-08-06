@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import re
 import json
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Generic, List, Optional, Tuple, TypeVar, Union
@@ -21,7 +22,12 @@ import torch.distributed
 import torch.nn as nn
 from megatron.core import mpu
 from megatron.core.transformer.transformer_config import TransformerConfig
-
+from megatron.core.utils import (
+    get_pg_rank,
+    get_pg_size,
+)
+from megatron.bridge.models.conversion.utils import get_module_and_param_from_name
+from megatron.core.transformer.module import MegatronModule
 
 WeightType = TypeVar("WeightType", torch.Tensor, Dict[str, torch.Tensor])
 
@@ -81,6 +87,7 @@ class MegatronParamMapping(ABC, Generic[WeightType]):
         self.megatron_param = megatron_param
         self.hf_param = hf_param
         self._validate_patterns()
+        self.ep_group = mpu.get_expert_model_parallel_group()
 
     def _resolve_names(self, captures: Tuple[str, ...]) -> Tuple[str, Union[str, Dict[str, str]]]:
         resolved_megatron_param = self.megatron_param
@@ -448,6 +455,60 @@ class MegatronParamMapping(ABC, Generic[WeightType]):
             return mpu.get_pipeline_model_parallel_group()
         return None
 
+    def _gather_from_ep_ranks(
+        self,
+        megatron_weights: Optional[torch.Tensor],
+        megatron_module: Optional[MegatronModule],
+        hf_param_name: Optional[str] = None,
+        megatron_param_name: Optional[str] = None,
+    ) -> Dict[str, torch.Tensor]:
+        """Handle expert parallel weight gathering for MoE models.
+        
+        This method handles the gathering of expert weights across expert parallel 
+        ranks. It should only be called when the parameter is confirmed to be an 
+        expert weight.
+        
+        Args:
+            megatron_weights (Optional[torch.Tensor]): The local expert weight tensor.
+            megatron_module (Optional[MegatronModule]): The megatron module containing config.
+            megatron_param_name (Optional[str]): The local megatron parameter name.
+            
+        Returns:
+            Dict[str, torch.Tensor]: Dictionary of expert weights mapped to HF parameter names.
+        """
+        assert megatron_weights is not None
+
+        model_config = self._get_config(megatron_module)
+        ep_size = get_pg_size(self.ep_group)
+        num_experts = model_config.num_moe_experts
+        num_experts_per_rank = num_experts // ep_size
+        
+        # Extract local expert number from parameter name
+        # Handle both .weight and .bias suffixes
+        local_expert_number = None
+        if ".weight" in megatron_param_name:
+            local_expert_number = megatron_param_name.split(".weight")[-1]
+        elif ".bias" in megatron_param_name:
+            local_expert_number = megatron_param_name.split(".bias")[-1]
+            
+        # Compute global expert numbers for all EP ranks
+        # use regex to replace the local expert number with the global expert number
+        gathered_expert_param_names = [
+            re.sub(r"experts\.(\d+)", f"experts.{int(local_expert_number) + num_experts_per_rank * i}", str(hf_param_name))
+            for i in range(ep_size)
+        ]
+        assert hf_param_name in gathered_expert_param_names, f"hf_param_name {hf_param_name} not in gathered_expert_param_names {gathered_expert_param_names}"
+
+        # Gather weights from all EP ranks
+        gathered_weights = [torch.empty_like(megatron_weights) for _ in range(ep_size)]
+        torch.distributed.all_gather(gathered_weights, megatron_weights, group=self.ep_group)
+
+        # Return dictionary mapping HF parameter names to weights
+        return {
+            param_name: gathered_weights[i]
+            for i, param_name in enumerate(gathered_expert_param_names)
+        }
+
 
 class DirectMapping(MegatronParamMapping[torch.Tensor]):
     """Direct 1:1 weight mapping with no transformation or tensor parallelism."""
@@ -473,6 +534,12 @@ class DirectMapping(MegatronParamMapping[torch.Tensor]):
 
         if megatron_weights is None:
             return {}
+
+        # Handle expert parallel weights
+        if ".mlp.experts.linear_fc" in megatron_param_name:
+            return self._gather_from_ep_ranks(
+                megatron_weights, megatron_module, self.hf_param, megatron_param_name
+            )
 
         return {str(self.hf_param): megatron_weights}
 
@@ -530,7 +597,7 @@ class ColumnParallelMapping(MegatronParamMapping[torch.Tensor]):
         if self.tp_size == 1:
             return hf_weights
 
-        target_param, output_shape = _get_target_param_and_shape(self.megatron_param, megatron_module)
+        _, target_param = get_module_and_param_from_name(megatron_module, self.megatron_param)
 
         # On rank 0, check for divisibility and split
         if self.tp_rank == 0:
@@ -550,7 +617,7 @@ class ColumnParallelMapping(MegatronParamMapping[torch.Tensor]):
         # Scatter to all ranks. Each rank gets its sharded shape from its module.
         return self.scatter_to_tp_ranks(
             splits,
-            output_shape,
+            target_param.shape,
             target_param.dtype,
             target_param.device,
         )
@@ -569,16 +636,19 @@ class ColumnParallelMapping(MegatronParamMapping[torch.Tensor]):
             return {}
 
         if self.tp_size == 1:
-            return {str(self.hf_param): megatron_weights}
+            full_weights = megatron_weights
+        else:
+            # Gather from all TP ranks
+            gathered = self.gather_from_tp_ranks(megatron_weights)
+            full_weights = torch.cat(gathered, dim=0)
 
-        # Gather from all TP ranks
-        gathered = self.gather_from_tp_ranks(megatron_weights)
-
-        # Only rank 0 concatenates and returns
-        if self.tp_rank == 0:
-            full_weight = torch.cat(gathered, dim=0)
-            return {str(self.hf_param): full_weight}
-        return {}
+        # Handle expert parallel weights
+        if ".mlp.experts.linear_fc" in megatron_param_name:
+            return self._gather_from_ep_ranks(
+                full_weights, megatron_module, self.hf_param, megatron_param_name
+            )
+        
+        return {str(self.hf_param): full_weights}
 
 
 class RowParallelMapping(MegatronParamMapping[torch.Tensor]):
@@ -612,22 +682,40 @@ class RowParallelMapping(MegatronParamMapping[torch.Tensor]):
         if self.tp_size == 1:
             return hf_weights
 
+        _, target_param = get_module_and_param_from_name(megatron_module, self.megatron_param)
+
         # On rank 0, check for divisibility and split
         if self.tp_rank == 0:
-            full_size = hf_weights.shape[1]
-            if full_size % self.tp_size != 0:
-                raise ValueError(f"Cannot evenly split dimension 1 size {full_size} across {self.tp_size} TP ranks")
-            splits = torch.chunk(hf_weights, self.tp_size, dim=1)
+            if hf_weights is None:
+                raise ValueError("hf_weights should not be None on rank 0")
+
+            # For bias (1D), we still split along dim 0
+            # For weight (2D), we split along dim 1
+            if hf_weights.ndim == 1:
+                full_size = hf_weights.shape[0]
+                if full_size % self.tp_size != 0:
+                    raise ValueError(
+                        f"Cannot evenly split dimension 0 size {full_size} across {self.tp_size} TP ranks"
+                    )
+                splits = torch.chunk(hf_weights, self.tp_size, dim=0)
+            else:
+                assert hf_weights.ndim == 2
+                full_size = hf_weights.shape[1]
+                if full_size % self.tp_size != 0:
+                    raise ValueError(
+                        f"Cannot evenly split dimension 0 size {full_size} across {self.tp_size} TP ranks"
+                    )
+                splits = torch.chunk(hf_weights, self.tp_size, dim=1)
+
         else:
             splits = None
 
         # Scatter to all ranks. Each rank gets its sharded shape from its module.
-        output_shape = megatron_module.weight.shape
         return self.scatter_to_tp_ranks(
             splits,
-            output_shape,
-            megatron_module.weight.dtype,
-            megatron_module.weight.device,
+            target_param.shape,
+            target_param.dtype,
+            target_param.device,
         )
 
     def megatron_to_hf(
@@ -639,20 +727,23 @@ class RowParallelMapping(MegatronParamMapping[torch.Tensor]):
         """Gather from all TP ranks and concatenate."""
         # Handle cross-PP broadcast
         megatron_weights = self.broadcast_from_pp_rank(megatron_weights)
-
+            
         if megatron_weights is None:
             return {}
 
         if self.tp_size == 1:
-            merged = megatron_weights
+            full_weights = megatron_weights
         else:
             gathered = self.gather_from_tp_ranks(megatron_weights)
-            merged = torch.cat(gathered, dim=1)
+            full_weights = torch.cat(gathered, dim=1)
 
-        if self.tp_rank == 0:
-            return {str(self.hf_param): merged}
-        else:
-            return {}
+        # Handle expert parallel weights
+        if ".mlp.experts.linear_fc" in megatron_param_name:
+            return self._gather_from_ep_ranks(
+                full_weights, megatron_module, self.hf_param, megatron_param_name
+            )
+
+        return {str(self.hf_param): full_weights}
 
 
 class ReplicatedMapping(MegatronParamMapping[torch.Tensor]):
@@ -678,6 +769,10 @@ class ReplicatedMapping(MegatronParamMapping[torch.Tensor]):
         if self.tp_size == 1:
             return hf_weights
 
+        # TODO(yuya): router.weight is on device cpu, need to check.
+        if target_device.index != torch.cuda.current_device():
+            hf_weights = hf_weights.to(torch.cuda.current_device())
+
         # All ranks need the full weight
         if self.tp_rank > 0:
             # Create empty tensor of correct shape
@@ -699,10 +794,13 @@ class ReplicatedMapping(MegatronParamMapping[torch.Tensor]):
         if megatron_weights is None:
             return {}
 
-        # For replicated weights, only rank 0 returns to avoid duplicates
-        if self.tp_rank == 0:
-            return {str(self.hf_param): megatron_weights}
-        return {}
+        # Handle expert parallel weights
+        if megatron_param_name and ".mlp.experts.linear_fc" in megatron_param_name:
+            return self._gather_from_ep_ranks(
+                megatron_weights, megatron_module, self.hf_param, megatron_param_name
+            )
+
+        return {str(self.hf_param): megatron_weights}
 
 
 class AutoMapping(MegatronParamMapping[torch.Tensor]):
@@ -756,11 +854,13 @@ class AutoMapping(MegatronParamMapping[torch.Tensor]):
             "ColumnParallelLinear",
             "TEColumnParallelLinear",
             "TELayerNormColumnParallelLinear",
+            "TEColumnParallelGroupedLinear",
             "VocabParallelEmbedding",
         },
         "row": {
             "RowParallelLinear",
             "TERowParallelLinear",
+            "TERowParallelGroupedLinear",
         },
         "replicated": {
             # Normalization layers
@@ -774,6 +874,7 @@ class AutoMapping(MegatronParamMapping[torch.Tensor]):
             "IdentityOp",
             "DotProductAttention",
             "TEDotProductAttention",
+            "TopKRouter",
         },
     }
 
@@ -797,18 +898,36 @@ class AutoMapping(MegatronParamMapping[torch.Tensor]):
         """Initialize TP-aware mapping."""
         super().__init__(megatron_param, hf_param)
 
-        # Create delegate mappings
-        self._column_mapping = ColumnParallelMapping(megatron_param, hf_param)
-        self._row_mapping = RowParallelMapping(megatron_param, hf_param)
-        self._replicated_mapping = ReplicatedMapping(megatron_param, hf_param)
+        # Cache for detected parallelism type and delegate mapping
+        self._detected_type: Optional[str] = None
+        self._mapping: Optional[MegatronParamMapping[torch.Tensor]] = None
+
+    def _get_or_create_mapping(self, parallelism_type: str) -> MegatronParamMapping[torch.Tensor]:
+        """Get or create the appropriate mapping for the given type."""
+        if parallelism_type == "column":
+            return ColumnParallelMapping(self.megatron_param, self.hf_param)
+        elif parallelism_type == "row":
+            return RowParallelMapping(self.megatron_param, self.hf_param)
+        elif parallelism_type == "replicated":
+            return ReplicatedMapping(self.megatron_param, self.hf_param)
+        else:
+            raise ValueError(f"Unknown parallelism type: {parallelism_type}")
 
     def _detect_parallelism_type(self, module: nn.Module, megatron_param_name: str) -> str:
         """Detect parallelism type from module."""
         module_type = type(module).__name__
 
-        # layer norm weight and bias needs to be handled as replicated
-        if "layer_norm" in megatron_param_name or "layernorm" in megatron_param_name:
-            return "replicated"
+        # Handle fused modules like TELayerNormColumnParallelLinear
+        # These modules have both column-parallel weights (weight, bias)
+        # and replicated layer norm weights (layer_norm_weight, layer_norm_bias)
+        if module_type == "TELayerNormColumnParallelLinear":
+            # Check the actual parameter name to determine the correct parallelism type
+            if megatron_param_name and (
+                megatron_param_name.endswith("layer_norm_weight") or megatron_param_name.endswith("layer_norm_bias")
+            ):
+                return "replicated"
+            # All other parameters (weight, bias) are column-parallel
+            return "column"
 
         # Check registry first
         for parallelism, types in self._MODULE_TYPE_REGISTRY.items():
@@ -850,16 +969,12 @@ class AutoMapping(MegatronParamMapping[torch.Tensor]):
         megatron_param_name: Optional[str] = None,
     ) -> torch.Tensor:
         """Delegate to appropriate mapping based on module type."""
-        parallelism_type = self._detect_parallelism_type(megatron_module, megatron_param_name)
+        # Detect type and create delegate on first use
+        if self._mapping is None:
+            self._detected_type = self._detect_parallelism_type(megatron_module, megatron_param_name)
+            self._mapping = self._get_or_create_mapping(self._detected_type)
 
-        if parallelism_type == "column":
-            return self._column_mapping.hf_to_megatron(hf_weights, megatron_module, megatron_param_name)
-        elif parallelism_type == "row":
-            return self._row_mapping.hf_to_megatron(hf_weights, megatron_module, megatron_param_name)
-        elif parallelism_type == "replicated":
-            return self._replicated_mapping.hf_to_megatron(hf_weights, megatron_module, megatron_param_name)
-
-        raise ValueError(f"Unknown parallelism type: {parallelism_type}")
+        return self._mapping.hf_to_megatron(hf_weights, megatron_module, megatron_param_name)
 
     def megatron_to_hf(
         self,
@@ -871,22 +986,18 @@ class AutoMapping(MegatronParamMapping[torch.Tensor]):
         # Need to determine type even if module is None (different PP rank)
         assert megatron_param_name is not None, "`megatron_param_name` is required for AutoMapping."
 
-        if megatron_module is not None:
-            parallelism_type = self._detect_parallelism_type(megatron_module, megatron_param_name)
-            # Broadcast to other ranks
-            parallelism_type = self.broadcast_obj_from_pp_rank(parallelism_type)
-        else:
-            # Receive from owning rank
-            parallelism_type = self.broadcast_obj_from_pp_rank(None)
+        if self._mapping is None:
+            if megatron_module is not None:
+                self._detected_type = self._detect_parallelism_type(megatron_module, megatron_param_name)
+                # Broadcast to other ranks
+                self._detected_type = self.broadcast_obj_from_pp_rank(self._detected_type)
+            else:
+                # Receive from owning rank
+                self._detected_type = self.broadcast_obj_from_pp_rank(None)
 
-        if parallelism_type == "column":
-            return self._column_mapping.megatron_to_hf(megatron_weights, megatron_module, megatron_param_name)
-        elif parallelism_type == "row":
-            return self._row_mapping.megatron_to_hf(megatron_weights, megatron_module, megatron_param_name)
-        elif parallelism_type == "replicated":
-            return self._replicated_mapping.megatron_to_hf(megatron_weights, megatron_module, megatron_param_name)
-        else:
-            raise ValueError(f"Unknown parallelism type: {parallelism_type}")
+            self._mapping = self._get_or_create_mapping(self._detected_type)
+
+        return self._mapping.megatron_to_hf(megatron_weights, megatron_module, megatron_param_name)
 
 
 class QKVMapping(MegatronParamMapping[Dict[str, torch.Tensor]]):
@@ -1075,7 +1186,7 @@ class GatedMLPMapping(MegatronParamMapping[Dict[str, torch.Tensor]]):
             return torch.cat([hf_weights["gate"], hf_weights["up"]], dim=0)
 
         # Get target parameter info from megatron module
-        target_param, output_shape = _get_target_param_and_shape(self.megatron_param, megatron_module)
+        _, target_param = get_module_and_param_from_name(megatron_module, self.megatron_param)
 
         # On rank 0, split gate and up separately, then concatenate corresponding pieces
         if self.tp_rank == 0:
@@ -1105,7 +1216,7 @@ class GatedMLPMapping(MegatronParamMapping[Dict[str, torch.Tensor]]):
         # Scatter the concatenated shards to each rank
         return self.scatter_to_tp_ranks(
             splits,
-            output_shape,
+            target_param.shape,
             target_param.dtype,
             target_param.device,
         )
@@ -1127,39 +1238,37 @@ class GatedMLPMapping(MegatronParamMapping[Dict[str, torch.Tensor]]):
         if self.tp_size == 1:
             # No TP, just split the concatenated tensor
             fused_mlp = megatron_weights
+            gate, up = torch.chunk(fused_mlp, 2, dim=0)
+
         else:
             # Gather shards from all TP ranks
             gathered_shards = self.gather_from_tp_ranks(megatron_weights)
 
-            if self.tp_rank == 0:
-                # Split each shard back into gate and up parts
-                gate_parts = []
-                up_parts = []
-                for shard in gathered_shards:
-                    # Each shard is [gate_shard; up_shard] concatenated along dim 0
-                    # This works for both bias (1D) and weight (2D) tensors
-                    gate_shard, up_shard = torch.chunk(shard, 2, dim=0)
-                    gate_parts.append(gate_shard)
-                    up_parts.append(up_shard)
+            # Split each shard back into gate and up parts
+            gate_parts = []
+            up_parts = []
+            for shard in gathered_shards:
+                # Each shard is [gate_shard; up_shard] concatenated along dim 0
+                # This works for both bias (1D) and weight (2D) tensors
+                gate_shard, up_shard = torch.chunk(shard, 2, dim=0)
+                gate_parts.append(gate_shard)
+                up_parts.append(up_shard)
 
-                # Concatenate all gate parts and all up parts separately
-                full_gate = torch.cat(gate_parts, dim=0)
-                full_up = torch.cat(up_parts, dim=0)
+            # Concatenate all gate parts and all up parts separately
+            gate = torch.cat(gate_parts, dim=0)
+            up = torch.cat(up_parts, dim=0)
 
-                # Concatenate gate and up to get the full tensor
-                fused_mlp = torch.cat([full_gate, full_up], dim=0)
-            else:
-                return {}
+        # Handle expert parallel weights
+        if ".mlp.experts.linear_fc" in megatron_param_name:
+            gathered_gate_weights_dict = self._gather_from_ep_ranks(
+                gate, megatron_module, self.hf_param["gate"], megatron_param_name
+            )
+            gathered_up_weights_dict = self._gather_from_ep_ranks(
+                up, megatron_module, self.hf_param["up"], megatron_param_name
+            )
+            return {**gathered_gate_weights_dict, **gathered_up_weights_dict}
 
-        # Only rank 0 returns the split weights/biases
-        if self.tp_rank == 0:
-            # Split the concatenated tensor in half along dim 0
-            # This works for both bias (1D) and weight (2D) tensors
-            gate, up = torch.chunk(fused_mlp, 2, dim=0)
-
-            return {self.hf_param["gate"]: gate, self.hf_param["up"]: up}
-        else:
-            return {}
+        return {self.hf_param["gate"]: gate, self.hf_param["up"]: up}
 
     def resolve(self, captures: Tuple[str, ...]) -> "MegatronParamMapping":
         """Return a new *resolved* GatedMLPMapping instance."""
@@ -1170,259 +1279,6 @@ class GatedMLPMapping(MegatronParamMapping[Dict[str, torch.Tensor]]):
             resolved_hf_param["gate"],
             resolved_hf_param["up"],
         )
-
-
-class MOEMapping(MegatronParamMapping[torch.Tensor]):
-    """Mapping for **Mixture of Experts (MoE)** weight distribution.
-
-    MoE models distribute expert weights across Expert Parallel (EP) ranks.
-    Each EP rank owns a subset of experts, and this mapping handles the
-    EP distribution while delegating TP operations to AutoMapping.
-
-    **Key features handled by this mapping**
-    1.  **Expert parallel distribution** – different experts on different EP ranks
-    2.  **Dynamic expert IDs** – weight names contain expert indices as wildcards
-    3.  **Cross-EP communication** – broadcasting weights from owning EP rank
-    4.  **TP delegation** – all tensor parallel ops handled by AutoMapping
-
-    **Weight naming convention**
-    -   Megatron: `"mlp.experts.linear_fc1.weight*"`  (where `*` is the expert ID)
-    -   External: `"model.layers.*.mlp.experts.*.gate_proj.weight"`
-
-    The expert ID wildcard is resolved based on EP rank and configuration.
-    """
-
-    def __init__(self, megatron_param: str, hf_param: str):
-        """Initialize MoE weight mapping.
-
-        Args:
-            megatron_param (str): Megatron expert weight pattern (expert ID as last
-                wildcard).
-            hf_param (str): External weight pattern (expert ID as last wildcard).
-        """
-        super().__init__(megatron_param, hf_param)
-
-        # Create a TP mapping for handling tensor parallelism
-        # This will be used after EP distribution is resolved
-        self._tp_mapping = AutoMapping(megatron_param, hf_param)
-
-    def hf_to_megatron(
-        self,
-        hf_weights: torch.Tensor,
-        megatron_module: nn.Module,
-        megatron_param_name: Optional[str] = None,
-    ) -> torch.Tensor:
-        """
-        Handle EP distribution then delegate TP operations.
-
-        This method:
-        1. Determines which EP rank should own this expert
-        2. Ensures only the owning rank has the weight
-        3. Delegates TP distribution to AutoMapping
-        """
-        config = self._get_config(megatron_module)
-
-        if self.ep_size == 1:
-            # No EP distribution, just delegate to TP mapping
-            return self._tp_mapping.hf_to_megatron(hf_weights, megatron_module, megatron_param_name)
-
-        # Extract expert ID from the resolved parameter name
-        expert_id = self._get_expert_id_from_name(megatron_param_name or self.megatron_param)
-
-        # Determine which EP rank owns this expert
-        owning_ep_rank = self._get_expert_ownership(expert_id, config)
-
-        # Only process on the owning rank
-        if self.ep_rank == owning_ep_rank:
-            # Now delegate TP distribution to the TP mapping
-            return self._tp_mapping.hf_to_megatron(hf_weights, megatron_module, megatron_param_name)
-        else:
-            # This rank doesn't own this expert
-            return None
-
-    def megatron_to_hf(
-        self,
-        megatron_weights: Optional[torch.Tensor],
-        megatron_module: Optional[nn.Module],
-        megatron_param_name: Optional[str] = None,
-    ) -> Dict[str, torch.Tensor]:
-        """
-        Gather from EP ranks then delegate TP gathering.
-
-        This method:
-        1. Handles cross-PP broadcast (inherited from base)
-        2. Determines which EP rank owns this expert
-        3. Broadcasts from owning EP rank
-        4. Delegates TP gathering to AutoMapping
-        """
-        # Handle cross-PP broadcast first
-        megatron_weights = self.broadcast_from_pp_rank(megatron_weights)
-
-        if megatron_weights is None:
-            return {}
-
-        # Get configuration
-        if megatron_module is None:
-            config = self.broadcast_obj_from_pp_rank(None)
-        else:
-            cfg_local = self._get_config(megatron_module)
-            config = self.broadcast_obj_from_pp_rank(cfg_local)
-
-        if self.ep_size == 1:
-            # No EP distribution, delegate directly to TP mapping
-            return self._tp_mapping.megatron_to_hf(megatron_weights, megatron_module, megatron_param_name)
-
-        # Extract expert ID from resolved name
-        expert_id = self._get_expert_id_from_name(megatron_param_name or self.megatron_param)
-
-        # Determine owning EP rank
-        owning_ep_rank = self._get_expert_ownership(expert_id, config)
-
-        # Broadcast weight from owning EP rank to all EP ranks
-        # (AutoMapping needs the weight on all ranks for TP gathering)
-        if self.ep_rank == owning_ep_rank:
-            # First gather TP shards on the owning EP rank
-            tp_gathered = self._tp_mapping.megatron_to_hf(megatron_weights, megatron_module, megatron_param_name)
-            # Extract the gathered weight (there should be only one key)
-            if tp_gathered:
-                gathered_weight = next(iter(tp_gathered.values()))
-            else:
-                gathered_weight = None
-        else:
-            gathered_weight = None
-
-        # Broadcast the gathered weight from owning EP rank to all EP ranks
-        gathered_weight = self._broadcast_from_ep_rank(gathered_weight, owning_ep_rank)
-
-        # Only return from EP rank 0 to avoid duplicates
-        if self.ep_rank == 0 and gathered_weight is not None:
-            return {str(self.hf_param): gathered_weight}
-
-        return {}
-
-    def _get_expert_id_from_name(self, name: str) -> int:
-        """
-        Extract expert ID from resolved weight name.
-
-        For patterns like "weight" followed by a number
-        The expert ID is expected to be the last numeric component.
-        """
-        import re
-
-        # Look for pattern like "weight" followed by a number
-        match = re.search(r"weight(\d+)", name)
-        if match:
-            return int(match.group(1))
-
-        # Also check for patterns like "experts.0.gate_proj"
-        match = re.search(r"experts\.(\d+)\.", name)
-        if match:
-            return int(match.group(1))
-
-        # Fallback: try to find any trailing number
-        match = re.search(r"(\d+)[^\d]*$", name)
-        if match:
-            return int(match.group(1))
-
-        raise ValueError(f"Could not extract expert ID from weight name: {name}")
-
-    def _get_expert_ownership(self, expert_id: int, config: Any) -> int:
-        """
-        Determine which EP rank owns a given expert.
-
-        Args:
-            expert_id (int): Global expert index
-            config (Any): Model configuration with num_moe_experts
-
-        Returns:
-            int: EP rank that owns this expert
-        """
-        num_experts = config.num_moe_experts
-        num_experts_per_rank = num_experts // self.ep_size
-        return expert_id // num_experts_per_rank
-
-    def _broadcast_from_ep_rank(self, tensor: Optional[torch.Tensor], owning_rank: int) -> Optional[torch.Tensor]:
-        """
-        Broadcast a tensor from a specific EP rank to all EP ranks.
-
-        Args:
-            tensor (Optional[torch.Tensor]): Tensor to broadcast (None on non-owning ranks)
-            owning_rank (int): EP rank that owns the tensor
-
-        Returns:
-            Optional[torch.Tensor]: Broadcasted tensor on all EP ranks
-        """
-        if self.ep_size == 1:
-            return tensor
-
-        # Allocate tensor on non-owning ranks
-        if self.ep_rank != owning_rank and tensor is None:
-            # Get tensor spec from owning rank
-            tensor_spec = None
-            if self.ep_rank == owning_rank:
-                tensor_spec = (tensor.shape, tensor.dtype)
-
-            # Broadcast spec
-            tensor_spec = torch.distributed.broadcast_object_list([tensor_spec], src=owning_rank, group=self.ep_group)[
-                0
-            ]
-
-            # Allocate tensor
-            shape, dtype = tensor_spec
-            # Use CPU by default, unless CUDA is available
-            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-            tensor = torch.empty(shape, dtype=dtype, device=device)
-
-        # Broadcast tensor data
-        global_src = torch.distributed.get_global_rank(group=self.ep_group, group_rank=owning_rank)
-        torch.distributed.broadcast(tensor, src=global_src, group=self.ep_group)
-
-        return tensor
-
-    @property
-    def ep_size(self) -> int:
-        """Get expert parallel world size."""
-        return mpu.get_expert_model_parallel_world_size()
-
-    @property
-    def ep_rank(self) -> int:
-        """Get current expert parallel rank."""
-        return mpu.get_expert_model_parallel_rank()
-
-    @property
-    def ep_group(self) -> Optional[torch.distributed.ProcessGroup]:
-        """Get expert parallel process group."""
-        if self.ep_size > 1:
-            return mpu.get_expert_model_parallel_group()
-        return None
-
-
-def _get_target_param_and_shape(megatron_param: str, megatron_module: nn.Module) -> tuple[torch.Tensor, tuple]:
-    """Get the target parameter pointer and its shape based on the parameter name."""
-    param_name_lower = megatron_param.lower()
-
-    # Define parameter mapping: (param_name, expected_ndim)
-    param_configs = [
-        ("bias", 1),
-        ("weight", 2),
-    ]
-
-    for param_name, expected_ndim in param_configs:
-        if param_name in param_name_lower:
-            if hasattr(megatron_module, param_name):
-                target_param = getattr(megatron_module, param_name)
-                if isinstance(target_param, torch.Tensor) and target_param.ndim == expected_ndim:
-                    return target_param, target_param.shape
-                else:
-                    raise ValueError(
-                        f"Parameter {param_name} exists but has wrong type or dimensions (expected ndim == {expected_ndim}, got {target_param.ndim if isinstance(target_param, torch.Tensor) else 'not a tensor'})"
-                    )
-            else:
-                raise ValueError(
-                    f"Parameter name suggests {param_name} but module {megatron_module} has no {param_name}"
-                )
-
-    raise ValueError(f"Could not determine parameter type for {megatron_param}")
 
 
 def merge_qkv_biases(config: TransformerConfig, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor) -> torch.Tensor:
@@ -1597,201 +1453,3 @@ def split_qkv_weights(
 
     return q, k, v
 
-
-def gather_tp_qkv(provider: TransformerConfig, tensors: List[torch.Tensor]) -> torch.Tensor:
-    """Gather QKV weights from all tensor parallel ranks.
-
-    Args:
-        provider (TransformerConfig): Model configuration provider.
-        tensors (List[torch.Tensor]): List of tensor shards from each TP rank.
-
-    Returns:
-        torch.Tensor: Full QKV weight matrix.
-    """
-    if provider.tensor_model_parallel_size == 1:
-        return tensors[0]
-    return torch.cat(tensors, dim=0)
-
-
-def gather_tp_gated_mlp(provider: TransformerConfig, tensors: List[torch.Tensor]) -> torch.Tensor:
-    """Gather gated MLP weights from all tensor parallel ranks.
-
-    Args:
-        provider (TransformerConfig): Model configuration provider.
-        tensors (List[torch.Tensor]): List of tensor shards from each TP rank.
-
-    Returns:
-        torch.Tensor: Full gated MLP weight matrix.
-    """
-    if provider.tensor_model_parallel_size == 1:
-        return tensors[0]
-
-    # Split each shard into gate and up parts
-    gate_parts = []
-    up_parts = []
-    for tensor in tensors:
-        gate, up = torch.chunk(tensor, 2, dim=0)
-        gate_parts.append(gate)
-        up_parts.append(up)
-
-    # Concatenate gates and ups separately, then merge
-    full_gate = torch.cat(gate_parts, dim=0)
-    full_up = torch.cat(up_parts, dim=0)
-    return torch.cat([full_gate, full_up], dim=0)
-
-
-def gather_tp_column_parallel(provider: TransformerConfig, tensors: List[torch.Tensor]) -> torch.Tensor:
-    """Gather column-parallel weights from all tensor parallel ranks.
-
-    Args:
-        provider (TransformerConfig): Model configuration provider.
-        tensors (List[torch.Tensor]): List of tensor shards from each TP rank.
-
-    Returns:
-        torch.Tensor: Full weight matrix.
-    """
-    if provider.tensor_model_parallel_size == 1:
-        return tensors[0]
-    return torch.cat(tensors, dim=0)
-
-
-def gather_tp_row_parallel(provider: TransformerConfig, tensors: List[torch.Tensor]) -> torch.Tensor:
-    """Gather row-parallel weights from all tensor parallel ranks.
-
-    Args:
-        provider (TransformerConfig): Model configuration provider.
-        tensors (List[torch.Tensor]): List of tensor shards from each TP rank.
-
-    Returns:
-        torch.Tensor: Full weight matrix.
-    """
-    if provider.tensor_model_parallel_size == 1:
-        return tensors[0]
-    return torch.cat(tensors, dim=1)
-
-
-def transpose_tp_row_parallel(provider: TransformerConfig, tensor: torch.Tensor) -> torch.Tensor:
-    """Transpose the weights for row-parallel layers.
-
-    Args:
-        provider (TransformerConfig): Model configuration provider.
-        tensor (torch.Tensor): The gathered tensor.
-
-    Returns:
-        torch.Tensor: The transposed tensor.
-    """
-    # Always transpose row-parallel weights when converting from Megatron to HF
-    # because they have different conventions
-    return torch.transpose(tensor, 0, 1).contiguous()
-
-
-def transpose_for_tp_row_parallel(provider: TransformerConfig, tensor: torch.Tensor) -> torch.Tensor:
-    """Transpose weights from HF to Megatron format for row-parallel layers.
-
-    This is used as a to_target transformation when loading HF weights.
-    HF stores these as (in_features, out_features) but Megatron expects
-    (out_features, in_features) for row-parallel layers.
-
-    Args:
-        provider (TransformerConfig): Model configuration provider.
-        tensor (torch.Tensor): The HF weight tensor.
-
-    Returns:
-        torch.Tensor: The transposed tensor ready for Megatron.
-    """
-    return torch.transpose(tensor, 0, 1).contiguous()
-
-
-def split_tp_qkv(provider: TransformerConfig, tensor: torch.Tensor) -> List[torch.Tensor]:
-    """Split QKV weights for distribution across tensor parallel ranks.
-
-    Args:
-        provider (TransformerConfig): Model configuration provider.
-        tensor (torch.Tensor): Full QKV weight matrix.
-
-    Returns:
-        List[torch.Tensor]: List of tensor shards, one per TP rank.
-    """
-    if provider.tensor_model_parallel_size == 1:
-        return [tensor]
-    return list(torch.chunk(tensor, provider.tensor_model_parallel_size, dim=0))
-
-
-def split_tp_gated_mlp(provider: TransformerConfig, tensor: torch.Tensor) -> List[torch.Tensor]:
-    """Split gated MLP weights for distribution across tensor parallel ranks.
-
-    Args:
-        provider (TransformerConfig): Model configuration provider.
-        tensor (torch.Tensor): Full gated MLP weight matrix.
-
-    Returns:
-        List[torch.Tensor]: List of tensor shards, one per TP rank.
-    """
-    tp_size = provider.tensor_model_parallel_size
-    if tp_size == 1:
-        return [tensor]
-
-    # First split into gate and up
-    gate, up = torch.chunk(tensor, 2, dim=0)
-
-    # Then split each across TP ranks
-    gate_shards = torch.chunk(gate, tp_size, dim=0)
-    up_shards = torch.chunk(up, tp_size, dim=0)
-
-    # Recombine for each rank
-    return [torch.cat([gate_shards[i], up_shards[i]], dim=0) for i in range(tp_size)]
-
-
-def split_tp_column_parallel(provider: TransformerConfig, tensor: torch.Tensor) -> List[torch.Tensor]:
-    """Split weights for column-parallel distribution across tensor parallel ranks.
-
-    Args:
-        provider (TransformerConfig): Model configuration provider.
-        tensor (torch.Tensor): Full weight matrix.
-
-    Returns:
-        List[torch.Tensor]: List of tensor shards, one per TP rank.
-    """
-    if provider.tensor_model_parallel_size == 1:
-        return [tensor]
-    return list(torch.chunk(tensor, provider.tensor_model_parallel_size, dim=0))
-
-
-def split_tp_row_parallel(provider: TransformerConfig, tensor: torch.Tensor) -> List[torch.Tensor]:
-    """Split weights for row-parallel distribution across tensor parallel ranks.
-
-    Args:
-        provider (TransformerConfig): Model configuration provider.
-        tensor (torch.Tensor): Full weight matrix.
-
-    Returns:
-        List[torch.Tensor]: List of tensor shards, one per TP rank.
-    """
-    if provider.tensor_model_parallel_size == 1:
-        return [tensor]
-    return list(torch.chunk(tensor, provider.tensor_model_parallel_size, dim=1))
-
-
-def split_tp_row_parallel_from_hf(provider: TransformerConfig, tensor: torch.Tensor) -> List[torch.Tensor]:
-    """Split HF weights for row-parallel distribution across tensor parallel ranks.
-
-    This function is used when loading from HuggingFace format. For row-parallel
-    layers, Megatron stores weights as (in_features, out_features_per_rank),
-    which is the same orientation as HF but split along the output dimension.
-
-    Args:
-        provider (TransformerConfig): Model configuration provider.
-        tensor (torch.Tensor): Full HF weight matrix (in_features, out_features).
-
-    Returns:
-        List[torch.Tensor]: List of tensor shards, one per TP rank.
-    """
-    if provider.tensor_model_parallel_size == 1:
-        # For single GPU, return as-is (no transpose needed)
-        return [tensor]
-
-    # For row parallel in Megatron:
-    # HF stores as (in_features, out_features)
-    # Megatron expects (in_features, out_features_per_rank)
-    # So we just split along dim 1, no transpose needed
-    return list(torch.chunk(tensor, provider.tensor_model_parallel_size, dim=1))

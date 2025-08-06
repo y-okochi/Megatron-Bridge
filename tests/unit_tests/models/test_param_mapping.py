@@ -18,7 +18,7 @@ import pytest
 import torch
 from megatron.core.transformer.transformer_config import TransformerConfig
 
-from megatron.bridge.models.param_mapping import (
+from megatron.bridge.models.conversion.param_mapping import (
     AutoMapping,
     ColumnParallelMapping,
     DirectMapping,
@@ -37,7 +37,7 @@ from megatron.bridge.models.param_mapping import (
 def mock_distributed_env():
     """Mocks the distributed environment for single-process testing."""
     with (
-        patch("megatron.bridge.models.param_mapping.mpu") as mock_mpu,
+        patch("megatron.bridge.models.conversion.param_mapping.mpu") as mock_mpu,
         patch("torch.distributed") as mock_dist,
         patch("torch.cuda.current_device", return_value=0),
     ):
@@ -223,14 +223,14 @@ class TestAutoMapping:
         class MyCustomRow(torch.nn.Module):
             pass
 
-        assert mapping._detect_parallelism_type(MyCol()) == "column"
-        assert mapping._detect_parallelism_type(MyRow()) == "row"
-        assert mapping._detect_parallelism_type(MyRep()) == "replicated"
-        assert mapping._detect_parallelism_type(torch.nn.LayerNorm(5)) == "replicated"
-        assert mapping._detect_parallelism_type(MyCustomRow()) == "row"
+        assert mapping._detect_parallelism_type(MyCol(), "some.weight") == "column"
+        assert mapping._detect_parallelism_type(MyRow(), "some.weight") == "row"
+        assert mapping._detect_parallelism_type(MyRep(), "some.weight") == "replicated"
+        assert mapping._detect_parallelism_type(torch.nn.LayerNorm(5), "some.weight") == "replicated"
+        assert mapping._detect_parallelism_type(MyCustomRow(), "some.weight") == "row"
 
         with pytest.raises(ValueError):
-            mapping._detect_parallelism_type(torch.nn.Linear(5, 5))
+            mapping._detect_parallelism_type(torch.nn.Linear(5, 5), "some.weight")
 
 
 class TestHelperFunctions:
@@ -457,7 +457,7 @@ class TestMappingEdgeCases:
         unknown_module = torch.nn.Linear(10, 10)
 
         with pytest.raises(ValueError, match="Cannot determine parallelism type"):
-            mapping._detect_parallelism_type(unknown_module)
+            mapping._detect_parallelism_type(unknown_module, "some.weight")
 
     def test_resolve_wildcard_patterns(self):
         """Test wildcard pattern resolution."""
