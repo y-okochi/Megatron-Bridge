@@ -24,6 +24,7 @@ from megatron.core import mpu
 from megatron.core.transformer.module import MegatronModule
 from megatron.core.transformer.transformer_config import TransformerConfig
 from megatron.core.utils import (
+    get_pg_rank,
     get_pg_size,
 )
 
@@ -88,7 +89,56 @@ class MegatronParamMapping(ABC, Generic[WeightType]):
         self.megatron_param = megatron_param
         self.hf_param = hf_param
         self._validate_patterns()
+
+        self.tp_group = mpu.get_tensor_model_parallel_group()
+        self.pp_group = mpu.get_pipeline_model_parallel_group()
         self.ep_group = mpu.get_expert_model_parallel_group()
+        self.etp_group = mpu.get_expert_tensor_parallel_group()
+
+    @property
+    def tp_rank(self) -> int:
+        """Get the tensor model parallel rank."""
+        return get_pg_rank(self.tp_group)
+
+    @property
+    def tp_size(self) -> int:
+        """Get the tensor model parallel size."""
+        return get_pg_size(self.tp_group)
+
+    @property
+    def pp_rank(self) -> int:
+        """Get the pipeline model parallel rank."""
+        return get_pg_rank(self.pp_group)
+
+    @property
+    def pp_size(self) -> int:
+        """Get the pipeline model parallel size."""
+        return get_pg_size(self.pp_group)
+
+    @property
+    def ep_rank(self) -> int:
+        """Get the expert model parallel rank."""
+        return get_pg_rank(self.ep_group)
+
+    @property
+    def ep_size(self) -> int:
+        """Get the expert model parallel size."""
+        return get_pg_size(self.ep_group)
+
+    @property
+    def etp_rank(self) -> int:
+        """Get the expert tensor parallel rank."""
+        return get_pg_rank(self.etp_group)
+
+    @property
+    def etp_size(self) -> int:
+        """Get the expert tensor parallel size."""
+        return get_pg_size(self.etp_group)
+
+    @property
+    def is_expert(self) -> bool:
+        """Check if this mapping is for an expert parameter."""
+        return ".mlp.experts.linear_fc" in self.megatron_param
 
     def _resolve_names(self, captures: Tuple[str, ...]) -> Tuple[str, Union[str, Dict[str, str]]]:
         resolved_megatron_param = self.megatron_param
@@ -422,40 +472,6 @@ class MegatronParamMapping(ABC, Generic[WeightType]):
             f"Ensure the module or its parent has a 'config' attribute."
         )
 
-    @property
-    def tp_size(self) -> int:
-        """Get tensor parallel world size from parallel_state."""
-        return mpu.get_tensor_model_parallel_world_size()
-
-    @property
-    def tp_rank(self) -> int:
-        """Get current tensor parallel rank from parallel_state."""
-        return mpu.get_tensor_model_parallel_rank()
-
-    @property
-    def tp_group(self) -> Optional[torch.distributed.ProcessGroup]:
-        """Get tensor parallel process group from parallel_state."""
-        if self.tp_size > 1:
-            return mpu.get_tensor_model_parallel_group()
-        return None
-
-    @property
-    def pp_size(self) -> int:
-        """Get pipeline parallel world size."""
-        return mpu.get_pipeline_model_parallel_world_size()
-
-    @property
-    def pp_rank(self) -> int:
-        """Get current pipeline parallel rank."""
-        return mpu.get_pipeline_model_parallel_rank()
-
-    @property
-    def pp_group(self) -> Optional[torch.distributed.ProcessGroup]:
-        """Get pipeline parallel process group."""
-        if self.pp_size > 1:
-            return mpu.get_pipeline_model_parallel_group()
-        return None
-
     def gather_from_ep_ranks(
         self,
         megatron_weights: Optional[torch.Tensor],
@@ -480,7 +496,7 @@ class MegatronParamMapping(ABC, Generic[WeightType]):
         assert megatron_weights is not None
 
         model_config = self._get_config(megatron_module)
-        ep_size = get_pg_size(self.ep_group)
+        ep_size = self.ep_size
         num_experts = model_config.num_moe_experts
         num_experts_per_rank = num_experts // ep_size
 
@@ -538,7 +554,7 @@ class DirectMapping(MegatronParamMapping[torch.Tensor]):
             return {}
 
         # Handle expert parallel weights
-        if ".mlp.experts.linear_fc" in megatron_param_name:
+        if self.is_expert:
             return self.gather_from_ep_ranks(megatron_weights, megatron_module, self.hf_param, megatron_param_name)
 
         return {str(self.hf_param): megatron_weights}
@@ -643,7 +659,7 @@ class ColumnParallelMapping(MegatronParamMapping[torch.Tensor]):
             full_weights = torch.cat(gathered, dim=0)
 
         # Handle expert parallel weights
-        if ".mlp.experts.linear_fc" in megatron_param_name:
+        if self.is_expert:
             return self.gather_from_ep_ranks(full_weights, megatron_module, self.hf_param, megatron_param_name)
 
         return {str(self.hf_param): full_weights}
@@ -736,7 +752,7 @@ class RowParallelMapping(MegatronParamMapping[torch.Tensor]):
             full_weights = torch.cat(gathered, dim=1)
 
         # Handle expert parallel weights
-        if ".mlp.experts.linear_fc" in megatron_param_name:
+        if self.is_expert:
             return self.gather_from_ep_ranks(full_weights, megatron_module, self.hf_param, megatron_param_name)
 
         return {str(self.hf_param): full_weights}
@@ -791,7 +807,7 @@ class ReplicatedMapping(MegatronParamMapping[torch.Tensor]):
             return {}
 
         # Handle expert parallel weights
-        if megatron_param_name and ".mlp.experts.linear_fc" in megatron_param_name:
+        if self.is_expert:
             return self.gather_from_ep_ranks(megatron_weights, megatron_module, self.hf_param, megatron_param_name)
 
         return {str(self.hf_param): megatron_weights}
@@ -1253,7 +1269,7 @@ class GatedMLPMapping(MegatronParamMapping[Dict[str, torch.Tensor]]):
             up = torch.cat(up_parts, dim=0)
 
         # Handle expert parallel weights
-        if ".mlp.experts.linear_fc" in megatron_param_name:
+        if self.is_expert:
             gathered_gate_weights_dict = self.gather_from_ep_ranks(
                 gate, megatron_module, self.hf_param["gate"], megatron_param_name
             )
