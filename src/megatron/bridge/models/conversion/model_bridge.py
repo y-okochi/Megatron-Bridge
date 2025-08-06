@@ -280,7 +280,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         """
         raise NotImplementedError("Subclass must implement mapping_registry method")
 
-    def _all_megatron_global_param_names(self, megatron_model: Union[MegatronModel, List[MegatronModel]]) -> List[str]:
+    def _megatron_global_param_names_all_pp_ranks(self, megatron_model: Union[MegatronModel, List[MegatronModel]]) -> List[str]:
         """Get all parameter names across all pipeline parallel ranks."""
         # Cache the result after first call
         if hasattr(self, "_cached_param_names"):
@@ -783,7 +783,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         mapping_registry = self.mapping_registry()
         model_config = unwrap_model(megatron_model)[0].config
         pp_rank = parallel_state.get_pipeline_model_parallel_rank()
-        global_names = self._all_megatron_global_param_names(megatron_model)
+        global_names = self._megatron_global_param_names_all_pp_ranks(megatron_model)
         global_names_index_dict = {name: idx for idx, name in enumerate(global_names)}
 
         tasks = [None] * len(global_names)
@@ -824,7 +824,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
                     mapping=mapping,
                 )
 
-        # Fill the remaining ones
+        # Fill the remaining ones for pp communications
         for idx, global_name in enumerate(global_names):
             mapping = mapping_registry.megatron_to_hf_lookup(global_name)
             if tasks[idx] is None:

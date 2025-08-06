@@ -27,7 +27,7 @@ from megatron.core.utils import (
     get_pg_size,
 )
 from megatron.bridge.models.conversion.utils import get_module_and_param_from_name
-
+from megatron.core.transformer.module import MegatronModule
 
 WeightType = TypeVar("WeightType", torch.Tensor, Dict[str, torch.Tensor])
 
@@ -458,7 +458,7 @@ class MegatronParamMapping(ABC, Generic[WeightType]):
     def _gather_from_ep_ranks(
         self,
         megatron_weights: Optional[torch.Tensor],
-        model_config: Optional[TransformerConfig],
+        megatron_module: Optional[MegatronModule],
         hf_param_name: Optional[str] = None,
         megatron_param_name: Optional[str] = None,
     ) -> Dict[str, torch.Tensor]:
@@ -470,17 +470,16 @@ class MegatronParamMapping(ABC, Generic[WeightType]):
         
         Args:
             megatron_weights (Optional[torch.Tensor]): The local expert weight tensor.
-            megatron_module (Optional[nn.Module]): The megatron module containing config.
+            megatron_module (Optional[MegatronModule]): The megatron module containing config.
             megatron_param_name (Optional[str]): The local megatron parameter name.
             
         Returns:
             Dict[str, torch.Tensor]: Dictionary of expert weights mapped to HF parameter names.
         """
-        if megatron_weights is None:
-            return {}
-    
+        assert megatron_weights is not None
+
+        model_config = self._get_config(megatron_module)
         ep_size = get_pg_size(self.ep_group)
-        ep_rank = get_pg_rank(self.ep_group)
         num_experts = model_config.num_moe_experts
         num_experts_per_rank = num_experts // ep_size
         
@@ -491,9 +490,6 @@ class MegatronParamMapping(ABC, Generic[WeightType]):
             local_expert_number = megatron_param_name.split(".weight")[-1]
         elif ".bias" in megatron_param_name:
             local_expert_number = megatron_param_name.split(".bias")[-1]
-        
-        if local_expert_number is None:
-            return {}
             
         # Compute global expert numbers for all EP ranks
         # use regex to replace the local expert number with the global expert number
@@ -506,7 +502,6 @@ class MegatronParamMapping(ABC, Generic[WeightType]):
         # Gather weights from all EP ranks
         gathered_weights = [torch.empty_like(megatron_weights) for _ in range(ep_size)]
         torch.distributed.all_gather(gathered_weights, megatron_weights, group=self.ep_group)
-        assert torch.allclose(gathered_weights[ep_rank], megatron_weights), f"ep_rank {ep_rank}'s gathered weights are not close to local weights"
 
         # Return dictionary mapping HF parameter names to weights
         return {
@@ -543,7 +538,7 @@ class DirectMapping(MegatronParamMapping[torch.Tensor]):
         # Handle expert parallel weights
         if ".mlp.experts.linear_fc" in megatron_param_name:
             return self._gather_from_ep_ranks(
-                megatron_weights, megatron_module.config, self.hf_param, megatron_param_name
+                megatron_weights, megatron_module, self.hf_param, megatron_param_name
             )
 
         return {str(self.hf_param): megatron_weights}
@@ -650,7 +645,7 @@ class ColumnParallelMapping(MegatronParamMapping[torch.Tensor]):
         # Handle expert parallel weights
         if ".mlp.experts.linear_fc" in megatron_param_name:
             return self._gather_from_ep_ranks(
-                full_weights, megatron_module.config, self.hf_param, megatron_param_name
+                full_weights, megatron_module, self.hf_param, megatron_param_name
             )
         
         return {str(self.hf_param): full_weights}
@@ -745,7 +740,7 @@ class RowParallelMapping(MegatronParamMapping[torch.Tensor]):
         # Handle expert parallel weights
         if ".mlp.experts.linear_fc" in megatron_param_name:
             return self._gather_from_ep_ranks(
-                full_weights, megatron_module.config, self.hf_param, megatron_param_name
+                full_weights, megatron_module, self.hf_param, megatron_param_name
             )
 
         return {str(self.hf_param): full_weights}
@@ -802,7 +797,7 @@ class ReplicatedMapping(MegatronParamMapping[torch.Tensor]):
         # Handle expert parallel weights
         if megatron_param_name and ".mlp.experts.linear_fc" in megatron_param_name:
             return self._gather_from_ep_ranks(
-                megatron_weights, megatron_module.config, self.hf_param, megatron_param_name
+                megatron_weights, megatron_module, self.hf_param, megatron_param_name
             )
 
         return {str(self.hf_param): megatron_weights}
@@ -1266,10 +1261,10 @@ class GatedMLPMapping(MegatronParamMapping[Dict[str, torch.Tensor]]):
         # Handle expert parallel weights
         if ".mlp.experts.linear_fc" in megatron_param_name:
             gathered_gate_weights_dict = self._gather_from_ep_ranks(
-                gate, megatron_module.config, self.hf_param["gate"], megatron_param_name
+                gate, megatron_module, self.hf_param["gate"], megatron_param_name
             )
             gathered_up_weights_dict = self._gather_from_ep_ranks(
-                up, megatron_module.config, self.hf_param["up"], megatron_param_name
+                up, megatron_module, self.hf_param["up"], megatron_param_name
             )
             return {**gathered_gate_weights_dict, **gathered_up_weights_dict}
 
@@ -1458,201 +1453,3 @@ def split_qkv_weights(
 
     return q, k, v
 
-
-def gather_tp_qkv(provider: TransformerConfig, tensors: List[torch.Tensor]) -> torch.Tensor:
-    """Gather QKV weights from all tensor parallel ranks.
-
-    Args:
-        provider (TransformerConfig): Model configuration provider.
-        tensors (List[torch.Tensor]): List of tensor shards from each TP rank.
-
-    Returns:
-        torch.Tensor: Full QKV weight matrix.
-    """
-    if provider.tensor_model_parallel_size == 1:
-        return tensors[0]
-    return torch.cat(tensors, dim=0)
-
-
-def gather_tp_gated_mlp(provider: TransformerConfig, tensors: List[torch.Tensor]) -> torch.Tensor:
-    """Gather gated MLP weights from all tensor parallel ranks.
-
-    Args:
-        provider (TransformerConfig): Model configuration provider.
-        tensors (List[torch.Tensor]): List of tensor shards from each TP rank.
-
-    Returns:
-        torch.Tensor: Full gated MLP weight matrix.
-    """
-    if provider.tensor_model_parallel_size == 1:
-        return tensors[0]
-
-    # Split each shard into gate and up parts
-    gate_parts = []
-    up_parts = []
-    for tensor in tensors:
-        gate, up = torch.chunk(tensor, 2, dim=0)
-        gate_parts.append(gate)
-        up_parts.append(up)
-
-    # Concatenate gates and ups separately, then merge
-    full_gate = torch.cat(gate_parts, dim=0)
-    full_up = torch.cat(up_parts, dim=0)
-    return torch.cat([full_gate, full_up], dim=0)
-
-
-def gather_tp_column_parallel(provider: TransformerConfig, tensors: List[torch.Tensor]) -> torch.Tensor:
-    """Gather column-parallel weights from all tensor parallel ranks.
-
-    Args:
-        provider (TransformerConfig): Model configuration provider.
-        tensors (List[torch.Tensor]): List of tensor shards from each TP rank.
-
-    Returns:
-        torch.Tensor: Full weight matrix.
-    """
-    if provider.tensor_model_parallel_size == 1:
-        return tensors[0]
-    return torch.cat(tensors, dim=0)
-
-
-def gather_tp_row_parallel(provider: TransformerConfig, tensors: List[torch.Tensor]) -> torch.Tensor:
-    """Gather row-parallel weights from all tensor parallel ranks.
-
-    Args:
-        provider (TransformerConfig): Model configuration provider.
-        tensors (List[torch.Tensor]): List of tensor shards from each TP rank.
-
-    Returns:
-        torch.Tensor: Full weight matrix.
-    """
-    if provider.tensor_model_parallel_size == 1:
-        return tensors[0]
-    return torch.cat(tensors, dim=1)
-
-
-def transpose_tp_row_parallel(provider: TransformerConfig, tensor: torch.Tensor) -> torch.Tensor:
-    """Transpose the weights for row-parallel layers.
-
-    Args:
-        provider (TransformerConfig): Model configuration provider.
-        tensor (torch.Tensor): The gathered tensor.
-
-    Returns:
-        torch.Tensor: The transposed tensor.
-    """
-    # Always transpose row-parallel weights when converting from Megatron to HF
-    # because they have different conventions
-    return torch.transpose(tensor, 0, 1).contiguous()
-
-
-def transpose_for_tp_row_parallel(provider: TransformerConfig, tensor: torch.Tensor) -> torch.Tensor:
-    """Transpose weights from HF to Megatron format for row-parallel layers.
-
-    This is used as a to_target transformation when loading HF weights.
-    HF stores these as (in_features, out_features) but Megatron expects
-    (out_features, in_features) for row-parallel layers.
-
-    Args:
-        provider (TransformerConfig): Model configuration provider.
-        tensor (torch.Tensor): The HF weight tensor.
-
-    Returns:
-        torch.Tensor: The transposed tensor ready for Megatron.
-    """
-    return torch.transpose(tensor, 0, 1).contiguous()
-
-
-def split_tp_qkv(provider: TransformerConfig, tensor: torch.Tensor) -> List[torch.Tensor]:
-    """Split QKV weights for distribution across tensor parallel ranks.
-
-    Args:
-        provider (TransformerConfig): Model configuration provider.
-        tensor (torch.Tensor): Full QKV weight matrix.
-
-    Returns:
-        List[torch.Tensor]: List of tensor shards, one per TP rank.
-    """
-    if provider.tensor_model_parallel_size == 1:
-        return [tensor]
-    return list(torch.chunk(tensor, provider.tensor_model_parallel_size, dim=0))
-
-
-def split_tp_gated_mlp(provider: TransformerConfig, tensor: torch.Tensor) -> List[torch.Tensor]:
-    """Split gated MLP weights for distribution across tensor parallel ranks.
-
-    Args:
-        provider (TransformerConfig): Model configuration provider.
-        tensor (torch.Tensor): Full gated MLP weight matrix.
-
-    Returns:
-        List[torch.Tensor]: List of tensor shards, one per TP rank.
-    """
-    tp_size = provider.tensor_model_parallel_size
-    if tp_size == 1:
-        return [tensor]
-
-    # First split into gate and up
-    gate, up = torch.chunk(tensor, 2, dim=0)
-
-    # Then split each across TP ranks
-    gate_shards = torch.chunk(gate, tp_size, dim=0)
-    up_shards = torch.chunk(up, tp_size, dim=0)
-
-    # Recombine for each rank
-    return [torch.cat([gate_shards[i], up_shards[i]], dim=0) for i in range(tp_size)]
-
-
-def split_tp_column_parallel(provider: TransformerConfig, tensor: torch.Tensor) -> List[torch.Tensor]:
-    """Split weights for column-parallel distribution across tensor parallel ranks.
-
-    Args:
-        provider (TransformerConfig): Model configuration provider.
-        tensor (torch.Tensor): Full weight matrix.
-
-    Returns:
-        List[torch.Tensor]: List of tensor shards, one per TP rank.
-    """
-    if provider.tensor_model_parallel_size == 1:
-        return [tensor]
-    return list(torch.chunk(tensor, provider.tensor_model_parallel_size, dim=0))
-
-
-def split_tp_row_parallel(provider: TransformerConfig, tensor: torch.Tensor) -> List[torch.Tensor]:
-    """Split weights for row-parallel distribution across tensor parallel ranks.
-
-    Args:
-        provider (TransformerConfig): Model configuration provider.
-        tensor (torch.Tensor): Full weight matrix.
-
-    Returns:
-        List[torch.Tensor]: List of tensor shards, one per TP rank.
-    """
-    if provider.tensor_model_parallel_size == 1:
-        return [tensor]
-    return list(torch.chunk(tensor, provider.tensor_model_parallel_size, dim=1))
-
-
-def split_tp_row_parallel_from_hf(provider: TransformerConfig, tensor: torch.Tensor) -> List[torch.Tensor]:
-    """Split HF weights for row-parallel distribution across tensor parallel ranks.
-
-    This function is used when loading from HuggingFace format. For row-parallel
-    layers, Megatron stores weights as (in_features, out_features_per_rank),
-    which is the same orientation as HF but split along the output dimension.
-
-    Args:
-        provider (TransformerConfig): Model configuration provider.
-        tensor (torch.Tensor): Full HF weight matrix (in_features, out_features).
-
-    Returns:
-        List[torch.Tensor]: List of tensor shards, one per TP rank.
-    """
-    if provider.tensor_model_parallel_size == 1:
-        # For single GPU, return as-is (no transpose needed)
-        return [tensor]
-
-    # For row parallel in Megatron:
-    # HF stores as (in_features, out_features)
-    # Megatron expects (in_features, out_features_per_rank)
-    # So we just split along dim 1, no transpose needed
-    return list(torch.chunk(tensor, provider.tensor_model_parallel_size, dim=1))
