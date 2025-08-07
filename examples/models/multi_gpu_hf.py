@@ -111,6 +111,8 @@ def main(
     if is_rank_0:
         console.print(f"[yellow]Tensor parallel size: {model_provider.tensor_model_parallel_size}[/yellow]")
         console.print(f"[yellow]Pipeline parallel size: {model_provider.pipeline_model_parallel_size}[/yellow]")
+        console.print(f"[yellow]Expert parallel size: {model_provider.expert_model_parallel_size}[/yellow]")
+        console.print(f"[yellow]Expert tensor parallel size: {model_provider.expert_tensor_parallel_size}[/yellow]")
 
     for name, param in bridge.export_hf_weights(megatron_model, show_progress=False):
         if is_rank_0:

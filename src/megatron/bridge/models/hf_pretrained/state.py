@@ -28,7 +28,6 @@ from typing import (
     Pattern,
     Tuple,
     Union,
-    overload,
 )
 
 import torch
@@ -67,7 +66,7 @@ class StateDict(Mapping[str, torch.Tensor]):
         torch.Size([10, 10])
         >>>
         >>> # 2. Access multiple tensors with a list of strings
-        >>> list(state[["model.layer.0.weight", "model.layer.1.weight"]].keys())
+        >>> list(state.get_tensors(["model.layer.0.weight", "model.layer.1.weight"]).keys())
         ['model.layer.0.weight', 'model.layer.1.weight']
         >>>
         >>> # 3. Access with a glob pattern
@@ -76,11 +75,11 @@ class StateDict(Mapping[str, torch.Tensor]):
         >>>
         >>> # 4. Access with a compiled regex pattern
         >>> regex = re.compile(r"model\\\\.layer\\\\.0\\\\..*")
-        >>> sorted(list(state[regex].keys()))
+        >>> sorted(list(state.regex(regex).keys()))
         ['model.layer.0.bias', 'model.layer.0.weight']
 
     The same querying flexibility applies to checkpoints on disk. The following
-    is a conceptual example of using `StateDict` with a `SafetensorsStateSource`
+    is a conceptual example of using `StateDict` with a `SafeTensorsStateSource`
     to query a sharded checkpoint without loading all of it into memory.
 
     .. code-block:: python
@@ -98,7 +97,7 @@ class StateDict(Mapping[str, torch.Tensor]):
 
     source: "StateSource"
 
-    def __init__(self, source: Dict[str, torch.Tensor] | "StateSource"):
+    def __init__(self, source: Union[Dict[str, torch.Tensor], "StateSource"]):
         """
         Initializes the StateDict query accessor.
 
@@ -143,133 +142,54 @@ class StateDict(Mapping[str, torch.Tensor]):
             # Exact match
             return [pattern] if pattern in all_keys else []
 
-    @overload
-    def __getitem__(self, key: str) -> Union[torch.Tensor, Dict[str, torch.Tensor]]: ...
-
-    @overload
-    def __getitem__(self, key: List[str]) -> Dict[str, torch.Tensor]: ...
-
-    @overload
-    def __getitem__(self, key: Pattern) -> Dict[str, torch.Tensor]: ...
-
-    def __getitem__(self, key: Union[str, List[str], Pattern]) -> Union[torch.Tensor, Dict[str, torch.Tensor]]:
+    def __getitem__(self, key: str) -> torch.Tensor:
         """
-        Accesses state dict entries using various key types.
-
-        This method allows for retrieving tensors using:
-        - A single string for an exact key match.
-        - A list of strings for multiple exact key matches.
-        - A string with glob-style wildcards (`*`, `?`, `[]`).
-        - A compiled regular expression object.
+        Access a single tensor by exact key match.
 
         Args:
-            key: A single key string, a list of keys, a glob pattern string, or a
-                compiled regular expression.
+            key: The exact tensor name to retrieve.
 
         Returns:
-            - A single `torch.Tensor` if `key` is a string that matches exactly one key
-              and does not contain wildcards.
-            - A `Dict[str, torch.Tensor]` for all other cases (list of keys, glob
-              pattern, or regex), mapping the matched keys to their corresponding
-              tensors.
+            The tensor corresponding to the key.
 
         Raises:
-            KeyError: If the key (or any key in a list) is not found, or if a
-                pattern matches no keys.
-
-        Examples:
-            >>> d = {
-            ...     "model.embed_tokens.weight": torch.randn(10, 1),
-            ...     "model.layers.0.mlp.weight": torch.randn(10, 1),
-            ...     "model.layers.0.self_attn.q_proj.weight": torch.randn(10, 1),
-            ...     "lm_head.weight": torch.randn(10, 1),
-            ... }
-            >>> state = StateDict(d)
-            >>>
-            >>> # Exact match (returns a single tensor)
-            >>> tensor = state["model.embed_tokens.weight"]
-            >>> isinstance(tensor, torch.Tensor)
-            True
-            >>>
-            >>> # List of keys (returns a dict of tensors)
-            >>> tensors = state[["model.embed_tokens.weight", "lm_head.weight"]]
-            >>> sorted(tensors.keys())
-            ['lm_head.weight', 'model.embed_tokens.weight']
-            >>>
-            >>> # Glob pattern (returns a dict of tensors)
-            >>> layer_0_weights = state["model.layers.0.*.weight"]
-            >>> sorted(layer_0_weights.keys())
-            ['model.layers.0.mlp.weight', 'model.layers.0.self_attn.q_proj.weight']
-            >>>
-            >>> # Regex pattern (returns a dict of tensors)
-            >>> import re
-            >>> attn_weights = state[re.compile(r".*self_attn.*")]
-            >>> list(attn_weights.keys())
-            ['model.layers.0.self_attn.q_proj.weight']
+            KeyError: If the key is not found.
         """
-        if isinstance(key, Pattern):
-            matched_keys = self._match_keys(key)
-            if not matched_keys:
-                raise KeyError(f"No keys match regex pattern: {key.pattern}")
-            return self._load_tensors(matched_keys)
-        elif isinstance(key, str):
-            if "*" in key or "?" in key or "[" in key:
-                matched_keys = self._match_keys(key)
-                if not matched_keys:
-                    raise KeyError(f"No keys match pattern: {key}")
-                return self._load_tensors(matched_keys)
-            else:
-                if key not in self._get_all_keys():
-                    raise KeyError(f"Key not found: {key}")
-                return self._load_tensors([key])[key]
-        elif isinstance(key, list):
-            all_keys_set = set(self._get_all_keys())
-            missing_keys = [k for k in key if k not in all_keys_set]
-            if missing_keys:
-                raise KeyError(f"Keys not found: {missing_keys}")
-            return self._load_tensors(key)
-        else:
-            raise TypeError(f"Key must be str, list of str, or compiled regex, got {type(key)}")
+        if key not in self._get_all_keys():
+            raise KeyError(f"Key not found: {key}")
+        return self._load_tensors([key])[key]
 
-    def regex(self, pattern: str) -> Dict[str, torch.Tensor]:
+    def get_tensors(self, keys: List[str]) -> Dict[str, torch.Tensor]:
         """
-        Queries the state dict with a regular expression pattern.
-
-        This is a convenience method that compiles the pattern string and uses it
-        to retrieve all matching tensors.
+        Get multiple tensors by exact key matches.
 
         Args:
-            pattern: The regular expression string to match against tensor keys.
+            keys: List of tensor names to retrieve.
 
         Returns:
-            A dictionary mapping matching tensor names to their `torch.Tensor` objects.
+            Dictionary mapping tensor names to tensors.
 
-        Examples:
-            >>> d = {
-            ...     "model.layers.0.self_attn.weight": torch.randn(1, 1),
-            ...     "model.layers.1.self_attn.weight": torch.randn(1, 1),
-            ...     "model.layers.1.mlp.weight": torch.randn(1, 1)
-            ... }
-            >>> state = StateDict(d)
-            >>> # Get all attention-related weights
-            >>> attention_weights = state.regex(r"model\\.layers\\.\\d+\\.self_attn.*")
-            >>> sorted(attention_weights.keys())
-            ['model.layers.0.self_attn.weight', 'model.layers.1.self_attn.weight']
+        Raises:
+            KeyError: If any key is not found.
         """
-        return self[re.compile(pattern)]
+        all_keys_set = set(self._get_all_keys())
+        missing_keys = [k for k in keys if k not in all_keys_set]
+        if missing_keys:
+            raise KeyError(f"Keys not found: {missing_keys}")
+        return self._load_tensors(keys)
 
     def glob(self, pattern: str) -> Dict[str, torch.Tensor]:
         """
-        Queries the state dict with a glob pattern.
-
-        This is a convenience method for pattern matching using Unix shell-style
-        wildcards.
+        Query the state dict with a glob pattern.
 
         Args:
             pattern: The glob pattern string to match against tensor keys.
 
         Returns:
-            A dictionary mapping matching tensor names to their `torch.Tensor` objects.
+            A dictionary mapping matching tensor names to their tensors.
+
+        Raises:
+            KeyError: If no keys match the pattern.
 
         Examples:
             >>> d = {
@@ -283,11 +203,47 @@ class StateDict(Mapping[str, torch.Tensor]):
             >>> sorted(layer_0_mlp.keys())
             ['model.layers.0.mlp.bias', 'model.layers.0.mlp.weight']
         """
-        return self[pattern]
+        matched_keys = self._match_keys(pattern)
+        if not matched_keys:
+            raise KeyError(f"No keys match pattern: {pattern}")
+        return self._load_tensors(matched_keys)
+
+    def regex(self, pattern: Union[str, Pattern]) -> Dict[str, torch.Tensor]:
+        """
+        Query the state dict with a regular expression pattern.
+
+        Args:
+            pattern: The regular expression string or compiled pattern to match against tensor keys.
+
+        Returns:
+            A dictionary mapping matching tensor names to their tensors.
+
+        Raises:
+            KeyError: If no keys match the pattern.
+
+        Examples:
+            >>> d = {
+            ...     "model.layers.0.self_attn.weight": torch.randn(1, 1),
+            ...     "model.layers.1.self_attn.weight": torch.randn(1, 1),
+            ...     "model.layers.1.mlp.weight": torch.randn(1, 1)
+            ... }
+            >>> state = StateDict(d)
+            >>> # Get all attention-related weights
+            >>> attention_weights = state.regex(r"model\\.layers\\.\\d+\\.self_attn.*")
+            >>> sorted(attention_weights.keys())
+            ['model.layers.0.self_attn.weight', 'model.layers.1.self_attn.weight']
+        """
+        if isinstance(pattern, str):
+            pattern = re.compile(pattern)
+        
+        matched_keys = self._match_keys(pattern)
+        if not matched_keys:
+            raise KeyError(f"No keys match regex pattern: {pattern.pattern}")
+        return self._load_tensors(matched_keys)
 
     def __call__(self) -> Dict[str, torch.Tensor]:
         """
-        Loads and returns the entire state dict as a dictionary.
+        Load and return the entire state dict as a dictionary.
 
         Note:
             This method loads all tensors from the source into memory. For large
@@ -324,7 +280,7 @@ class StateDict(Mapping[str, torch.Tensor]):
 
     def get(self, key: str, default=None) -> Optional[torch.Tensor]:
         """
-        Gets a tensor from the state dict.
+        Get a tensor from the state dict.
         Returns `default` if the key is not found.
         Note: This method is for single key lookup and does not support patterns.
         """
@@ -342,7 +298,7 @@ class StateDict(Mapping[str, torch.Tensor]):
 
     def has_glob(self, pattern: str) -> bool:
         """
-        Efficiently checks if any tensor key matches the given glob pattern.
+        Efficiently check if any tensor key matches the given glob pattern.
         This is forwarded to the underlying StateSource which may have an
         optimized implementation that avoids iterating over all keys.
 
@@ -354,11 +310,12 @@ class StateDict(Mapping[str, torch.Tensor]):
         """
         return self.source.has_glob(pattern)
 
-    def save_tensor_generator(
+    # Save methods - only available for SafeTensorsStateSource
+    def save_tensors(
         self, 
-        generator: Iterable[Tuple[str, torch.Tensor]], 
-        output_path: Union[str, Path], 
-        strict: bool = True
+        tensor_generator: Iterable[Tuple[str, torch.Tensor]], 
+        output_path: Union[str, Path],
+        strict: bool = False
     ) -> None:
         """
         Save tensors from a generator to safetensors files.
@@ -366,31 +323,19 @@ class StateDict(Mapping[str, torch.Tensor]):
         This method is only available when using SafeTensorsStateSource.
         
         Args:
-            generator: An iterable of (tensor_name, tensor) tuples.
+            tensor_generator: An iterable of (tensor_name, tensor) tuples.
             output_path: The directory where the safetensor files will be saved.
             strict: If True, raises errors for missing tensors. If False, skips them with warnings.
             
         Raises:
             AttributeError: If the underlying source doesn't support this operation.
         """
-        if hasattr(self.source, 'save_tensor_generator'):
-            return self.source.save_tensor_generator(generator, output_path, strict)
+        if hasattr(self.source, 'save_tensors'):
+            return self.source.save_tensors(tensor_generator, output_path, strict)
         else:
-            raise AttributeError("The underlying StateSource does not support save_tensor_generator")
+            raise AttributeError("The underlying StateSource does not support save_tensors")
 
-    def save_tensors(self, tensor_generator: Iterable[Tuple[str, torch.Tensor]], output_path: Union[str, Path]) -> None:
-        """
-        Save tensors (convenience method).
-        
-        This is equivalent to calling save_tensor_generator(..., strict=False).
-        
-        Args:
-            tensor_generator: An iterable of (tensor_name, tensor) tuples.
-            output_path: The directory where the safetensor files will be saved.
-        """
-        return self.save_tensor_generator(tensor_generator, output_path, strict=False)
-
-    def save_tensor_generator_memory_efficient(self, tensor_generator: Iterable[Tuple[str, torch.Tensor]], output_path: Union[str, Path]) -> None:
+    def save_tensors_memory_efficient(self, tensor_generator: Iterable[Tuple[str, torch.Tensor]], output_path: Union[str, Path]) -> None:
         """
         Save tensors using a memory-efficient approach with temporary files.
         
@@ -403,10 +348,10 @@ class StateDict(Mapping[str, torch.Tensor]):
         Raises:
             AttributeError: If the underlying source doesn't support this operation.
         """
-        if hasattr(self.source, 'save_tensor_generator_memory_efficient'):
-            return self.source.save_tensor_generator_memory_efficient(tensor_generator, output_path)
+        if hasattr(self.source, 'save_tensors_memory_efficient'):
+            return self.source.save_tensors_memory_efficient(tensor_generator, output_path)
         else:
-            raise AttributeError("The underlying StateSource does not support save_tensor_generator_memory_efficient")
+            raise AttributeError("The underlying StateSource does not support save_tensors_memory_efficient")
 
     def save_index(self, output_path: Union[str, Path]) -> None:
         """
@@ -469,8 +414,6 @@ class StateSource(ABC, Mapping[str, torch.Tensor]):
         load all keys. Subclasses should override this method if a more
         performant implementation is available.
         """
-        import fnmatch
-
         for key in self.get_all_keys():
             if fnmatch.fnmatch(key, pattern):
                 return True
@@ -722,7 +665,6 @@ class SafeTensorsStateSource(StateSource):
         Returns:
             True if a matching key is found, False otherwise.
         """
-        import fnmatch
         from glob import glob as file_glob
 
         from safetensors import safe_open
@@ -751,14 +693,14 @@ class SafeTensorsStateSource(StateSource):
 
         return False
 
-    def save_tensor_generator(
+    def save_tensors(
         self, 
         generator: Iterable[Tuple[str, torch.Tensor]], 
         output_path: Union[str, Path], 
         strict: bool = True
     ):
         """
-        Saves tensors from a generator to `.safetensors` files, preserving the
+        Save tensors from a generator to `.safetensors` files, preserving the
         original sharding structure in a memory-efficient, streaming fashion.
 
         This method reads the sharding information (which tensor belongs to which
@@ -899,7 +841,7 @@ class SafeTensorsStateSource(StateSource):
                 with open(output_index_file, "w") as f:
                     json.dump(new_index_data, f, indent=4)
 
-    def save_tensor_generator_memory_efficient(
+    def save_tensors_memory_efficient(
         self,
         tensor_generator: Iterable[Tuple[str, torch.Tensor]],
         output_path: Union[str, Path],
