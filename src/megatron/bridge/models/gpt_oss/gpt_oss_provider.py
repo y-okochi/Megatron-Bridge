@@ -17,17 +17,11 @@ from dataclasses import dataclass
 from typing import Callable, List, Literal, Optional, Tuple, Union
 
 import torch
-import torch.nn.functional as F
 
 from megatron.bridge.models.gpt_provider import GPTModelProvider
-
+from megatron.core.fusions.fused_bias_geglu import quick_gelu
 
 logger = logging.getLogger(__name__)
-
-
-def quick_gelu(x):
-    """Quick GELU activation function."""
-    return x * torch.sigmoid(1.702 * x)
 
 
 @dataclass
@@ -71,7 +65,7 @@ class GPTOSSProvider(GPTModelProvider):
     bias_activation_fusion: bool = True
     window_attn_skip_freq: Optional[Union[int, List[int]]] = 2  # alternative SWA/full
     attention_backend: str = "local"  # supports "local" and "fused"
-
+    bias_dropout_fusion: bool = False
 
 @dataclass
 class GPTOSSProvider120B(GPTOSSProvider):

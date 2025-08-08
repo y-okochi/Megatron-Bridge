@@ -20,6 +20,7 @@ from typing import Tuple, Union, Dict, Optional
 import torch
 import torch.nn as nn
 from megatron.core.models.gpt.gpt_model import GPTModel
+from megatron.core.fusions.fused_bias_geglu import quick_gelu
 from transformers import GenerationConfig, GptOssForCausalLM
 
 from megatron.bridge.models.conversion.mapping_registry import MegatronMappingRegistry
@@ -30,7 +31,8 @@ from megatron.bridge.models.conversion.param_mapping import (
     QKVMapping,
     GatedMLPMapping,
 )
-from megatron.bridge.models.gpt_oss.gpt_oss_provider import GPTOSSProvider, quick_gelu
+from megatron.bridge.models.conversion.utils import extract_expert_number_from_param
+from megatron.bridge.models.gpt_oss.gpt_oss_provider import GPTOSSProvider
 from megatron.bridge.models.hf_pretrained.causal_lm import PreTrainedCausalLM
 
 
@@ -185,6 +187,8 @@ class GPTOSSMLPDownProjMapping(AutoMapping):
         super().__init__(megatron_param, hf_param)
 
     def hf_to_megatron(self, hf_weights: torch.Tensor, megatron_module: nn.Module) -> torch.Tensor:
+        global_expert_number = extract_expert_number_from_param(self.megatron_param)
+        hf_weights = hf_weights[global_expert_number]
         return super().hf_to_megatron(hf_weights, megatron_module)
     
     def megatron_to_hf(self, megatron_weights: torch.Tensor, megatron_module: nn.Module) -> torch.Tensor:
@@ -200,10 +204,17 @@ class GPTOSSMLPGateUpProjMapping(MegatronParamMapping):
     """
     def __init__(self, megatron_param: str, hf_param: str):
         super().__init__(megatron_param, hf_param)
+        self._mapping = GatedMLPMapping(
+            # the hf name here is not important, just serve as placeholder
+            megatron_param, gate=f"hf.{megatron_param}.gate", up=f"hf.{megatron_param}.up"
+        )
 
     def hf_to_megatron(self, hf_weights: torch.Tensor, megatron_module: nn.Module) -> torch.Tensor:
-        breakpoint()
-        return super().hf_to_megatron(hf_weights, megatron_module)
+        global_expert_number = extract_expert_number_from_param(self.megatron_param)
+        hf_weights = hf_weights[global_expert_number].chunk(2, dim=-1)
+        return self._mapping.hf_to_megatron(
+            {"gate": hf_weights[0], "up": hf_weights[1]}, megatron_module
+        )
     
     def megatron_to_hf(self, megatron_weights: torch.Tensor, megatron_module: nn.Module) -> torch.Tensor:
         return super().megatron_to_hf(megatron_weights, megatron_module)
