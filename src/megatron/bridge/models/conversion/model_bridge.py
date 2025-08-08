@@ -753,7 +753,9 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
 
         # Filter out output_layer related parameters if embeddings are tied
         if embeddings_are_tied:
-            sorted_global_param_names_all_pp_ranks = [name for name in sorted_global_param_names_all_pp_ranks if "output_layer" not in name]
+            sorted_global_param_names_all_pp_ranks = [
+                name for name in sorted_global_param_names_all_pp_ranks if "output_layer" not in name
+            ]
 
         global_names_index_dict = {name: idx for idx, name in enumerate(sorted_global_param_names_all_pp_ranks)}
 

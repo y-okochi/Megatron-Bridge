@@ -146,13 +146,13 @@ class TestReplicatedMapping:
             result = mapping.hf_to_megatron(hf_weight, megatron_module)
             # Verify the method was called once
             mock_broadcast_method.assert_called_once()
-            
+
             # Check the arguments more robustly
             args, kwargs = mock_broadcast_method.call_args
             called_tensor = args[0]
-            assert 'src_rank' in kwargs
-            assert kwargs['src_rank'] == 0
-            
+            assert "src_rank" in kwargs
+            assert kwargs["src_rank"] == 0
+
             # Verify the tensor shapes match and values are the same (accounting for device movement)
             assert called_tensor.shape == hf_weight.shape
             assert torch.equal(called_tensor.cpu(), hf_weight.cpu())
