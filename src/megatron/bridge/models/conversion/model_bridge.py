@@ -44,8 +44,7 @@ from megatron.bridge.models.conversion.param_mapping import MegatronParamMapping
 from megatron.bridge.models.conversion.utils import extract_sort_key, get_module_and_param_from_name
 from megatron.bridge.models.decorators.dispatch import dispatch
 from megatron.bridge.models.model_provider import ModelProviderMixin
-from megatron.bridge.utils.common_utils import unwrap_model
-
+from megatron.bridge.utils.common_utils import unwrap_model, print_rank_0
 
 logger = logging.getLogger(__name__)
 
@@ -541,18 +540,8 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
             megatron_model = [megatron_model]
 
         megatron_to_hf_tasks = self._build_conversion_tasks(hf_pretrained, megatron_model)
-
-        # Check if embeddings are tied
-        embeddings_are_tied = False
-        # Output layer not exists in named params only if pp_group.size()=1
-        if parallel_state.get_pipeline_model_parallel_world_size() == 1:
-            model_config = unwrap_model(megatron_model)[0].config
-            megatron_embeddings_tied = model_config.share_embeddings_and_output_weights
-            if hasattr(hf_pretrained, "config") and hasattr(hf_pretrained.config, "tie_word_embeddings"):
-                hf_embeddings_tied = hf_pretrained.config.tie_word_embeddings
-                assert megatron_embeddings_tied == hf_embeddings_tied, "Megatron and HF embeddings must be tied"
-            embeddings_are_tied = megatron_embeddings_tied
-
+        model_config = unwrap_model(megatron_model)[0].config
+        embeddings_are_tied = model_config.share_embeddings_and_output_weights
         for task in self._with_progress_tracking(megatron_to_hf_tasks, "Converting to HuggingFace", show_progress):
             converted_weights_dict = task.mapping.megatron_to_hf(task.param_weight, task.megatron_module)
 
@@ -755,8 +744,14 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
 
         mapping_registry = self.mapping_registry()
         model_config = unwrap_model(megatron_model)[0].config
+        embeddings_are_tied = model_config.share_embeddings_and_output_weights
         pp_rank = parallel_state.get_pipeline_model_parallel_rank()
         global_names = self._megatron_global_param_names_all_pp_ranks(megatron_model)
+
+        # Filter out output_layer related parameters if embeddings are tied
+        if embeddings_are_tied:
+            global_names = [name for name in global_names if "output_layer" not in name]
+
         global_names_index_dict = {name: idx for idx, name in enumerate(global_names)}
 
         tasks = [None] * len(global_names)
@@ -767,7 +762,9 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
 
                 local_name = self._unwrap_name(local_name)
                 global_name = _megatron_local_name_to_global(megatron_model, model_config, local_name, vp_stage)
-                assert global_name in global_names_index_dict, f"unrecognized global name '{global_name}'"
+                # if name removed due to some reason, continue. e.g. embeddings_are_tied
+                if global_name not in global_names_index_dict:
+                    continue
                 global_name_idx = global_names_index_dict[global_name]
                 mapping = mapping_registry.megatron_to_hf_lookup(global_name)
 
