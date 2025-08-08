@@ -526,12 +526,10 @@ class MegatronParamMapping(ABC, Generic[WeightType]):
         # Extract local expert number from parameter name
         # Handle both .weight and .bias suffixes
         local_expert_number = None
-        if ".weight" in self.megatron_param:
-            global_expert_number = int(self.megatron_param.split(".weight")[-1])
-            local_expert_number = global_expert_number % num_experts_per_rank
-        elif ".bias" in self.megatron_param:
-            global_expert_number = int(self.megatron_param.split(".bias")[-1])
-            local_expert_number = global_expert_number % num_experts_per_rank
+        for key in (".weight", ".bias"):
+            if key in self.megatron_param:
+                global_expert_number = int(self.megatron_param.split(key)[-1])
+                local_expert_number = global_expert_number % num_experts_per_rank
 
         # Compute global expert numbers for all EP ranks
         # use regex to replace the local expert number with the global expert number
