@@ -505,6 +505,8 @@ class MegatronParamMapping(ABC, Generic[WeightType]):
         This method handles the gathering of expert weights across expert parallel
         ranks. It should only be called when the parameter is confirmed to be an
         expert weight.
+        e.g. ep 2, 8 experts, [0, 1, 2, 3] [4, 5, 6, 7]
+        will pop up {0: weight0, 4: weight4}, number of EP items in the dict.
 
         Args:
             megatron_weights (Optional[torch.Tensor]): The local expert weight tensor.

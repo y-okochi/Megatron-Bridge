@@ -749,15 +749,15 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         model_config = unwrap_model(megatron_model)[0].config
         embeddings_are_tied = model_config.share_embeddings_and_output_weights
         pp_rank = parallel_state.get_pipeline_model_parallel_rank()
-        global_names = self._megatron_global_param_names_all_pp_ranks(megatron_model)
+        sorted_global_param_names_all_pp_ranks = self._megatron_global_param_names_all_pp_ranks(megatron_model)
 
         # Filter out output_layer related parameters if embeddings are tied
         if embeddings_are_tied:
-            global_names = [name for name in global_names if "output_layer" not in name]
+            sorted_global_param_names_all_pp_ranks = [name for name in sorted_global_param_names_all_pp_ranks if "output_layer" not in name]
 
-        global_names_index_dict = {name: idx for idx, name in enumerate(global_names)}
+        global_names_index_dict = {name: idx for idx, name in enumerate(sorted_global_param_names_all_pp_ranks)}
 
-        tasks = [None] * len(global_names)
+        tasks = [None] * len(sorted_global_param_names_all_pp_ranks)
         for vp_stage, model in enumerate(megatron_model):
             for local_name, _ in model.named_parameters():
                 if "_extra_state" in local_name:
@@ -798,7 +798,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
                 )
 
         # Fill the remaining ones for pp communications
-        for idx, global_name in enumerate(global_names):
+        for idx, global_name in enumerate(sorted_global_param_names_all_pp_ranks):
             mapping = mapping_registry.megatron_to_hf_lookup(global_name)
             if tasks[idx] is None:
                 # This is an exception here we pass in global name
