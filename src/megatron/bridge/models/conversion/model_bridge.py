@@ -321,6 +321,8 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         # e.g. decoder.layers.0.mlp.experts.linear_fc1.weight100
         flattened_names = list(set(sum(gathered_global_param_names, [])))
 
+        # the order cannot be changed, this sync for all ranks for conversion
+        # change this might cause a hang
         gathered_global_param_names = sorted(flattened_names, key=extract_sort_key)
 
         # Cache the result

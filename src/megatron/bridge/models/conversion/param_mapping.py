@@ -90,10 +90,16 @@ class MegatronParamMapping(ABC, Generic[WeightType]):
         self.hf_param = hf_param
         self._validate_patterns()
 
-        self.pp_group = mpu.get_pipeline_model_parallel_group()
-        self.ep_group = mpu.get_expert_model_parallel_group()
-        self._tp_group = mpu.get_tensor_model_parallel_group()
-        self._etp_group = mpu.get_expert_tensor_parallel_group()
+        if mpu.is_initialized():
+            self.pp_group = mpu.get_pipeline_model_parallel_group()
+            self.ep_group = mpu.get_expert_model_parallel_group()
+            self._tp_group = mpu.get_tensor_model_parallel_group()
+            self._etp_group = mpu.get_expert_tensor_parallel_group()
+        else:
+            self.pp_group = None
+            self.ep_group = None
+            self._tp_group = None
+            self._etp_group = None
 
     @property
     def tp_group(self):
