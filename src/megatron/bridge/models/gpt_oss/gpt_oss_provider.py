@@ -31,7 +31,7 @@ def quick_gelu(x):
 
 
 @dataclass
-class GPTOSSConfig(GPTModelProvider):
+class GPTOSSProvider(GPTModelProvider):
     """
     Base config for GPT-OSS
     """
@@ -74,14 +74,14 @@ class GPTOSSConfig(GPTModelProvider):
 
 
 @dataclass
-class GPTOSSConfig120B(GPTOSSConfig):
+class GPTOSSProvider120B(GPTOSSProvider):
     """Config for GPT-OSS 120B """
     num_layers: int = 36
     num_moe_experts: int = 128
 
 
 @dataclass
-class GPTOSSConfig20B(GPTOSSConfig):
+class GPTOSSProvider20B(GPTOSSProvider):
     """Config for GPT-OSS 20B """
     num_layers: int = 24
     num_moe_experts: int = 32

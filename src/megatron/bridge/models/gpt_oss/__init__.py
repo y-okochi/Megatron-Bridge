@@ -12,15 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from megatron.bridge.models.gpt_oss.gpt_oss_bridge import GPTOSSBridge
 from megatron.bridge.models.gpt_oss.gpt_oss_provider import (
-    GPTOSSConfig,
-    GPTOSSConfig120B,
-    GPTOSSConfig20B,
+    GPTOSSProvider,
+    GPTOSSProvider120B,
+    GPTOSSProvider20B,
 )
 
 
 __all__ = [
-    "GPTOSSConfig",
-    "GPTOSSConfig120B",
-    "GPTOSSConfig20B",
+    "GPTOSSBridge",
+    "GPTOSSProvider",
+    "GPTOSSProvider120B",
+    "GPTOSSProvider20B",
 ]
