@@ -448,6 +448,19 @@ class MegatronParamMapping(ABC, Generic[WeightType]):
                         f"{megatron_param_wildcards} wildcards, hf_param['{key}']='{pattern}' has {hf_param_wildcards}"
                     )
 
+    def _normalize_expert_param_name(self, param_name: str) -> str:
+        """Normalize expert parameter name by replacing trailing numbers with 0.
+        e.g. experts.weight15 -> experts.weight0, experts.bias15 -> experts.bias0
+        
+        Args:
+            param_name (str): Parameter name that may end with a number.
+            
+        Returns:
+            str: Parameter name with trailing number replaced by 0.
+        """
+        # Use regex to replace any trailing number with 0
+        return re.sub(r'\d+$', '0', param_name)
+
     def _get_config(self, module: nn.Module) -> Any:
         """Extract configuration from module hierarchy."""
         current = module
@@ -610,7 +623,8 @@ class ColumnParallelMapping(MegatronParamMapping[torch.Tensor]):
         if self.tp_size == 1:
             return hf_weights
 
-        _, target_param = get_module_and_param_from_name(megatron_module, self.megatron_param)
+        normalized_param = self._normalize_expert_param_name(self.megatron_param)
+        _, target_param = get_module_and_param_from_name(megatron_module, normalized_param)
 
         # On rank 0, check for divisibility and split
         if self.tp_rank == 0:
@@ -690,7 +704,8 @@ class RowParallelMapping(MegatronParamMapping[torch.Tensor]):
         if self.tp_size == 1:
             return hf_weights
 
-        _, target_param = get_module_and_param_from_name(megatron_module, self.megatron_param)
+        normalized_param = self._normalize_expert_param_name(self.megatron_param)
+        _, target_param = get_module_and_param_from_name(megatron_module, normalized_param)
 
         # On rank 0, check for divisibility and split
         if self.tp_rank == 0:
@@ -1180,7 +1195,8 @@ class GatedMLPMapping(MegatronParamMapping[Dict[str, torch.Tensor]]):
             return torch.cat([hf_weights["gate"], hf_weights["up"]], dim=0)
 
         # Get target parameter info from megatron module
-        _, target_param = get_module_and_param_from_name(megatron_module, self.megatron_param)
+        normalized_param = self._normalize_expert_param_name(self.megatron_param)
+        _, target_param = get_module_and_param_from_name(megatron_module, normalized_param)
 
         # On rank 0, split gate and up separately, then concatenate corresponding pieces
         if self.tp_rank == 0:
