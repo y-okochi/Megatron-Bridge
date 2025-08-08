@@ -90,10 +90,16 @@ class MegatronParamMapping(ABC, Generic[WeightType]):
         self.hf_param = hf_param
         self._validate_patterns()
 
-        self.pp_group = mpu.get_pipeline_model_parallel_group()
-        self.ep_group = mpu.get_expert_model_parallel_group()
-        self._tp_group = mpu.get_tensor_model_parallel_group()
-        self._etp_group = mpu.get_expert_tensor_parallel_group()
+        if mpu.is_initialized():
+            self.pp_group = mpu.get_pipeline_model_parallel_group()
+            self.ep_group = mpu.get_expert_model_parallel_group()
+            self._tp_group = mpu.get_tensor_model_parallel_group()
+            self._etp_group = mpu.get_expert_tensor_parallel_group()
+        else:
+            self.pp_group = None
+            self.ep_group = None
+            self._tp_group = None
+            self._etp_group = None
 
     @property
     def tp_group(self):
@@ -451,15 +457,15 @@ class MegatronParamMapping(ABC, Generic[WeightType]):
     def _normalize_expert_param_name(self, param_name: str) -> str:
         """Normalize expert parameter name by replacing trailing numbers with 0.
         e.g. experts.weight15 -> experts.weight0, experts.bias15 -> experts.bias0
-        
+
         Args:
             param_name (str): Parameter name that may end with a number.
-            
+
         Returns:
             str: Parameter name with trailing number replaced by 0.
         """
         # Use regex to replace any trailing number with 0
-        return re.sub(r'\d+$', '0', param_name)
+        return re.sub(r"\d+$", "0", param_name)
 
     def _get_config(self, module: nn.Module) -> Any:
         """Extract configuration from module hierarchy."""
@@ -499,6 +505,9 @@ class MegatronParamMapping(ABC, Generic[WeightType]):
         This method handles the gathering of expert weights across expert parallel
         ranks. It should only be called when the parameter is confirmed to be an
         expert weight.
+        For example, with expert parallel size = 2 and 8 total experts, experts are distributed as:
+        Rank 0: [0, 1, 2, 3], Rank 1: [4, 5, 6, 7]
+        This will return a dictionary with one entry per EP rank, e.g. {0: weight0, 4: weight4}
 
         Args:
             megatron_weights (Optional[torch.Tensor]): The local expert weight tensor.
@@ -518,12 +527,10 @@ class MegatronParamMapping(ABC, Generic[WeightType]):
         # Extract local expert number from parameter name
         # Handle both .weight and .bias suffixes
         local_expert_number = None
-        if ".weight" in self.megatron_param:
-            global_expert_number = int(self.megatron_param.split(".weight")[-1])
-            local_expert_number = global_expert_number % num_experts_per_rank
-        elif ".bias" in self.megatron_param:
-            global_expert_number = int(self.megatron_param.split(".bias")[-1])
-            local_expert_number = global_expert_number % num_experts_per_rank
+        for key in (".weight", ".bias"):
+            if key in self.megatron_param:
+                global_expert_number = int(self.megatron_param.split(key)[-1])
+                local_expert_number = global_expert_number % num_experts_per_rank
 
         # Compute global expert numbers for all EP ranks
         # use regex to replace the local expert number with the global expert number
@@ -623,6 +630,9 @@ class ColumnParallelMapping(MegatronParamMapping[torch.Tensor]):
         if self.tp_size == 1:
             return hf_weights
 
+        # Some parameters are named with global expert number, e.g. experts.weight15, 
+        # normalize it to experts.weight0, note we are only use the shape, dtype, device info, 
+        # not the actual value, so it is safe to do this.
         normalized_param = self._normalize_expert_param_name(self.megatron_param)
         _, target_param = get_module_and_param_from_name(megatron_module, normalized_param)
 
@@ -704,6 +714,9 @@ class RowParallelMapping(MegatronParamMapping[torch.Tensor]):
         if self.tp_size == 1:
             return hf_weights
 
+        # Some parameters are named with global expert number, e.g. experts.weight15, 
+        # normalize it to experts.weight0, note we are only use the shape, dtype, device info, 
+        # not the actual value, so it is safe to do this.
         normalized_param = self._normalize_expert_param_name(self.megatron_param)
         _, target_param = get_module_and_param_from_name(megatron_module, normalized_param)
 
@@ -1195,6 +1208,9 @@ class GatedMLPMapping(MegatronParamMapping[Dict[str, torch.Tensor]]):
             return torch.cat([hf_weights["gate"], hf_weights["up"]], dim=0)
 
         # Get target parameter info from megatron module
+        # Some parameters are named with global expert number, e.g. experts.weight15, 
+        # normalize it to experts.weight0, note we are only use the shape, dtype, device info, 
+        # not the actual value, so it is safe to do this.
         normalized_param = self._normalize_expert_param_name(self.megatron_param)
         _, target_param = get_module_and_param_from_name(megatron_module, normalized_param)
 

@@ -44,7 +44,8 @@ from megatron.bridge.models.conversion.param_mapping import MegatronParamMapping
 from megatron.bridge.models.conversion.utils import extract_sort_key, get_module_and_param_from_name
 from megatron.bridge.models.decorators.dispatch import dispatch
 from megatron.bridge.models.model_provider import ModelProviderMixin
-from megatron.bridge.utils.common_utils import unwrap_model, print_rank_0
+from megatron.bridge.utils.common_utils import unwrap_model
+
 
 logger = logging.getLogger(__name__)
 
@@ -129,21 +130,21 @@ def _megatron_local_name_to_global(
     if ".mlp.experts.linear_fc" in param_name and get_pg_size(ep_group) > 1:
         num_experts = config.num_moe_experts
         num_experts_per_rank = num_experts // ep_group.size()
-        # Handle weight and bias parameters separately
+        
+        def _update_expert_number(param_name: str, param_type: str) -> str:
+            """Update expert number from local to global for weight or bias parameters."""
+            local_expert_number = int(param_name.split(f".{param_type}")[-1])
+            global_expert_number = num_experts_per_rank * ep_group.rank() + local_expert_number
+            return param_name.replace(
+                f".{param_type}{local_expert_number}",
+                f".{param_type}{global_expert_number}",
+            )
+        
+        # Handle weight and bias parameters
         if ".weight" in param_name:
-            local_expert_number = int(param_name.split(".weight")[-1])
-            global_expert_number = num_experts_per_rank * ep_group.rank() + local_expert_number
-            param_name = param_name.replace(
-                f".weight{local_expert_number}",
-                f".weight{global_expert_number}",
-            )
+            param_name = _update_expert_number(param_name, "weight")
         elif ".bias" in param_name:
-            local_expert_number = int(param_name.split(".bias")[-1])
-            global_expert_number = num_experts_per_rank * ep_group.rank() + local_expert_number
-            param_name = param_name.replace(
-                f".bias{local_expert_number}",
-                f".bias{global_expert_number}",
-            )
+            param_name = _update_expert_number(param_name, "bias")
     return param_name
 
 
@@ -320,6 +321,8 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         # e.g. decoder.layers.0.mlp.experts.linear_fc1.weight100
         flattened_names = list(set(sum(gathered_global_param_names, [])))
 
+        # the order cannot be changed, this sync for all ranks for conversion
+        # change this might cause a hang
         gathered_global_param_names = sorted(flattened_names, key=extract_sort_key)
 
         # Cache the result
@@ -408,6 +411,8 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
 
         description = f"Loading from {hf_pretrained.model_name_or_path}"
         for task in self._with_progress_tracking(hf_to_megatron_tasks, description):
+            
+            # None means megatron module not on current rank, skip if this task is not going to happen
             if task.megatron_module is None:
                 continue
             # 1) Fetch source tensor(s) from HF state dict
@@ -478,6 +483,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
             megatron_model = [megatron_model]
 
         for task in self._build_conversion_tasks(hf_pretrained, megatron_model):
+            # None means megatron module not on current rank, skip if this task is not going to happen
             if task.megatron_module is None:
                 continue
             hf_state_dict: Mapping[str, torch.Tensor] = hf_pretrained.state
@@ -746,15 +752,17 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         model_config = unwrap_model(megatron_model)[0].config
         embeddings_are_tied = model_config.share_embeddings_and_output_weights
         pp_rank = parallel_state.get_pipeline_model_parallel_rank()
-        global_names = self._megatron_global_param_names_all_pp_ranks(megatron_model)
+        sorted_global_param_names_all_pp_ranks = self._megatron_global_param_names_all_pp_ranks(megatron_model)
 
         # Filter out output_layer related parameters if embeddings are tied
         if embeddings_are_tied:
-            global_names = [name for name in global_names if "output_layer" not in name]
+            sorted_global_param_names_all_pp_ranks = [
+                name for name in sorted_global_param_names_all_pp_ranks if "output_layer" not in name
+            ]
 
-        global_names_index_dict = {name: idx for idx, name in enumerate(global_names)}
+        global_names_index_dict = {name: idx for idx, name in enumerate(sorted_global_param_names_all_pp_ranks)}
 
-        tasks = [None] * len(global_names)
+        tasks = [None] * len(sorted_global_param_names_all_pp_ranks)
         for vp_stage, model in enumerate(megatron_model):
             for local_name, _ in model.named_parameters():
                 if "_extra_state" in local_name:
@@ -795,7 +803,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
                 )
 
         # Fill the remaining ones for pp communications
-        for idx, global_name in enumerate(global_names):
+        for idx, global_name in enumerate(sorted_global_param_names_all_pp_ranks):
             mapping = mapping_registry.megatron_to_hf_lookup(global_name)
             if tasks[idx] is None:
                 # This is an exception here we pass in global name
