@@ -451,15 +451,15 @@ class MegatronParamMapping(ABC, Generic[WeightType]):
     def _normalize_expert_param_name(self, param_name: str) -> str:
         """Normalize expert parameter name by replacing trailing numbers with 0.
         e.g. experts.weight15 -> experts.weight0, experts.bias15 -> experts.bias0
-        
+
         Args:
             param_name (str): Parameter name that may end with a number.
-            
+
         Returns:
             str: Parameter name with trailing number replaced by 0.
         """
         # Use regex to replace any trailing number with 0
-        return re.sub(r'\d+$', '0', param_name)
+        return re.sub(r"\d+$", "0", param_name)
 
     def _get_config(self, module: nn.Module) -> Any:
         """Extract configuration from module hierarchy."""

@@ -44,7 +44,8 @@ from megatron.bridge.models.conversion.param_mapping import MegatronParamMapping
 from megatron.bridge.models.conversion.utils import extract_sort_key, get_module_and_param_from_name
 from megatron.bridge.models.decorators.dispatch import dispatch
 from megatron.bridge.models.model_provider import ModelProviderMixin
-from megatron.bridge.utils.common_utils import unwrap_model, print_rank_0
+from megatron.bridge.utils.common_utils import unwrap_model
+
 
 logger = logging.getLogger(__name__)
 
