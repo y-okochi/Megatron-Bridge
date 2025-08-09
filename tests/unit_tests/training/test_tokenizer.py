@@ -46,7 +46,7 @@ class TestTokenizerConfig:
             make_vocab_size_divisible_by=128,
             tensor_model_parallel_size=1,
         )
-    
+
     def test_build_tokenzier_megatron(self):
         additional_args = {}
         additional_args["additional_special_tokens"] = [f"<extra_id_{i}>" for i in range(100)]
@@ -73,7 +73,7 @@ class TestTokenizerConfig:
             make_vocab_size_divisible_by=128,
             tensor_model_parallel_size=1,
         )
-    
+
     def test_build_tokenizer_null(self):
         additional_args = dict(vocab_size=131072)
         config = TokenizerConfig(
