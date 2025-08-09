@@ -6,9 +6,9 @@ import math
 
 from megatron.core.tokenizers import MegatronTokenizer
 
-from megatron.bridge.utils.common_utils import get_rank_safe
 from megatron.bridge.training.tokenizers.config import TokenizerConfig
 from megatron.bridge.training.tokenizers.multimodal_tokenizer import MultimodalTokenizer
+from megatron.bridge.utils.common_utils import get_rank_safe
 
 
 def build_tokenizer(
@@ -70,7 +70,7 @@ def build_tokenizer(
             metadata_path=tokenizer_config.metadata_path,
             **tokenizer_config.additional_args,
         )
-    
+
     # Add vocab size (if not already set from a checkpoint).
     if getattr(tokenizer_config, "padded_vocab_size", None) is None:
         tokenizer_config.padded_vocab_size = _vocab_size_with_padding(

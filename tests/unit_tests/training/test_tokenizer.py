@@ -12,15 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import pytest
-
-from megatron.hub.training.tokenizers.config import TokenizerConfig
 from megatron.hub.training.tokenizers import build_tokenizer
+from megatron.hub.training.tokenizers.config import TokenizerConfig
 
 
 class TestTokenizerConfig:
     def test_tokenizer_config(self):
-        additional_args= {
+        additional_args = {
             "num_special_tokens": 100,
             "pattern": "v1",
         }
@@ -51,7 +49,7 @@ class TestTokenizerConfig:
     
     def test_build_tokenzier_megatron(self):
         additional_args = {}
-        additional_args['additional_special_tokens'] = [f'<extra_id_{i}>' for i in range(100)]
+        additional_args["additional_special_tokens"] = [f"<extra_id_{i}>" for i in range(100)]
         config = TokenizerConfig(
             tokenizer_path="BertWordPieceCase",
             metadata_path=dict(library="megatron"),

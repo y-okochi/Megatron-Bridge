@@ -16,9 +16,9 @@
 
 from typing import Any, Optional
 
-from megatron.bridge.data.builders.hf_dataset import ProcessExampleOutput
-
 from megatron.core.tokenizers import MegatronTokenizerBase
+
+from megatron.bridge.data.builders.hf_dataset import ProcessExampleOutput
 
 def process_squad_example(
     example: dict[str, Any], tokenizer: Optional[MegatronTokenizerBase] = None
