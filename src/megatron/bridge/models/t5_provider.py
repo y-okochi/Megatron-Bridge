@@ -22,7 +22,7 @@ from megatron.core.transformer.spec_utils import ModuleSpec
 from megatron.core.transformer.transformer_config import TransformerConfig
 
 from megatron.bridge.models.gpt_provider import get_vocab_size
-from megatron.bridge.models.model_provider_mixin import ModelProviderMixin
+from megatron.bridge.models.model_provider import ModelProviderMixin
 
 
 logger = logging.getLogger(__name__)
@@ -79,7 +79,6 @@ class T5ModelProvider(TransformerConfig, ModelProviderMixin[MCoreT5Model]):
     persist_layer_norm: bool = True
     bias_dropout_fusion: bool = True
     deallocate_pipeline_outputs: bool = True
-    pipeline_model_parallel_split_rank: int = 0
     num_moe_experts: Optional[int] = None
     recompute_num_layers: int = 1
     distribute_saved_activations: bool = False

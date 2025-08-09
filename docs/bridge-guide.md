@@ -1,14 +1,15 @@
-# Megatron <-> HuggingFace Bridge User Guide
+# Bridge with 🤗Hugging Face
 
-Megatron Bridge provides seamless bidirectional conversion between HuggingFace Transformers and Megatron Core model formats. This guide covers the main APIs for loading models, checking compatibility, and converting between formats.
+Megatron Bridge provides seamless bidirectional conversion between 🤗Hugging Face Transformers and Megatron Core model formats. This guide covers the main APIs for loading models, checking compatibility, and converting between formats.
 
-## Loading a HuggingFace Model into Megatron Implementation
+## Loading a 🤗Hugging Face Model into Megatron Implementation
 
-The easiest way to load a HuggingFace model is using `AutoBridge.from_hf_pretrained()`, which automatically detects the model architecture and selects the appropriate bridge. You can then use `AutoBridge.to_megatron_model()` to initialize the Megatron model from the HuggingFace configuration and load HuggingFace weights.
+The easiest way to load a 🤗Hugging Face model is using `AutoBridge.from_hf_pretrained()`, which automatically detects the model architecture and selects the appropriate bridge. You can then use `AutoBridge.to_megatron_model()` to initialize the Megatron model from the 🤗Hugging Face configuration and load 🤗HuggingFace weights.
 
 ### Basic Usage
 
 ```python
+import torch
 from megatron.bridge import AutoBridge
 
 # Load any supported model automatically
@@ -70,13 +71,13 @@ The provider pattern is especially useful when you need to:
 
 Before loading a model, you can check if it's supported by Megatron Bridge.
 
-You can list all supported HuggingFace model architectures with the following:
+You can list all supported 🤗Hugging Face model architectures with the following:
 
 ```python
-from megatron.bridge import CausalLMBridge
+from megatron.bridge import AutoBridge
 
 # Get list of all supported model architectures
-supported_models = CausalLMBridge.list_supported_models()
+supported_models = AutoBridge.list_supported_models()
 
 print(f"Found {len(supported_models)} supported models:")
 for i, model in enumerate(supported_models, 1):
@@ -99,9 +100,9 @@ if AutoBridge.can_handle("custom/model", trust_remote_code=True):
     bridge = AutoBridge.from_hf_pretrained("custom/model", trust_remote_code=True)
 ```
 
-## Converting back to HuggingFace
+## Converting back to 🤗Hugging Face
 
-After training or modifying a Megatron model, you can convert it back to HuggingFace format for deployment or sharing. The bridge provides several methods for this conversion depending on your needs.
+After training or modifying a Megatron model, you can convert it back to 🤗Hugging Face format for deployment or sharing. The bridge provides several methods for this conversion depending on your needs.
 
 To save the complete model including configuration, tokenizer, and weights:
 
@@ -109,7 +110,7 @@ To save the complete model including configuration, tokenizer, and weights:
 # Save the complete model (config, tokenizer, weights)
 bridge.save_hf_pretrained(megatron_model, "./my-fine-tuned-llama")
 
-# The saved model can be loaded with HuggingFace
+# The saved model can be loaded with 🤗Hugging Face
 from transformers import AutoModelForCausalLM
 hf_model = AutoModelForCausalLM.from_pretrained("./my-fine-tuned-llama")
 ```
@@ -167,14 +168,11 @@ for name, weight in bridge.export_hf_weights(model, mode="distribute"):
 When working with Megatron Bridge, there are several patterns that will help you use the API effectively and avoid common pitfalls.
 
 ### 1. Always Use High-Level APIs
-Always prefer high-level APIs like `AutoBridge` for automatic model detection, or `CausalLMBridge` for causal language models. Avoid direct bridge usage unless you know the specific type required:
+Always prefer high-level APIs like `AutoBridge` for automatic model detection. Avoid direct bridge usage unless you know the specific type required:
 
 ```python
 # ✅ Preferred: Use AutoBridge for automatic detection
 bridge = AutoBridge.from_hf_pretrained("any-supported-model")
-
-# ✅ Or use CausalLMBridge for causal language models
-bridge = CausalLMBridge.from_hf_pretrained("gpt2")
 
 # ❌ Avoid: Direct bridge usage unless you know the specific type
 ```
@@ -202,7 +200,7 @@ for name, weight in bridge.export_hf_weights(model, cpu=True):
 
 # ✅ Use config-only loading for architecture exploration
 config = AutoConfig.from_pretrained("meta-llama/Llama-3-8B")
-bridge = CausalLMBridge.from_hf_config(config)
+bridge = AutoBridge.from_hf_config(config)
 transformer_config = bridge.transformer_config
 print(f"Hidden size: {transformer_config.hidden_size}")
 ```
@@ -218,7 +216,7 @@ try:
 except ValueError as e:
     print(f"Model not supported: {e}")
     # Check what models are available
-    supported = CausalLMBridge.list_supported_models()
+    supported = AutoBridge.list_supported_models()
     print(f"Supported models: {supported}")
 ```
 
@@ -226,7 +224,7 @@ except ValueError as e:
 
 ### Common Issues
 
-1. **Model Not Supported**: Use `CausalLMBridge.list_supported_models()` to see available options
+1. **Model Not Supported**: Use `AutoBridge.list_supported_models()` to see available options
 2. **Memory Errors**: Use streaming APIs or increase parallelism
 3. **Shape Mismatches**: Check parallelism configuration matches your hardware
 4. **Missing Weights**: Ensure the model architecture is properly registered
@@ -237,10 +235,12 @@ For debugging, you can enable verbose logging and inspect bridge configurations:
 ```python
 # Enable verbose logging
 import logging
+from megatron.bridge import AutoBridge
+
 logging.getLogger("megatron.bridge.models").setLevel(logging.DEBUG)
 
 # Inspect bridge configuration
-bridge = CausalLMBridge.from_hf_pretrained("gpt2")
+bridge = AutoBridge.from_hf_pretrained("gpt2")
 print(bridge.transformer_config)
 
 # Check weight mappings

@@ -38,11 +38,11 @@ from megatron.core.transformer.module import MegatronModule
 from rich.progress import BarColumn, Progress, TextColumn, TimeRemainingColumn
 from transformers.modeling_utils import PreTrainedModel
 
+from megatron.bridge.models.conversion.mapping_registry import MegatronMappingRegistry
+from megatron.bridge.models.conversion.param_mapping import MegatronParamMapping
+from megatron.bridge.models.conversion.utils import get_transformer_layer_offset
 from megatron.bridge.models.decorators.dispatch import dispatch
-from megatron.bridge.models.mapping_registry import MegatronMappingRegistry
-from megatron.bridge.models.model_provider import ModelProviderProtocol
-from megatron.bridge.models.param_mapping import MegatronParamMapping
-from megatron.bridge.models.utils import get_transformer_layer_offset
+from megatron.bridge.models.model_provider import ModelProviderMixin
 from megatron.bridge.utils.common_utils import unwrap_model
 
 
@@ -50,7 +50,7 @@ logger = logging.getLogger(__name__)
 
 MappingT = TypeVar("MappingT", bound=MegatronParamMapping)
 HFPreTrained = TypeVar("HFPreTrained")
-ModelProviderTarget = TypeVar("ModelProviderTarget", bound=ModelProviderProtocol)
+ModelProviderTarget = TypeVar("ModelProviderTarget", bound=ModelProviderMixin)
 MegatronModel = TypeVar("MegatronModel", bound=MegatronModule)
 _BridgeImplClass = TypeVar("_BridgeImplClass", bound="MegatronModelBridge")
 
@@ -105,7 +105,7 @@ class WeightConversionTask(Generic[MappingT]):
 
     def hf_to_megatron(
         self,
-        weights: Union[torch.Tensor, Mapping[str, torch.Tensor]],
+        hf_weights: Union[torch.Tensor, Mapping[str, torch.Tensor]],
         megatron_module: torch.nn.Module,
     ) -> torch.Tensor:
         """Convert HuggingFace weights to Megatron format.
@@ -115,7 +115,7 @@ class WeightConversionTask(Generic[MappingT]):
         distribution, and pipeline parallel communication.
 
         Args:
-            weights: HuggingFace weights to convert (single tensor or dict of tensors).
+            hf_weights: HuggingFace weights to convert (single tensor or dict of tensors).
             megatron_module: Megatron module that owns the target parameter.
 
         Returns:
@@ -125,11 +125,11 @@ class WeightConversionTask(Generic[MappingT]):
             ValueError: If required fields for HF->Megatron conversion are missing.
         """
 
-        return self.mapping.hf_to_megatron(weights, megatron_module)
+        return self.mapping.hf_to_megatron(hf_weights, megatron_module, self.param_name)
 
     def megatron_to_hf(
         self,
-        megatron_weight: Optional[torch.Tensor],
+        megatron_weights: Optional[torch.Tensor],
         megatron_module: Optional[torch.nn.Module],
     ) -> Dict[str, torch.Tensor]:
         """Convert Megatron weights to HuggingFace format.
@@ -139,7 +139,7 @@ class WeightConversionTask(Generic[MappingT]):
         parallel broadcasting, and format transformation.
 
         Args:
-            megatron_weight: Megatron weight tensor to convert (may be None if not owned by this rank).
+            megatron_weights: Megatron weight tensor to convert (may be None if not owned by this rank).
             megatron_module: Megatron module that owns the parameter (may be None).
 
         Returns:
@@ -149,7 +149,7 @@ class WeightConversionTask(Generic[MappingT]):
             ValueError: If required fields for Megatron->HF conversion are missing.
         """
 
-        return self.mapping.megatron_to_hf(megatron_weight, megatron_module)
+        return self.mapping.megatron_to_hf(megatron_weights, megatron_module, self.param_name)
 
 
 def _adjust_layer_number_to_global(name: str, layer_offset: int) -> str:
@@ -214,7 +214,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
 
             def mapping_registry(self) -> MegatronMappingRegistry:
                 return MegatronMappingRegistry(
-                    TPAwareMapping(
+                    AutoMapping(
                         megatron_param="embedding.word_embeddings.weight",
                         hf_param="model.embed_tokens.weight"
                     ),
@@ -225,8 +225,8 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         .. code-block:: python
 
             # The bridge is typically not instantiated directly
-            # Instead, use CausalLMBridge or AutoBridge which handle this
-            bridge = CausalLMBridge.from_hf_pretrained("meta-llama/Llama-3-8B")
+            # Instead, use AutoBridge or AutoBridge which handle this
+            bridge = AutoBridge.from_hf_pretrained("meta-llama/Llama-3-8B")
             provider = bridge.to_megatron_provider()
 
     Note:
@@ -284,7 +284,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
 
                 def mapping_registry(self):
                     return MegatronMappingRegistry(
-                        TPAwareMapping(
+                        AutoMapping(
                             megatron_param="embedding.word_embeddings.weight",
                             hf_param="model.embed_tokens.weight"
                         ),
@@ -384,7 +384,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
                     # Check shape compatibility before copying
                     if local_weights.shape != task.param_weight.shape:
                         raise ValueError(
-                            f"Shape mismatch for {task.mapping.megatron_param}:\n"
+                            f"Shape mismatch for megatron param {task.mapping.megatron_param}:\n"
                             f"  Expected shape: {task.param_weight.shape}\n"
                             f"  Got shape: {local_weights.shape}\n"
                             f"  Bridge type: {type(task.mapping).__name__}\n"
