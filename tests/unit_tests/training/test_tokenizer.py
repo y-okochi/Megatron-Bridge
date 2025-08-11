@@ -17,21 +17,26 @@ from megatron.bridge.training.tokenizers.config import TokenizerConfig
 
 
 class TestTokenizerConfig:
-    def test_tokenizer_config(self):
-        additional_args = {
-            "num_special_tokens": 100,
-            "pattern": "v1",
-        }
+    def test_build_tokenizer_tiktoken(self, ensure_test_data):
         config = TokenizerConfig(
-            tokenizer_path="/path/to/model",
-            metadata_path=dict(library="tiktoken"),
-            additional_args=additional_args,
+            tokenizer_path=f"{ensure_test_data}/tokenizers/tiktoken/tiktoken.vocab.json",
+            num_special_tokens=100,
+            pattern="v1",
+            vocab_size=32000,
         )
 
-        assert config.metadata_path == {"library": "tiktoken"}
-        assert config.additional_args["pattern"] == "v1"
+        assert config.pattern == "v1"
+        assert config.num_special_tokens == 100
 
-    def test_build_tokenizer_multimodal(self):
+        tokenizer = build_tokenizer(
+            tokenizer_config=config,
+            make_vocab_size_divisible_by=128,
+            tensor_model_parallel_size=1,
+        )
+
+        assert tokenizer.vocab_size == 32000
+
+    def test_build_tokenizer_multimodal(self, ensure_test_data):
         special_tokens = ["<image_start>", "<image_end>"]
         config = TokenizerConfig(
             tokenizer_path="llava-hf/llava-1.5-7b-hf",
@@ -47,14 +52,15 @@ class TestTokenizerConfig:
             tensor_model_parallel_size=1,
         )
 
-    def test_build_tokenzier_megatron(self):
-        additional_args = {}
-        additional_args["additional_special_tokens"] = [f"<extra_id_{i}>" for i in range(100)]
+    def test_build_tokenzier_megatron(self, ensure_test_data):
+        additional_special_tokens = [f"<extra_id_{i}>" for i in range(100)]
         config = TokenizerConfig(
             tokenizer_path="BertWordPieceCase",
             metadata_path=dict(library="megatron"),
-            additional_args=additional_args,
+            additional_special_tokens=additional_special_tokens,
         )
+
+        assert config.additional_special_tokens == additional_special_tokens
 
         tokenizer = build_tokenizer(
             tokenizer_config=config,
@@ -62,24 +68,30 @@ class TestTokenizerConfig:
             tensor_model_parallel_size=1,
         )
 
-    def test_build_tokenizer_huggingface(self):
+        assert len(tokenizer.additional_special_tokens_ids) == 100
+
+    def test_build_tokenizer_huggingface(self, ensure_test_data):
+        special_tokens = {"bos_token": "<TEST_BOS>", "eos_token": "<TEST_EOS>"}
         config = TokenizerConfig(
-            tokenizer_path="nvidia/Minitron-4B-Base",
+            tokenizer_path=f"{ensure_test_data}/tokenizers/huggingface",
             metadata_path=dict(library="huggingface"),
-            special_tokens=[f'<extra_id_{i}>' for i in range(100)],
+            special_tokens=special_tokens,
         )
+
+        assert config.special_tokens == special_tokens
 
         tokenizer = build_tokenizer(
             tokenizer_config=config,
             make_vocab_size_divisible_by=128,
             tensor_model_parallel_size=1,
         )
+
+        assert tokenizer.tokenize("<TEST_BOS><TEST_EOS>") == [128257, 128256]
 
     def test_build_tokenizer_null(self):
-        additional_args = dict(vocab_size=131072)
         config = TokenizerConfig(
             metadata_path=dict(library="null"),
-            additional_args=additional_args,
+            vocab_size=100000,
         )
 
         tokenizer = build_tokenizer(
@@ -87,3 +99,38 @@ class TestTokenizerConfig:
             make_vocab_size_divisible_by=128,
             tensor_model_parallel_size=1,
         )
+
+        assert tokenizer.vocab_size == 100001
+
+    def test_build_tokenizer_sentencepiece(self, ensure_test_data):
+        config = TokenizerConfig(
+            tokenizer_path=f"{ensure_test_data}/tokenizers/sentencepiece/tokenizer.model",
+            legacy=False,
+        )
+
+        assert config.legacy == False
+
+        tokenizer = build_tokenizer(
+            tokenizer_config=config,
+            make_vocab_size_divisible_by=128,
+            tensor_model_parallel_size=1,
+        )
+    
+    def test_write_metadata(self, ensure_test_data):
+        chat_template = "test chat template"
+        config = TokenizerConfig(
+            tokenizer_path=f"{ensure_test_data}/tokenizers/huggingface",
+            write_metadata=True,
+            tokenizer_library="huggingface",
+            chat_template=chat_template,
+            model_type="gpt",
+            overwrite_metadata=True,
+        )
+
+        tokenizer = build_tokenizer(
+            tokenizer_config=config,
+            make_vocab_size_divisible_by=128,
+            tensor_model_parallel_size=1,
+        )
+
+        assert tokenizer.chat_template == chat_template

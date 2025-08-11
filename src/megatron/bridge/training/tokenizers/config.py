@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from dataclasses import dataclass, field
-from typing import Literal, Optional, Union
+from typing import Literal, Optional, Union, Dict, List
 
 from megatron.core.tokenizers import MegatronTokenizerBase
 
@@ -31,14 +31,33 @@ class TokenizerConfig:
     multimodal_tokenizer: Optional[bool] = False
     """Whether to use multimodal tokenizer."""
 
+    special_tokens: Optional[Union[Dict[str, str], List[str]]] = None
+    """Tokenizer special tokens."""
+
+    chat_template: Optional[str] = None
+    """Tokenizer chat template."""
+
+    # Sentencepiece tokenizer arguments
+    legacy: Optional[bool] = None
+    ignore_extra_whitespaces: Optional[bool] = None
+    chat_template: Optional[str] = None
+    trim_spm_separator_after_special_token: Optional[bool] = None
+    spm_separator: Optional[str] = None
+
+    # Huggingface tokenizer arguments
+    use_fast: Optional[bool] = None
+    trust_remote_code: Optional[bool] = None
+    include_special_tokens: Optional[bool] = None
     vocab_file: Optional[str] = None
-
     meges_file: Optional[str] = None
+    additional_special_tokens: Optional[List[str]] = None
 
-    additional_args: Optional[dict] = field(default_factory=dict)
-    """Tokenizer additional arguments."""
+    # Tiktoken tokenizer arguments
+    num_special_tokens: Optional[int] = None
+    pattern: Optional[int] = None
 
-    special_tokens: Optional[list[str]] = field(default_factory=list)
+    # Null tokenizer arguments
+    vocab_size: Optional[int] = None
 
     # Multimodal tokenizer arguments
     tokenizer_prompt_format: Optional[str] = None
@@ -64,9 +83,6 @@ class TokenizerConfig:
 
     tokenizer_class: Optional[MegatronTokenizerBase] = None
     """Pre-defined tokenizer class."""
-
-    chat_template: Optional[str] = None
-    """Tokenizer chat template."""
 
     overwrite_metadata: Optional[bool] = False
     """If overwrite metadata file."""

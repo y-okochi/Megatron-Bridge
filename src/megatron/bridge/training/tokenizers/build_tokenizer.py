@@ -4,11 +4,24 @@
 
 import math
 
+from dataclasses import asdict
+
 from megatron.core.tokenizers import MegatronTokenizer
 
 from megatron.bridge.training.tokenizers.config import TokenizerConfig
 from megatron.bridge.training.tokenizers.multimodal_tokenizer import MultimodalTokenizer
 from megatron.bridge.utils.common_utils import get_rank_safe
+
+
+MAIN_ARGS = [
+    "tokenizer_path",
+    "metadata_path",
+    "multimodal_tokenizer",
+    "write_metadata",
+    "overwrite_metadata",
+    "tokenizer_library",
+    "model_type",
+]
 
 
 def build_tokenizer(
@@ -63,15 +76,28 @@ def build_tokenizer(
                 tokenizer_class=tokenizer_config.tokenizer_class,
                 overwrite=tokenizer_config.overwrite_metadata,
                 metadata_path=tokenizer_config.metadata_path,
+                chat_template=tokenizer_config.chat_template,
             )
 
-        if tokenizer_config.special_tokens:
-            tokenizer_config.additional_args['additional_special_tokens'] = tokenizer_config.special_tokens
-        tokenizer = MegatronTokenizer.from_pretrained(
-            tokenizer_path=tokenizer_config.tokenizer_path,
-            metadata_path=tokenizer_config.metadata_path,
-            **tokenizer_config.additional_args,
-        )
+        additional_args = {k: v for k, v in asdict(tokenizer_config).items() if v is not None and k not in MAIN_ARGS}
+        if tokenizer_config.additional_special_tokens:
+            additional_args['additional_special_tokens'] = tokenizer_config.additional_special_tokens
+
+        special_tokens = tokenizer_config.special_tokens
+        if type(special_tokens) is list or special_tokens is None:
+            tokenizer = MegatronTokenizer.from_pretrained(
+                tokenizer_path=tokenizer_config.tokenizer_path,
+                metadata_path=tokenizer_config.metadata_path,
+                **additional_args,
+            )
+        else:
+            special_tokens = additional_args.pop('special_tokens')
+            tokenizer = MegatronTokenizer.from_pretrained(
+                tokenizer_path=tokenizer_config.tokenizer_path,
+                metadata_path=tokenizer_config.metadata_path,
+                **additional_args,
+                **special_tokens,
+            )
 
     # Add vocab size (if not already set from a checkpoint).
     if getattr(tokenizer_config, "padded_vocab_size", None) is None:
