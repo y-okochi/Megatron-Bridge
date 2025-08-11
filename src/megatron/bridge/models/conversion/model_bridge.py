@@ -41,7 +41,7 @@ from transformers.modeling_utils import PreTrainedModel
 
 from megatron.bridge.models.conversion.mapping_registry import MegatronMappingRegistry
 from megatron.bridge.models.conversion.param_mapping import MegatronParamMapping
-from megatron.bridge.models.conversion.utils import get_module_and_param_from_name
+from megatron.bridge.models.conversion.utils import extract_sort_key, get_module_and_param_from_name
 from megatron.bridge.models.decorators.dispatch import dispatch
 from megatron.bridge.models.model_provider import ModelProviderMixin
 from megatron.bridge.utils.common_utils import unwrap_model
@@ -130,21 +130,21 @@ def _megatron_local_name_to_global(
     if ".mlp.experts.linear_fc" in param_name and get_pg_size(ep_group) > 1:
         num_experts = config.num_moe_experts
         num_experts_per_rank = num_experts // ep_group.size()
-        # Handle weight and bias parameters separately
+
+        def _update_expert_number(param_name: str, param_type: str) -> str:
+            """Update expert number from local to global for weight or bias parameters."""
+            local_expert_number = int(param_name.split(f".{param_type}")[-1])
+            global_expert_number = num_experts_per_rank * ep_group.rank() + local_expert_number
+            return param_name.replace(
+                f".{param_type}{local_expert_number}",
+                f".{param_type}{global_expert_number}",
+            )
+
+        # Handle weight and bias parameters
         if ".weight" in param_name:
-            local_expert_number = int(param_name.split(".weight")[-1])
-            global_expert_number = num_experts_per_rank * ep_group.rank() + local_expert_number
-            param_name = param_name.replace(
-                f".weight{local_expert_number}",
-                f".weight{global_expert_number}",
-            )
+            param_name = _update_expert_number(param_name, "weight")
         elif ".bias" in param_name:
-            local_expert_number = int(param_name.split(".bias")[-1])
-            global_expert_number = num_experts_per_rank * ep_group.rank() + local_expert_number
-            param_name = param_name.replace(
-                f".bias{local_expert_number}",
-                f".bias{global_expert_number}",
-            )
+            param_name = _update_expert_number(param_name, "bias")
     return param_name
 
 
@@ -280,7 +280,9 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         """
         raise NotImplementedError("Subclass must implement mapping_registry method")
 
-    def _megatron_global_param_names_all_pp_ranks(self, megatron_model: Union[MegatronModel, List[MegatronModel]]) -> List[str]:
+    def _megatron_global_param_names_all_pp_ranks(
+        self, megatron_model: Union[MegatronModel, List[MegatronModel]]
+    ) -> List[str]:
         """Get all parameter names across all pipeline parallel ranks."""
         # Cache the result after first call
         if hasattr(self, "_cached_param_names"):
@@ -318,33 +320,44 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         # the order matters here, casually re-order will cause a hang.
         # e.g. decoder.layers.0.mlp.experts.linear_fc1.weight100
         flattened_names = list(set(sum(gathered_global_param_names, [])))
-        
-        def _extract_sort_key(param_name: str):
-            """Extract sorting key based on layer and expert numbers."""
 
-            # Extract at most 2 numbers: layer number and expert number
-            # Pattern: *layers.d+.*d+ (layer number and potentially expert number)
-            numbers = []
-            # Find layer number
-            layer_match = re.search(r'layers\.(\d+)', param_name)
-            if layer_match:
-                numbers.append(int(layer_match.group(1)))
-            # Find expert number after bias or weight
-            expert_match = re.search(r'(?:bias|weight)(\d+)', param_name)
-            if expert_match:
-                numbers.append(int(expert_match.group(1)))
-            # Pad to ensure consistent comparison (max 2 numbers)
-            while len(numbers) < 2:
-                numbers.append(-1)
-            numbers = numbers[:2]  # Keep at most 2 numbers
-            return numbers, param_name
-        
-        gathered_global_param_names = sorted(flattened_names, key=_extract_sort_key)
+        # the order cannot be changed, this sync for all ranks for conversion
+        # change this might cause a hang
+        gathered_global_param_names = sorted(flattened_names, key=extract_sort_key)
 
         # Cache the result
         self._cached_param_names = gathered_global_param_names
 
         return self._cached_param_names
+
+    def _with_progress_tracking(self, tasks, description: str, show_progress: bool = True):
+        """Helper method to wrap an iterable with progress tracking.
+
+        Args:
+            tasks: Iterable of tasks to process
+            description: Description for the progress bar
+            show_progress: Whether to show progress (defaults to True)
+
+        Yields:
+            Items from the tasks iterable while updating progress
+        """
+        is_main_rank = not torch.distributed.is_initialized() or torch.distributed.get_rank() == 0
+        bridge_name = self.__class__.__name__
+
+        with Progress(
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+            TimeRemainingColumn(),
+            TextColumn("({task.completed}/{task.total})"),
+            TextColumn("{task.fields[bridge]}"),
+            disable=not (is_main_rank and show_progress),
+        ) as progress:
+            task_id = progress.add_task(description, total=len(tasks), bridge=bridge_name)
+
+            for task in tasks:
+                yield task
+                progress.update(task_id, advance=1)
 
     def load_weights_hf_to_megatron(
         self, hf_pretrained: HFPreTrained, megatron_model: Union[MegatronModel, List[MegatronModel]]
@@ -394,54 +407,37 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
             megatron_model = [megatron_model]
 
         hf_to_megatron_tasks = self._build_conversion_tasks(hf_pretrained, megatron_model)
-
         hf_state_dict: Mapping[str, torch.Tensor] = hf_pretrained.state if hasattr(hf_pretrained, "state") else {}
 
-        is_main_rank = not torch.distributed.is_initialized() or torch.distributed.get_rank() == 0
-        bridge_name = self.__class__.__name__
+        description = f"Loading from {hf_pretrained.model_name_or_path}"
+        for task in self._with_progress_tracking(hf_to_megatron_tasks, description):
+            # None means megatron module not on current rank, skip if this task is not going to happen
+            if task.megatron_module is None:
+                continue
+            # 1) Fetch source tensor(s) from HF state dict
+            if isinstance(task.mapping.hf_param, str):
+                hf_weights = hf_state_dict[task.mapping.hf_param]
+            else:
+                hf_weights = {k: hf_state_dict[v] for k, v in task.mapping.hf_param.items()}
 
-        with Progress(
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
-            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-            TimeRemainingColumn(),
-            TextColumn("({task.completed}/{task.total})"),
-            TextColumn("{task.fields[bridge]}"),
-            disable=not is_main_rank,
-        ) as progress:
-            task_id = progress.add_task(
-                f"Loading from {hf_pretrained.model_name_or_path}", total=len(hf_to_megatron_tasks), bridge=bridge_name
-            )
+            # 2) Delegate conversion & distribution to the bridge
+            converted_weights = task.mapping.hf_to_megatron(hf_weights, task.megatron_module)
 
-            for task in hf_to_megatron_tasks:
-                if task.megatron_module is None:
-                    continue
-                # 1) Fetch source tensor(s) from HF state dict
-                if isinstance(task.mapping.hf_param, str):
-                    hf_weights = hf_state_dict[task.mapping.hf_param]
-                else:
-                    hf_weights = {k: hf_state_dict[v] for k, v in task.mapping.hf_param.items()}
+            # 3) Copy into Megatron param if this rank received a shard
+            if converted_weights is not None:
+                # Assert that param_weight is not None for HF->Megatron tasks
+                assert task.param_weight is not None, "param_weight is required for HF->Megatron conversion"
 
-                # 2) Delegate conversion & distribution to the bridge
-                converted_weights = task.mapping.hf_to_megatron(hf_weights, task.megatron_module, task.param_name)
-
-                # 3) Copy into Megatron param if this rank received a shard
-                if converted_weights is not None:
-                    # Assert that param_weight is not None for HF->Megatron tasks
-                    assert task.param_weight is not None, "param_weight is required for HF->Megatron conversion"
-
-                    # Check shape compatibility before copying
-                    if converted_weights.shape != task.param_weight.shape:
-                        raise ValueError(
-                            f"Shape mismatch for megatron param {task.mapping.megatron_param}:\n"
-                            f"  Expected shape: {task.param_weight.shape}\n"
-                            f"  Got shape: {converted_weights.shape}\n"
-                            f"  Bridge type: {type(task.mapping).__name__}\n"
-                            f"  HF mapping: {task.mapping.hf_param}"
-                        )
-                    task.param_weight.data.copy_(converted_weights)
-
-                progress.update(task_id, advance=1)
+                # Check shape compatibility before copying
+                if converted_weights.shape != task.param_weight.shape:
+                    raise ValueError(
+                        f"Shape mismatch for megatron param {task.mapping.megatron_param}:\n"
+                        f"  Expected shape: {task.param_weight.shape}\n"
+                        f"  Got shape: {converted_weights.shape}\n"
+                        f"  Bridge type: {type(task.mapping).__name__}\n"
+                        f"  HF mapping: {task.mapping.hf_param}"
+                    )
+                task.param_weight.data.copy_(converted_weights)
 
         self._broadcast_shared_embeddings(megatron_model)
         return megatron_model
@@ -486,6 +482,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
             megatron_model = [megatron_model]
 
         for task in self._build_conversion_tasks(hf_pretrained, megatron_model):
+            # None means megatron module not on current rank, skip if this task is not going to happen
             if task.megatron_module is None:
                 continue
             hf_state_dict: Mapping[str, torch.Tensor] = hf_pretrained.state
@@ -494,10 +491,10 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
             else:
                 hf_weights = {k: hf_state_dict[v] for k, v in task.mapping.hf_param.items()}
 
-            local_weights = task.mapping.hf_to_megatron(hf_weights, task.megatron_module, task.param_name)
-            if local_weights is not None:
+            converted_weights = task.mapping.hf_to_megatron(hf_weights, task.megatron_module)
+            if converted_weights is not None:
                 # Assert that vp_stage is not None for HF->Megatron tasks
-                yield MegatronWeightTuple(task.param_name, local_weights, task.vp_stage)
+                yield MegatronWeightTuple(task.param_name, converted_weights, task.vp_stage)
 
     def stream_weights_megatron_to_hf(
         self,
@@ -548,64 +545,34 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
             megatron_model = [megatron_model]
 
         megatron_to_hf_tasks = self._build_conversion_tasks(hf_pretrained, megatron_model)
+        model_config = unwrap_model(megatron_model)[0].config
+        embeddings_are_tied = model_config.share_embeddings_and_output_weights
+        for task in self._with_progress_tracking(megatron_to_hf_tasks, "Converting to HuggingFace", show_progress):
+            converted_weights_dict = task.mapping.megatron_to_hf(task.param_weight, task.megatron_module)
 
-        # Check if embeddings are tied
-        embeddings_are_tied = False
-        # Output layer not exists in named params only if pp_group.size()=1
-        if parallel_state.get_pipeline_model_parallel_world_size() == 1:
-            model_config = unwrap_model(megatron_model)[0].config
-            megatron_embeddings_tied = model_config.share_embeddings_and_output_weights
-            if hasattr(hf_pretrained, 'config') and hasattr(hf_pretrained.config, 'tie_word_embeddings'):
-                hf_embeddings_tied = hf_pretrained.config.tie_word_embeddings
-                assert megatron_embeddings_tied == hf_embeddings_tied, "Megatron and HF embeddings must be tied"
-            embeddings_are_tied = megatron_embeddings_tied
-        
-        is_main_rank = not torch.distributed.is_initialized() or torch.distributed.get_rank() == 0
-        bridge_name = self.__class__.__name__
+            # All ranks get the full tensor
+            for hf_name, tensor in converted_weights_dict.items():
+                final_tensor = tensor.cpu() if cpu else tensor
 
-        with Progress(
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
-            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-            TimeRemainingColumn(),
-            TextColumn("({task.completed}/{task.total})"),
-            TextColumn("{task.fields[bridge]}"),
-            disable=not (is_main_rank and show_progress),
-        ) as progress:
-            task_id = progress.add_task(
-                "Converting to HuggingFace", total=len(megatron_to_hf_tasks), bridge=bridge_name
-            )
+                # Handle tied embeddings case
+                # TODO(yuya): fix this hard coded naming
+                if embeddings_are_tied and hf_name == "model.embed_tokens.weight":
+                    # Yield the embedding weight
+                    yield HFWeightTuple(hf_name, final_tensor)
 
-            for task in megatron_to_hf_tasks:
-                converted_weights_dict = task.mapping.megatron_to_hf(
-                    task.param_weight, task.megatron_module, task.param_name
-                )
-
-                # All ranks get the full tensor
-                for hf_name, tensor in converted_weights_dict.items():
-                    final_tensor = tensor.cpu() if cpu else tensor
-                    
-                    # Handle tied embeddings case
-                    # TODO(yuya): fix this hard coded naming
-                    if embeddings_are_tied and hf_name == "model.embed_tokens.weight":
-                        # Yield the embedding weight
-                        yield HFWeightTuple(hf_name, final_tensor)
-                        
-                        # Also yield as lm_head.weight if it's expected
-                        if hasattr(hf_pretrained, 'state') and hasattr(hf_pretrained.state, 'source'):
-                            expected_keys = hf_pretrained.state.source.get_all_keys()
-                            if "lm_head.weight" in expected_keys:
-                                yield HFWeightTuple("lm_head.weight", final_tensor)
-                    elif embeddings_are_tied and hf_name == "lm_head.weight":
-                        # This should not happen when embeddings are tied - assert error
-                        raise ValueError(
-                            "Encountered lm_head.weight when embeddings are tied. This indicates a mapping error."
-                        )
-                    else:
-                        # Regular case - yield the tensor normally
-                        yield HFWeightTuple(hf_name, final_tensor)
-
-                progress.update(task_id, advance=1)
+                    # Also yield as lm_head.weight if it's expected
+                    if hasattr(hf_pretrained, "state") and hasattr(hf_pretrained.state, "source"):
+                        expected_keys = hf_pretrained.state.source.get_all_keys()
+                        if "lm_head.weight" in expected_keys:
+                            yield HFWeightTuple("lm_head.weight", final_tensor)
+                elif embeddings_are_tied and hf_name == "lm_head.weight":
+                    # This should not happen when embeddings are tied - assert error
+                    raise ValueError(
+                        "Encountered lm_head.weight when embeddings are tied. This indicates a mapping error."
+                    )
+                else:
+                    # Regular case - yield the tensor normally
+                    yield HFWeightTuple(hf_name, final_tensor)
 
     def dtype_from_hf(self, config, default=None):
         """Extract torch dtype from a HuggingFace config.
@@ -782,11 +749,19 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
 
         mapping_registry = self.mapping_registry()
         model_config = unwrap_model(megatron_model)[0].config
+        embeddings_are_tied = model_config.share_embeddings_and_output_weights
         pp_rank = parallel_state.get_pipeline_model_parallel_rank()
-        global_names = self._megatron_global_param_names_all_pp_ranks(megatron_model)
-        global_names_index_dict = {name: idx for idx, name in enumerate(global_names)}
+        sorted_global_param_names_all_pp_ranks = self._megatron_global_param_names_all_pp_ranks(megatron_model)
 
-        tasks = [None] * len(global_names)
+        # Filter out output_layer related parameters if embeddings are tied
+        if embeddings_are_tied:
+            sorted_global_param_names_all_pp_ranks = [
+                name for name in sorted_global_param_names_all_pp_ranks if "output_layer" not in name
+            ]
+
+        global_names_index_dict = {name: idx for idx, name in enumerate(sorted_global_param_names_all_pp_ranks)}
+
+        tasks = [None] * len(sorted_global_param_names_all_pp_ranks)
         for vp_stage, model in enumerate(megatron_model):
             for local_name, _ in model.named_parameters():
                 if "_extra_state" in local_name:
@@ -794,7 +769,9 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
 
                 local_name = self._unwrap_name(local_name)
                 global_name = _megatron_local_name_to_global(megatron_model, model_config, local_name, vp_stage)
-                assert global_name in global_names_index_dict, f"unrecognized global name '{global_name}'"
+                # if name removed due to some reason, continue. e.g. embeddings_are_tied
+                if global_name not in global_names_index_dict:
+                    continue
                 global_name_idx = global_names_index_dict[global_name]
                 mapping = mapping_registry.megatron_to_hf_lookup(global_name)
 
@@ -825,7 +802,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
                 )
 
         # Fill the remaining ones for pp communications
-        for idx, global_name in enumerate(global_names):
+        for idx, global_name in enumerate(sorted_global_param_names_all_pp_ranks):
             mapping = mapping_registry.megatron_to_hf_lookup(global_name)
             if tasks[idx] is None:
                 # This is an exception here we pass in global name
