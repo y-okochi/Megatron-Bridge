@@ -65,6 +65,8 @@ def build_tokenizer(
                 metadata_path=tokenizer_config.metadata_path,
             )
 
+        if tokenizer_config.special_tokens:
+            tokenizer_config.additional_args['additional_special_tokens'] = tokenizer_config.special_tokens
         tokenizer = MegatronTokenizer.from_pretrained(
             tokenizer_path=tokenizer_config.tokenizer_path,
             metadata_path=tokenizer_config.metadata_path,

@@ -12,8 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from megatron.hub.training.tokenizers import build_tokenizer
-from megatron.hub.training.tokenizers.config import TokenizerConfig
+from megatron.bridge.training.tokenizers.build_tokenizer import build_tokenizer
+from megatron.bridge.training.tokenizers.config import TokenizerConfig
 
 
 class TestTokenizerConfig:
@@ -66,6 +66,7 @@ class TestTokenizerConfig:
         config = TokenizerConfig(
             tokenizer_path="nvidia/Minitron-4B-Base",
             metadata_path=dict(library="huggingface"),
+            special_tokens=[f'<extra_id_{i}>' for i in range(100)],
         )
 
         tokenizer = build_tokenizer(

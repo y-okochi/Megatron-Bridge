@@ -31,6 +31,10 @@ class TokenizerConfig:
     multimodal_tokenizer: Optional[bool] = False
     """Whether to use multimodal tokenizer."""
 
+    vocab_file: Optional[str] = None
+
+    meges_file: Optional[str] = None
+
     additional_args: Optional[dict] = field(default_factory=dict)
     """Tokenizer additional arguments."""
 
@@ -66,6 +70,3 @@ class TokenizerConfig:
 
     overwrite_metadata: Optional[bool] = False
     """If overwrite metadata file."""
-
-    # metadata_path: Optional[str] = None
-    # """Path to save metadata file."""
