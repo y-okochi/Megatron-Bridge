@@ -460,14 +460,18 @@ def get_model(
     else:
         model = _create_model(model_provider, model_type)
 
-    if pre_wrap_hook:
-        _model = pre_wrap_hook(model)
-        if _model is not None:
-            model = _model
-
     # Set tensor model parallel attributes if not set
     # In case pre_wrap_hook augmented the model (e.g. adding PEFT adapters)
     for model_module in model:
+        if pre_wrap_hook:
+            if isinstance(pre_wrap_hook, Callable):
+                pre_wrap_hook(model_module)
+            elif isinstance(pre_wrap_hook, list):
+                for hook in pre_wrap_hook:
+                    hook(model_module)
+            else:
+                raise RuntimeError(f"hook must be a callable or a list: {type(pre_wrap_hook)}")
+
         for param in model_module.parameters():
             tensor_parallel.set_defaults_if_not_set_tensor_model_parallel_attributes(param)
 
