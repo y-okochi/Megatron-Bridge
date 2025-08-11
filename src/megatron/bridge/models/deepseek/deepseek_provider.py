@@ -38,7 +38,7 @@ if HAVE_TE:
 
 
 @dataclass
-class DeepSeekConfig(MLATransformerConfig, GPTModelProvider):
+class DeepSeekProvider(MLATransformerConfig, GPTModelProvider):
     """
     Base config for DeepSeek V2 and V3 models.
     """
@@ -111,7 +111,7 @@ class DeepSeekConfig(MLATransformerConfig, GPTModelProvider):
 
 
 @dataclass
-class DeepSeekV2Config(DeepSeekConfig):
+class DeepSeekV2Provider(DeepSeekProvider):
     """
     DeepSeek-V2 Model: https://github.com/deepseek-ai/DeepSeek-V2
     """
@@ -133,7 +133,7 @@ class DeepSeekV2Config(DeepSeekConfig):
 
 
 @dataclass
-class DeepSeekV2LiteConfig(DeepSeekV2Config):
+class DeepSeekV2LiteProvider(DeepSeekV2Provider):
     """
     DeepSeek-V2-Lite Model: https://github.com/deepseek-ai/DeepSeek-V2
     HuggingFace: https://huggingface.co/deepseek-ai/DeepSeek-V2-Lite
@@ -156,7 +156,7 @@ class DeepSeekV2LiteConfig(DeepSeekV2Config):
 
 
 @dataclass
-class DeepSeekV3Config(DeepSeekConfig):
+class DeepSeekV3Provider(DeepSeekProvider):
     """
     DeepSeek-V3 Model: https://github.com/deepseek-ai/DeepSeek-V3
     """

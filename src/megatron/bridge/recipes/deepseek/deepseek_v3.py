@@ -18,7 +18,7 @@ from typing import List, Optional, Union
 import torch
 from megatron.core.distributed import DistributedDataParallelConfig
 
-from megatron.bridge.models.deepseek import DeepSeekV2Provider
+from megatron.bridge.models.deepseek import DeepSeekV3Provider
 from megatron.bridge.recipes.utils.dataset_utils import get_blend_fields_from_data_paths
 from megatron.bridge.recipes.utils.optimizer_utils import distributed_fused_adam_with_cosine_annealing
 from megatron.bridge.recipes.utils.tokenizer_utils import DEFAULT_NULL_TOKENIZER_VOCAB_SIZE
@@ -36,36 +36,42 @@ from megatron.bridge.training.mixed_precision import MixedPrecisionConfig
 
 
 def model_config(
-    tensor_parallelism: int = 1,
-    pipeline_parallelism: int = 4,
+    tensor_parallelism: int = 2,
+    pipeline_parallelism: int = 16,
     pipeline_parallelism_dtype: Optional[torch.dtype] = None,
     virtual_pipeline_parallelism: Optional[int] = None,
     context_parallelism: int = 1,
-    expert_parallelism: int = 32,
+    expert_parallelism: int = 64,
     sequence_parallelism: bool = False,
-    recompute_granularity: str = "full",
-    recompute_method: str = "uniform",
-    recompute_num_layers: int = 1,
-) -> DeepSeekV2Provider:
+    # MTP support
+    use_mtp: bool = True,
+    mtp_num_layers: Optional[int] = 1,
+    mtp_loss_scaling_factor: Optional[float] = 0.1,
+    # Recomputation
+    recompute_granularity: str = "selective",
+    recompute_modules: Optional[List[str]] = None,
+) -> DeepSeekV3Provider:
     """
-    Configure the DeepSeek-V2 (236B) model.
+    Configure the DeepSeek-V3 (671B) model.
 
     Args:
-        tensor_parallelism (int): Degree of tensor model parallelism.
-        pipeline_parallelism (int): Degree of pipeline model parallelism.
-        pipeline_parallelism_dtype (Optional[torch.dtype]): Data type for pipeline parallelism.
-        virtual_pipeline_parallelism (Optional[int]): Size of virtual pipeline parallelism.
-        context_parallelism (int): Degree of context parallelism.
-        expert_parallelism (int): Degree of expert model parallelism for MoE.
-        sequence_parallelism (bool): Whether to use sequence parallelism.
-        recompute_granularity (str): Granularity of activation recomputation.
-        recompute_method (str): Method for activation recomputation.
-        recompute_num_layers (int): Number of layers to recompute.
+        tensor_parallelism: Degree of tensor model parallelism.
+        pipeline_parallelism: Degree of pipeline model parallelism.
+        pipeline_parallelism_dtype: Data type for pipeline parallelism.
+        virtual_pipeline_parallelism: Size of virtual pipeline parallelism.
+        context_parallelism: Degree of context parallelism.
+        expert_parallelism: Degree of expert model parallelism.
+        sequence_parallelism: Whether to use sequence parallelism.
+        use_mtp: Enable multi-token prediction (MTP).
+        mtp_num_layers: Number of MTP layers (used when use_mtp=True).
+        mtp_loss_scaling_factor: Loss scaling factor for MTP (used when use_mtp=True).
+        recompute_granularity: Recomputation granularity. For V3 we recommend "selective".
+        recompute_modules: Modules to selectively recompute when granularity is "selective".
 
     Returns:
-        DeepSeekV2Config: Configuration for the DeepSeek-V2 model.
+        DeepSeekV3Provider: Configuration for the DeepSeek-V3 model.
     """
-    return DeepSeekV2Provider(
+    cfg = DeepSeekV3Provider(
         tensor_model_parallel_size=tensor_parallelism,
         pipeline_model_parallel_size=pipeline_parallelism,
         pipeline_dtype=pipeline_parallelism_dtype,
@@ -73,10 +79,27 @@ def model_config(
         context_parallel_size=context_parallelism,
         expert_model_parallel_size=expert_parallelism,
         sequence_parallel=sequence_parallelism,
+        # MTP
+        mtp_num_layers=mtp_num_layers if use_mtp else None,
+        mtp_loss_scaling_factor=mtp_loss_scaling_factor if use_mtp else None,
+        # Recomputation
         recompute_granularity=recompute_granularity,
-        recompute_method=recompute_method,
-        recompute_num_layers=recompute_num_layers,
     )
+
+    # Some deployments expect a list of modules for selective recomputation
+    if recompute_modules is None:
+        recompute_modules = ["mla_up_proj", "layernorm"]
+    # Set attribute defensively in case downstream supports selective recomputation lists
+    try:
+        setattr(cfg, "recompute_modules", recompute_modules)
+    except Exception:
+        pass
+
+    # Pipeline split for asymmetric stages as used in NeMo recipe
+    cfg.num_layers_in_first_pipeline_stage = 3
+    cfg.num_layers_in_last_pipeline_stage = 2
+
+    return cfg
 
 
 def pretrain_config(
@@ -91,16 +114,19 @@ def pretrain_config(
     per_split_data_args_path: Optional[str] = None,
     mock: bool = False,
     # Model configuration
-    tensor_parallelism: int = 1,
-    pipeline_parallelism: int = 4,
+    tensor_parallelism: int = 2,
+    pipeline_parallelism: int = 16,
     pipeline_parallelism_dtype: Optional[torch.dtype] = torch.bfloat16,
     virtual_pipeline_parallelism: Optional[int] = None,
     context_parallelism: int = 1,
-    expert_parallelism: int = 32,
-    sequence_parallelism: bool = False,
+    expert_parallelism: int = 64,
+    sequence_parallelism: bool = True,
+    use_mtp: bool = True,
+    mtp_num_layers: Optional[int] = 1,
+    mtp_loss_scaling_factor: Optional[float] = 0.1,
     # Training hyperparameters
     train_iters: int = 1_000_000,
-    global_batch_size: int = 512,
+    global_batch_size: int = 4096,
     micro_batch_size: int = 1,
     seq_length: int = 4096,
     lr: float = 3e-4,
@@ -109,42 +135,9 @@ def pretrain_config(
     # Precision recipe
     precision_config: Optional[Union[MixedPrecisionConfig, str]] = "bf16_mixed",
     comm_overlap_config: Optional[CommOverlapConfig] = None,
-    # Recompute settings
-    recompute_granularity: str = "full",
-    recompute_method: str = "uniform",
-    recompute_num_layers: int = 1,
 ) -> ConfigContainer:
     """
-    Create a pre-training configuration for DeepSeek-V2 (236B) model.
-
-    Args:
-        dir (Optional[str]): Base directory for saving logs and checkpoints.
-        name (str): Name of the pre-training run.
-        data_paths (Optional[List[str]]): List of paths to dataset files. If None, mock data will be used.
-        data_args_path (Optional[str]): Path to file containing data arguments.
-        train_data_path (Optional[List[str]]): List of training data paths.
-        valid_data_path (Optional[List[str]]): List of validation data paths.
-        test_data_path (Optional[List[str]]): List of test data paths.
-        per_split_data_args_path (Optional[str]): Path to JSON file with per-split data configuration.
-        mock (bool): Whether to use mock data. If True, ignores data_paths.
-        tensor_parallelism (int): Degree of tensor model parallelism.
-        pipeline_parallelism (int): Degree of pipeline model parallelism.
-        pipeline_parallelism_dtype (Optional[torch.dtype]): Data type for pipeline parallelism.
-        virtual_pipeline_parallelism (Optional[int]): Size of virtual pipeline parallelism.
-        context_parallelism (int): Degree of context parallelism to be passed to model_config.
-        expert_parallelism (int): Degree of expert model parallelism for MoE.
-        sequence_parallelism (bool): Whether to use sequence parallelism.
-        train_iters (int): Total number of training iterations.
-        global_batch_size (int): Global batch size for training.
-        micro_batch_size (int): Micro batch size for training.
-        seq_length (int): Sequence length for training data.
-        lr (float): Learning rate.
-        min_lr (float): Minimum learning rate for cosine decay.
-        lr_warmup_iters (int) Number of warmup iterations for the learning rate.
-        precision_config (Optional[Union[MixedPrecisionConfig, str]]): Precision configuration for the model.
-        recompute_granularity (str): Granularity of activation recomputation.
-        recompute_method (str): Method for activation recomputation.
-        recompute_num_layers (int): Number of layers to recompute.
+    Create a pre-training configuration for DeepSeek-V3 (671B) model.
 
     Returns:
         ConfigContainer: Configuration for pre-training.
@@ -166,9 +159,9 @@ def pretrain_config(
         context_parallelism=context_parallelism,
         expert_parallelism=expert_parallelism,
         sequence_parallelism=sequence_parallelism,
-        recompute_granularity=recompute_granularity,
-        recompute_method=recompute_method,
-        recompute_num_layers=recompute_num_layers,
+        use_mtp=use_mtp,
+        mtp_num_layers=mtp_num_layers,
+        mtp_loss_scaling_factor=mtp_loss_scaling_factor,
     )
 
     opt_config, scheduler = distributed_fused_adam_with_cosine_annealing(
@@ -182,7 +175,6 @@ def pretrain_config(
         min_lr=min_lr,
     )
 
-    # Config Container
     cfg = ConfigContainer(
         model=model_cfg,
         train=TrainingConfig(
@@ -192,14 +184,14 @@ def pretrain_config(
             global_batch_size=global_batch_size,
             micro_batch_size=micro_batch_size,
             manual_gc=True,
-            manual_gc_interval=100,
-            manual_gc_eval=100,
+            manual_gc_interval=5,
+            manual_gc_eval=5,
         ),
         optimizer=opt_config,
         scheduler=scheduler,
         ddp=DistributedDataParallelConfig(
             check_for_nan_in_grad=True,
-            grad_reduce_in_fp32=True,
+            grad_reduce_in_fp32=False,  # V3 recipe sets this to False
             overlap_grad_reduce=True,
             overlap_param_gather=True,
             average_in_collective=True,
@@ -215,7 +207,6 @@ def pretrain_config(
             blend=blend,
             blend_per_split=blend_per_split,
             split=split,
-            # Dataloader config parameters
             data_sharding=True,
             dataloader_type="single",
             num_workers=1,
