@@ -200,8 +200,8 @@ def pretrain_config(
             tensorboard_dir=tensorboard_dir,
         ),
         tokenizer=TokenizerConfig(
-            metadata_path=dict(library="null"),
-            additional_args=dict(vocab_size=DEFAULT_NULL_TOKENIZER_VOCAB_SIZE),
+            metadata_path={"library": "null"},
+            vocab_size=DEFAULT_NULL_TOKENIZER_VOCAB_SIZE,
         ),
         checkpoint=CheckpointConfig(
             save_interval=2000,
