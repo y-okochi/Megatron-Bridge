@@ -123,7 +123,6 @@ class TestTokenizerConfig:
             write_metadata=True,
             tokenizer_library="huggingface",
             chat_template=chat_template,
-            model_type="gpt",
             overwrite_metadata=True,
         )
 
