@@ -21,31 +21,6 @@ from rich.table import Table
 
 from megatron.bridge.utils.common_utils import unwrap_model
 
-def extract_expert_number_from_param(param_name: str) -> int:
-    """
-    Extract expert number from a parameter name ending with .weight{N} or .bias{N}.
-    
-    Args:
-        param_name: Parameter name like "decoder.layers.*.mlp.experts.linear_fc2.weight123"
-        
-    Returns:
-        Expert number (e.g., 123)
-        
-    Raises:
-        ValueError: If the parameter doesn't contain .weight or .bias patterns
-    """
-    if ".weight" in param_name:
-        expert_number_str = param_name.split(".weight")[-1]
-    elif ".bias" in param_name:
-        expert_number_str = param_name.split(".bias")[-1]
-    else:
-        raise ValueError(f"Could not extract expert number from parameter: {param_name}")
-    
-    try:
-        return int(expert_number_str)
-    except ValueError:
-        raise ValueError(f"Expert number '{expert_number_str}' is not a valid integer in parameter: {param_name}")
-
 
 def weights_verification_table(bridge, megatron_model) -> Table:
     """
