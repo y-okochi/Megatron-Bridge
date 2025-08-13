@@ -1126,6 +1126,8 @@ class QKVMapping(MegatronParamMapping[Dict[str, torch.Tensor]]):
             config = self.broadcast_obj_from_pp_rank(None)
         else:
             config = self._get_config(megatron_module)
+            # remove non-picklable objects
+            config.grad_sync_func = config.no_sync_func = None
             config = self.broadcast_obj_from_pp_rank(config)
 
         # Delegate TP/PP gathering.
