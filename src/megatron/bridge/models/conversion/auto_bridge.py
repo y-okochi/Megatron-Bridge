@@ -320,6 +320,10 @@ class AutoBridge(Generic[MegatronModelT]):
             show_progress: Display progress bar during export
             conversion_tasks (Optional[List[WeightConversionTask]]): Pre-built conversion tasks.
                 If not provided, tasks will be built automatically from the models.
+                *Please note that this is an advanced feature and should be used with caution. 
+                The tasks needs to be built with the `get_conversion_tasks` method first and 
+                carefully adjust based on your needs.*
+
 
         Yields:
             HFWeightTuple: Named tuples of (param_name, weight_tensor)
