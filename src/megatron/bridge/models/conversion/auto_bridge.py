@@ -15,7 +15,7 @@
 import dataclasses
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Generic, Iterable, Type, TypeVar, Union
+from typing import Any, Generic, Iterable, List, Optional, Type, TypeVar, Union
 
 import torch.distributed
 import transformers
@@ -26,14 +26,15 @@ from transformers.configuration_utils import PretrainedConfig
 from typing_extensions import Unpack
 
 from megatron.bridge.models.conversion import model_bridge
+from megatron.bridge.models.conversion.model_bridge import (
+    HFWeightTuple,
+    MegatronModelBridge,
+    WeightConversionTask,
+)
 from megatron.bridge.models.gpt_provider import GPTModelProvider
 from megatron.bridge.models.hf_pretrained.causal_lm import PreTrainedCausalLM
 from megatron.bridge.models.hf_pretrained.state import SafeTensorsStateSource
 from megatron.bridge.models.model_provider import GetModelKwargs, ModelProviderMixin
-
-
-if TYPE_CHECKING:
-    from megatron.bridge.models.conversion.model_bridge import HFWeightTuple, MegatronModelBridge
 
 
 MegatronModelT = TypeVar("MegatronModelT", bound=MegatronModule)
@@ -312,6 +313,7 @@ class AutoBridge(Generic[MegatronModelT]):
         model: list[MegatronModelT],
         cpu: bool = False,
         show_progress: bool = True,
+        conversion_tasks: Optional[List[WeightConversionTask]] = None,
     ) -> Iterable["HFWeightTuple"]:
         """
         Export Megatron model weights to HuggingFace format.
@@ -324,6 +326,8 @@ class AutoBridge(Generic[MegatronModelT]):
             model: Megatron model instance or list of instances
             cpu: Whether to move tensors to CPU before yielding
             show_progress: Display progress bar during export
+            conversion_tasks (Optional[List[WeightConversionTask]]): Pre-built conversion tasks.
+                If not provided, tasks will be built automatically from the models.
 
         Yields:
             HFWeightTuple: Named tuples of (param_name, weight_tensor)
@@ -689,6 +693,75 @@ class AutoBridge(Generic[MegatronModelT]):
                 provider.register_pre_wrap_hook(partial(self._model_bridge.load_weights_hf_to_megatron, pre_trained))
 
         return provider
+
+    def get_conversion_tasks(
+        self,
+        megatron_model: Union[MegatronModelT, List[MegatronModelT]],
+        hf_path: str | Path | None = None,
+    ) -> List["WeightConversionTask"]:
+        """Get the conversion tasks for weight conversion between HuggingFace and Megatron formats.
+
+        This method returns the planned conversion tasks that would be executed during
+        weight conversion in either direction. Each task contains information about parameter
+        mappings, source and target parameters, and the conversion logic required.
+
+        The tasks can be used for both HF→Megatron and Megatron→HF conversions since they
+        contain bidirectional mapping information.
+
+        Args:
+            megatron_model: Megatron model instance or list of instances (one per
+                virtual pipeline stage) that participate in the conversion.
+            hf_path: Optional path to load HF weights from. If None, uses weights
+                from the bridge's hf_pretrained instance.
+
+        Returns:
+            List[WeightConversionTask]: List of conversion tasks that would be executed.
+                Each task contains:
+                - param_name: Megatron parameter name
+                - mapping: The parameter mapping object handling the conversion
+                - pp_rank: Pipeline parallel rank that owns the parameter
+                - vp_stage: Virtual pipeline stage index
+                - megatron_module: Reference to the Megatron module owning the parameter
+                - param_weight: The actual parameter tensor
+
+        Example:
+            >>> bridge = AutoBridge.from_hf_pretrained("meta-llama/Llama-3.2-1B")
+            >>> megatron_model = bridge.to_megatron_model(load_weights=False, wrap_with_ddp=False)
+            >>> tasks = bridge.get_conversion_tasks(megatron_model)
+            >>>
+            >>> for task in tasks:
+            ...     # For HF→Megatron direction
+            ...     print(f"HF param {task.mapping.hf_param} -> Megatron param {task.param_name}")
+            ...
+            ...     # For Megatron→HF direction
+            ...     hf_params = task.mapping.hf_param
+            ...     if isinstance(hf_params, str):
+            ...         print(f"Megatron param {task.param_name} -> HF param {hf_params}")
+            ...     else:
+            ...         print(f"Megatron param {task.param_name} -> HF params {list(hf_params.values())}")
+            ...
+            ...     print(f"  Mapping type: {type(task.mapping).__name__}")
+            ...     print(f"  PP rank: {task.pp_rank}, VP stage: {task.vp_stage}")
+
+        Note:
+            This method is useful for:
+            - Debugging weight conversion issues in both directions
+            - Understanding parameter mappings between formats
+            - Custom weight conversion implementations
+            - Analyzing model structure differences
+            - Verifying parameter alignment and shapes
+        """
+        if not isinstance(megatron_model, list):
+            megatron_model = [megatron_model]
+
+        if hf_path is None:
+            if not isinstance(self.hf_pretrained, PreTrainedCausalLM):
+                raise ValueError("hf_path is required when hf_pretrained is not a PreTrainedCausalLM instance")
+            pre_trained = self.hf_pretrained
+        else:
+            pre_trained = PreTrainedCausalLM.from_pretrained(hf_path)
+
+        return self._model_bridge.build_conversion_tasks(pre_trained, megatron_model)
 
     @property
     def transformer_config(self) -> TransformerConfig:
