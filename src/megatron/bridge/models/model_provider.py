@@ -201,10 +201,6 @@ class ModelProviderMixin(abc.ABC, Generic[ModelT]):
         if seed is not None:
             model_parallel_cuda_manual_seed(seed, **(seed_kwargs or {}))
 
-    def __call__(self, *args, **kwargs: Unpack["GetModelKwargs"]) -> list[ModelT]:
-        """A convenience wrapper around `provide_distributed_model`."""
-        return self.provide_distributed_model(*args, **kwargs)
-
     @property
     def meta_model(self) -> list[ModelT]:
         """Returns the model instantiated on the meta device for inspection.
