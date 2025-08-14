@@ -547,7 +547,7 @@ class TestGetModel:
         mock_create_model.return_value = [model]
 
         # Hook now operates on individual model modules, not the entire list
-        pre_wrap_hook = Mock()
+        pre_wrap_hook = Mock(return_value=None)
 
         mock_correct_amax.return_value = [model]
         mock_ddp_wrap.return_value = [model]
@@ -560,8 +560,8 @@ class TestGetModel:
         # Assertions
         assert result == [model]
         mock_create_model.assert_called_once()
-        # Hook should be called once for each model module in the list
-        pre_wrap_hook.assert_called_once_with(model)
+        # Hook should be called once with the model list
+        pre_wrap_hook.assert_called_once_with([model])
         mock_ddp_wrap.assert_called_once()
 
 
