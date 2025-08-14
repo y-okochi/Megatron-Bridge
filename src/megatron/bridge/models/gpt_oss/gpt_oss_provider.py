@@ -16,10 +16,9 @@ import logging
 from dataclasses import dataclass
 from typing import Callable, List, Literal, Optional, Tuple, Union
 
-import torch
-
 from megatron.bridge.models.gpt_provider import GPTModelProvider
 from megatron.core.fusions.fused_bias_geglu import quick_gelu
+from megatron.core.transformer.enums import AttnBackend
 
 logger = logging.getLogger(__name__)
 
@@ -63,9 +62,10 @@ class GPTOSSProvider(GPTModelProvider):
     activation_func: Callable = quick_gelu
     glu_linear_offset: float = 1.0
     bias_activation_fusion: bool = True
-    window_attn_skip_freq: Optional[Union[int, List[int]]] = 2  # alternative SWA/full
-    attention_backend: str = "local"  # supports "local" and "fused"
     bias_dropout_fusion: bool = False
+    window_attn_skip_freq: Optional[Union[int, List[int]]] = 2  # alternative SWA/full
+    attention_backend: AttnBackend = AttnBackend.local  # currently only "local" is supported
+    activation_func_clamp_value: Optional[float] = 7.0
 
 @dataclass
 class GPTOSSProvider120B(GPTOSSProvider):

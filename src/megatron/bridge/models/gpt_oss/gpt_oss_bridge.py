@@ -15,12 +15,11 @@
 import json
 from functools import cached_property, partial
 from pathlib import Path
-from typing import Tuple, Union, Dict, Optional
-
+from typing import Union, Dict, Optional, Mapping
+import math
 import torch
 import torch.nn as nn
 from megatron.core.models.gpt.gpt_model import GPTModel
-from megatron.core.fusions.fused_bias_geglu import quick_gelu
 from transformers import GenerationConfig, GptOssForCausalLM
 
 from megatron.bridge.models.conversion.mapping_registry import MegatronMappingRegistry
@@ -31,9 +30,9 @@ from megatron.bridge.models.conversion.param_mapping import (
     QKVMapping,
     GatedMLPMapping,
 )
-from megatron.bridge.models.conversion.utils import extract_expert_number_from_param
 from megatron.bridge.models.gpt_oss.gpt_oss_provider import GPTOSSProvider
 from megatron.bridge.models.hf_pretrained.causal_lm import PreTrainedCausalLM
+from megatron.bridge.utils.common_utils import extract_expert_number_from_param
 
 
 @MegatronModelBridge.register_bridge(source=GptOssForCausalLM, target=GPTModel)
@@ -49,6 +48,12 @@ class GPTOSSBridge(MegatronModelBridge):
         >>> provider = bridge.to_megatron_provider()
     """
 
+    def __init__(self):
+        super().__init__()
+        # gpt-oss HF weights has one weight for all the experts, but megatron has one for each expert
+        # We need to cache the weights to load and dequantize the expert weights only once.
+        self.hf_weights_cache = {}
+
     def provider_bridge(self, hf_pretrained: PreTrainedCausalLM) -> GPTOSSProvider:
         hf_config = hf_pretrained.config
 
@@ -60,70 +65,31 @@ class GPTOSSBridge(MegatronModelBridge):
             except Exception:
                 generation_config = None
 
-        # Extract rope scaling parameters
-        rope_scaling = getattr(hf_config, 'rope_scaling', {})
-
         provider = GPTOSSProvider(
-            # Basic model architecture
             num_layers=hf_config.num_hidden_layers,
-            hidden_size=hf_config.hidden_size,
-            num_attention_heads=hf_config.num_attention_heads,
-            num_query_groups=hf_config.num_key_value_heads,
-            ffn_hidden_size=hf_config.intermediate_size,
-            vocab_size=hf_config.vocab_size,
-            seq_length=hf_config.max_position_embeddings,
-
-            # MoE configuration
-            num_moe_experts=getattr(hf_config, 'num_local_experts', None),
-            moe_router_topk=getattr(hf_config, 'num_experts_per_tok', 4),
-            moe_ffn_hidden_size=hf_config.intermediate_size,
-            moe_grouped_gemm=True,  # Default for GPT-OSS
-            moe_router_load_balancing_type="none",  # Based on router_aux_loss_coef presence
-            moe_token_dispatcher_type="alltoall",
-
-            # Attention configuration
-            attention_dropout=getattr(hf_config, 'attention_dropout', 0.0),
-            hidden_dropout=getattr(hf_config, 'hidden_dropout', 0.0),
-
-            # Position embedding and rope configuration
-            position_embedding_type="yarn",
-            rotary_base=getattr(hf_config, 'rope_theta', 150000),
-            rotary_scaling_factor=rope_scaling.get('factor', 32.0),
-            yarn_original_max_position_embeddings=rope_scaling.get('original_max_position_embeddings', 4096),
-            yarn_beta_fast=rope_scaling.get('beta_fast', 32.0),
-            yarn_beta_slow=rope_scaling.get('beta_slow', 1.0),
-
-            # Sliding window attention
-            window_size=(getattr(hf_config, 'sliding_window', 128), 0),
-            window_attn_skip_freq=2,  # Based on layer_types alternating pattern
-
-            # Normalization
-            normalization="RMSNorm",
-            layernorm_epsilon=getattr(hf_config, 'rms_norm_eps', 1e-5),
-
-            # Activation and GLU configuration
-            activation_func=quick_gelu,  # Based on "hidden_act": "silu" in HF config
-            glu_linear_offset=getattr(hf_config, 'swiglu_limit', 7.0),
-            gated_linear_unit=True,
-
-            # Attention configuration (continued)
-            softmax_type="learnable",  # GPT-OSS specific
-
-            # Other configurations
-            init_method_std=getattr(hf_config, 'initializer_range', 0.02),
-            share_embeddings_and_output_weights=getattr(hf_config, 'tie_word_embeddings', False),
-
-            # Precision and performance
+            num_moe_experts=hf_config.num_local_experts,
             bf16=True,
             params_dtype=torch.bfloat16,
-            make_vocab_size_divisible_by=self.make_vocab_size_divisible_by(hf_config.vocab_size),
-
-            # Generation config
             generation_config=generation_config,
         )
 
-
         return provider
+
+    def load_hf_weights(self, hf_param: str | dict[str, str], hf_state_dict: Mapping[str, torch.Tensor]) -> torch.Tensor:
+        """Load weights from HuggingFace state dict and dequantize if necessary."""
+        if isinstance(hf_param, str):
+            hf_weights = hf_state_dict[hf_param]
+        elif "blocks" in hf_param and "scales" in hf_param:
+            new_hf_param_name = hf_param['blocks'].replace("_blocks", "")
+            if new_hf_param_name in self.hf_weights_cache:
+                hf_weights = self.hf_weights_cache[new_hf_param_name]
+            else:
+                hf_weights = _dequantize_mxfp4(hf_state_dict[hf_param['blocks']], hf_state_dict[hf_param['scales']])
+                # save in cache
+                self.hf_weights_cache[new_hf_param_name] = hf_weights
+        else:
+            hf_weights = {k: hf_state_dict[v] for k, v in hf_param.items()}
+        return hf_weights
 
     def mapping_registry(self) -> MegatronMappingRegistry:
         """
@@ -132,18 +98,17 @@ class GPTOSSBridge(MegatronModelBridge):
         """
 
         # Dictionary maps HF parameter names -> Megatron parameter names
-        # Based on the mapping from the OpenAI GPT-OSS importer
         param_mappings = {
-            "embedding.weight": "embedding.word_embeddings.weight",
-            "norm.scale": "decoder.final_layernorm.weight",
-            "unembedding.weight": "output_layer.weight",
-            "model.layers.*.attn.norm.scale": "decoder.layers.*.self_attention.linear_qkv.layer_norm_weight",
-            "model.layers.*.attn.out.bias": "decoder.layers.*.self_attention.linear_proj.bias",
-            "model.layers.*.attn.out.weight": "decoder.layers.*.self_attention.linear_proj.weight",
-            "model.layers.*.attn.sinks": "decoder.layers.*.self_attention.core_attention.softmax_offset",
-            "model.layers.*.mlp.norm.scale": "decoder.layers.*.pre_mlp_layernorm.weight",
-            "model.layers.*.mlp.gate.bias": "decoder.layers.*.mlp.router.bias",
-            "model.layers.*.mlp.gate.weight": "decoder.layers.*.mlp.router.weight",
+            "model.embed_tokens.weight": "embedding.word_embeddings.weight",
+            "model.norm.weight": "decoder.final_layernorm.weight",
+            "lm_head.weight": "output_layer.weight",
+            "model.layers.*.input_layernorm.weight": "decoder.layers.*.self_attention.linear_qkv.layer_norm_weight",
+            "model.layers.*.self_attn.o_proj.bias": "decoder.layers.*.self_attention.linear_proj.bias",
+            "model.layers.*.self_attn.o_proj.weight": "decoder.layers.*.self_attention.linear_proj.weight",
+            "model.layers.*.self_attn.sinks": "decoder.layers.*.self_attention.core_attention.softmax_offset",
+            "model.layers.*.post_attention_layernorm.weight": "decoder.layers.*.pre_mlp_layernorm.weight",
+            "model.layers.*.mlp.router.bias": "decoder.layers.*.mlp.router.bias",
+            "model.layers.*.mlp.router.weight": "decoder.layers.*.mlp.router.weight",
         }
 
         mapping_list = []
@@ -153,13 +118,20 @@ class GPTOSSBridge(MegatronModelBridge):
 
         mapping_list.extend([
             QKVMapping(
-                q="model.layers.*.attn.q_proj.*",
-                k="model.layers.*.attn.k_proj.*",
-                v="model.layers.*.attn.v_proj.*",
-                megatron_param="decoder.layers.*.self_attention.linear_qkv.*",
+                q="model.layers.*.self_attn.q_proj.weight",
+                k="model.layers.*.self_attn.k_proj.weight",
+                v="model.layers.*.self_attn.v_proj.weight",
+                megatron_param="decoder.layers.*.self_attention.linear_qkv.weight",
+            ),
+            QKVMapping(
+                q="model.layers.*.self_attn.q_proj.bias",
+                k="model.layers.*.self_attn.k_proj.bias",
+                v="model.layers.*.self_attn.v_proj.bias",
+                megatron_param="decoder.layers.*.self_attention.linear_qkv.bias",
             ),
             GPTOSSMLPDownProjMapping(
-                hf_param="model.layers.*.mlp.experts.down_proj",
+                hf_param="model.layers.*.mlp.experts.down_proj_blocks",
+                hf_scales="model.layers.*.mlp.experts.down_proj_scales",
                 megatron_param="decoder.layers.*.mlp.experts.linear_fc2.weight*",
             ),
             GPTOSSMLPDownProjMapping(
@@ -167,7 +139,8 @@ class GPTOSSBridge(MegatronModelBridge):
                 megatron_param="decoder.layers.*.mlp.experts.linear_fc2.bias*",
             ),
             GPTOSSMLPGateUpProjMapping(
-                hf_param="model.layers.*.mlp.experts.gate_up_proj",
+                hf_param="model.layers.*.mlp.experts.gate_up_proj_blocks",
+                hf_scales="model.layers.*.mlp.experts.gate_up_proj_scales",
                 megatron_param="decoder.layers.*.mlp.experts.linear_fc1.weight*",
             ),
             GPTOSSMLPGateUpProjMapping(
@@ -183,13 +156,14 @@ class GPTOSSMLPDownProjMapping(AutoMapping):
     """
     MLPDownProj for expert weights GPT-OSS models.
     """
-    def __init__(self, megatron_param: str, hf_param: str):
+    def __init__(self, megatron_param: str, hf_param: str, hf_scales: Optional[str] = None):
+        if hf_scales is not None:
+            hf_param = {"blocks": hf_param, "scales": hf_scales}
         super().__init__(megatron_param, hf_param)
 
     def hf_to_megatron(self, hf_weights: torch.Tensor, megatron_module: nn.Module) -> torch.Tensor:
         global_expert_number = extract_expert_number_from_param(self.megatron_param)
-        hf_weights = hf_weights[global_expert_number]
-        return super().hf_to_megatron(hf_weights, megatron_module)
+        return super().hf_to_megatron(hf_weights[global_expert_number], megatron_module)
     
     def megatron_to_hf(self, megatron_weights: torch.Tensor, megatron_module: nn.Module) -> torch.Tensor:
         return super().megatron_to_hf(megatron_weights, megatron_module)
@@ -202,19 +176,14 @@ class GPTOSSMLPGateUpProjMapping(MegatronParamMapping):
     """
     MLPGateUpProj for expert weights GPT-OSS models.
     """
-    def __init__(self, megatron_param: str, hf_param: str):
+    def __init__(self, megatron_param: str, hf_param: str, hf_scales: Optional[str] = None):
+        if hf_scales is not None:
+            hf_param = {"blocks": hf_param, "scales": hf_scales}
         super().__init__(megatron_param, hf_param)
-        self._mapping = GatedMLPMapping(
-            # the hf name here is not important, just serve as placeholder
-            megatron_param, gate=f"hf.{megatron_param}.gate", up=f"hf.{megatron_param}.up"
-        )
 
-    def hf_to_megatron(self, hf_weights: torch.Tensor, megatron_module: nn.Module) -> torch.Tensor:
+    def hf_to_megatron(self, hf_weights: Union[torch.Tensor, Dict], megatron_module: nn.Module) -> torch.Tensor:
         global_expert_number = extract_expert_number_from_param(self.megatron_param)
-        hf_weights = hf_weights[global_expert_number].chunk(2, dim=-1)
-        return self._mapping.hf_to_megatron(
-            {"gate": hf_weights[0], "up": hf_weights[1]}, megatron_module
-        )
+        return torch.cat((hf_weights[global_expert_number][::2, ...], hf_weights[global_expert_number][1::2, ...]), dim=0)
     
     def megatron_to_hf(self, megatron_weights: torch.Tensor, megatron_module: nn.Module) -> torch.Tensor:
         return super().megatron_to_hf(megatron_weights, megatron_module)
@@ -222,3 +191,60 @@ class GPTOSSMLPGateUpProjMapping(MegatronParamMapping):
     def _validate_patterns(self, *args, **kwargs):
         # allow number of wildcards to mismatch in this mapping
         pass
+
+
+def _dequantize_mxfp4(
+    blocks: torch.Tensor,
+    scales: torch.Tensor,
+    *,
+    dtype: torch.dtype = torch.bfloat16,
+    rows_per_chunk: int = 32768 * 1024,
+) -> torch.Tensor:
+    assert blocks.shape[:-1] == scales.shape, f"{blocks.shape=} does not match {scales.shape=}"
+    FP4_VALUES = [
+        +0.0,
+        +0.5,
+        +1.0,
+        +1.5,
+        +2.0,
+        +3.0,
+        +4.0,
+        +6.0,
+        -0.0,
+        -0.5,
+        -1.0,
+        -1.5,
+        -2.0,
+        -3.0,
+        -4.0,
+        -6.0,
+    ]
+    scales = scales.to(torch.int32) - 127
+    lut = torch.tensor(FP4_VALUES, dtype=dtype, device=blocks.device)
+
+    *prefix_shape, G, B = blocks.shape
+    rows_total = math.prod(prefix_shape) * G
+
+    blocks = blocks.reshape(rows_total, B)
+    scales = scales.reshape(rows_total, 1)
+
+    out = torch.empty(rows_total, B * 2, dtype=dtype, device=blocks.device)
+
+    for r0 in range(0, rows_total, rows_per_chunk):
+        r1 = min(r0 + rows_per_chunk, rows_total)
+
+        blk = blocks[r0:r1]
+        exp = scales[r0:r1]
+
+        # nibble indices -> int64
+        idx_lo = (blk & 0x0F).to(torch.long)
+        idx_hi = (blk >> 4).to(torch.long)
+
+        sub = out[r0:r1]
+        sub[:, 0::2] = lut[idx_lo]
+        sub[:, 1::2] = lut[idx_hi]
+
+        torch.ldexp(sub, exp, out=sub)
+        del idx_lo, idx_hi, blk, exp
+
+    return out.reshape(*prefix_shape, G, B * 2).view(*prefix_shape, G * B * 2)
