@@ -28,7 +28,7 @@ from megatron.core.utils import (
     get_pg_size,
 )
 
-from megatron.bridge.models.conversion.utils import get_module_and_param_from_name
+from megatron.bridge.models.conversion.utils import get_module_and_param_from_name, remove_non_pickleables
 
 
 WeightType = TypeVar("WeightType", torch.Tensor, Dict[str, torch.Tensor])
@@ -359,6 +359,7 @@ class MegatronParamMapping(ABC, Generic[WeightType]):
         torch.distributed.broadcast_object_list(obj_list, src=global_src, group=self.pp_group)
 
         return obj_list[0]
+
 
     def broadcast_tensor_to_tp_ranks(self, tensor: torch.Tensor, src_rank: int = 0) -> torch.Tensor:
         """Broadcast a tensor to all TP ranks.
@@ -1126,8 +1127,8 @@ class QKVMapping(MegatronParamMapping[Dict[str, torch.Tensor]]):
             config = self.broadcast_obj_from_pp_rank(None)
         else:
             config = self._get_config(megatron_module)
-            # remove non-picklable objects
-            config.grad_sync_func = config.no_sync_func = None
+            # create shallow copy and remove non-picklable objects with max depth=2
+            config = remove_non_pickleables(config, max_depth=2)
             config = self.broadcast_obj_from_pp_rank(config)
 
         # Delegate TP/PP gathering.
