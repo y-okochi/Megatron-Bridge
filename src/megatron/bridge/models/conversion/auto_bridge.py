@@ -320,8 +320,8 @@ class AutoBridge(Generic[MegatronModelT]):
             show_progress: Display progress bar during export
             conversion_tasks (Optional[List[WeightConversionTask]]): Pre-built conversion tasks.
                 If not provided, tasks will be built automatically from the models.
-                *Please note that this is an advanced feature and should be used with caution. 
-                The tasks needs to be built with the `get_conversion_tasks` method first and 
+                *Please note that this is an advanced feature and should be used with caution.
+                The tasks needs to be built with the `get_conversion_tasks` method first and
                 carefully adjust based on your needs.*
 
 
@@ -341,7 +341,11 @@ class AutoBridge(Generic[MegatronModelT]):
         """
         dispatch_instance = (self._get_causal_lm_architecture(), self._get_model_instance(model))
         return model_bridge.stream_weights_megatron_to_hf(
-            dispatch_instance, model, self.hf_pretrained, cpu=cpu, show_progress=show_progress,
+            dispatch_instance,
+            model,
+            self.hf_pretrained,
+            cpu=cpu,
+            show_progress=show_progress,
             conversion_tasks=conversion_tasks,
         )
 
