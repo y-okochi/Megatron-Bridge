@@ -219,7 +219,7 @@ def load_megatron_model(
             return model_cfg.provide()
         else:
             provider = _gpt_provider if model_type == "gpt" else _mamba_provider
-            return provider.provide_distributed_model(mlm_args, model_cfg)
+            return provider(mlm_args, model_cfg)
 
     # Auto-detect if we should skip temp dist context
     if skip_temp_dist_context is None:

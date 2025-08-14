@@ -341,7 +341,11 @@ class AutoBridge(Generic[MegatronModelT]):
         """
         dispatch_instance = (self._get_causal_lm_architecture(), self._get_model_instance(model))
         return model_bridge.stream_weights_megatron_to_hf(
-            dispatch_instance, model, self.hf_pretrained, cpu=cpu, show_progress=show_progress,
+            dispatch_instance,
+            model,
+            self.hf_pretrained,
+            cpu=cpu,
+            show_progress=show_progress,
             conversion_tasks=conversion_tasks,
         )
 

@@ -30,7 +30,7 @@ from megatron.bridge.models.qwen.qwen_provider import Qwen2ModelProvider
 @MegatronModelBridge.register_bridge(source=Qwen2ForCausalLM, target=GPTModel)
 class Qwen2Bridge(MegatronModelBridge):
     """
-    Megatron Hub Bridge for Qwen2 Causal LM.
+    Megatron Bridge for Qwen2 Causal LM.
 
     This bridge handles the conversion between HuggingFace Qwen2ForCausalLM
     and Megatron-Core GPTModel formats, including weight mappings and
@@ -65,8 +65,6 @@ class Qwen2Bridge(MegatronModelBridge):
             generation_config=hf_pretrained.generation_config,
             add_qkv_bias=True,  # Qwen2 has bias in QKV projections
         )
-
-        provider.gradient_accumulation_fusion = False
 
         return provider
 

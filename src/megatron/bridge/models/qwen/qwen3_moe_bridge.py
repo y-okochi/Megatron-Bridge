@@ -16,11 +16,11 @@ import torch
 from megatron.core.models.gpt.gpt_model import GPTModel
 from transformers import Qwen3MoeForCausalLM
 
-from megatron.bridge.models import GatedMLPMapping
 from megatron.bridge.models.conversion.mapping_registry import MegatronMappingRegistry
 from megatron.bridge.models.conversion.model_bridge import MegatronModelBridge
 from megatron.bridge.models.conversion.param_mapping import (
     AutoMapping,
+    GatedMLPMapping,
     QKVMapping,
 )
 from megatron.bridge.models.hf_pretrained.causal_lm import PreTrainedCausalLM
@@ -70,8 +70,6 @@ class Qwen3MoEBridge(MegatronModelBridge):
             moe_grouped_gemm=True,
         )
 
-        provider.gradient_accumulation_fusion = False
-
         return provider
 
     def mapping_registry(self) -> MegatronMappingRegistry:
@@ -117,21 +115,6 @@ class Qwen3MoEBridge(MegatronModelBridge):
                     hf_param="model.layers.*.mlp.experts.*.down_proj.weight",
                     megatron_param="decoder.layers.*.mlp.experts.linear_fc2.weight*",
                 ),
-                # # MoE Experts: Map expert gate projections
-                # MoEMapping(
-                #     megatron_param="decoder.layers.*.mlp.experts.linear_fc1.weight*",
-                #     hf_param="model.layers.*.mlp.experts.*.gate_proj.weight",
-                # ),
-                # # MoE Experts: Map expert up projections
-                # MoEMapping(
-                #     megatron_param="decoder.layers.*.mlp.experts.linear_fc1.weight*",
-                #     hf_param="model.layers.*.mlp.experts.*.up_proj.weight",
-                # ),
-                # # MoE Experts: Map expert down projections
-                # MoEMapping(
-                #     megatron_param="decoder.layers.*.mlp.experts.linear_fc2.weight*",
-                #     hf_param="model.layers.*.mlp.experts.*.down_proj.weight",
-                # ),
             ]
         )
 

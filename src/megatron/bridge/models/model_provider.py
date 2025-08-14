@@ -105,7 +105,11 @@ class ModelProviderMixin(abc.ABC, Generic[ModelT]):
         data_parallel_random_init: bool = True,
         use_cpu_initialization: None | bool = False,
         init_model_with_meta_device: bool | None = None,
-        pre_wrap_hook: Union[Callable[[list[MegatronModule]], list[MegatronModule]], list[Callable[[list[MegatronModule]], list[MegatronModule]]]] | None = None,
+        pre_wrap_hook: Union[
+            Callable[[list[MegatronModule]], list[MegatronModule]],
+            list[Callable[[list[MegatronModule]], list[MegatronModule]]],
+        ]
+        | None = None,
         post_wrap_hook: Callable[[list[MegatronModule]], list[MegatronModule]] | None = None,
     ) -> list[ModelT]:
         """Instantiate and wrap the model for distributed training.
@@ -151,10 +155,12 @@ class ModelProviderMixin(abc.ABC, Generic[ModelT]):
 
         # Convert list of hooks to a single composed callable
         if isinstance(pre_wrap_hook, list):
+
             def composed_pre_wrap_hook(model: list[MegatronModule]) -> list[MegatronModule]:
                 for hook in pre_wrap_hook:
                     model = hook(model)
                 return model
+
             final_pre_wrap_hook = composed_pre_wrap_hook
         else:
             final_pre_wrap_hook = pre_wrap_hook or self.pre_wrap_hook
@@ -402,7 +408,13 @@ class GetModelKwargs(TypedDict, total=False):
     data_parallel_random_init: bool
     use_cpu_initialization: bool | None
     init_model_with_meta_device: bool | None
-    pre_wrap_hook: Union[Callable[[list[MegatronModule]], list[MegatronModule]], list[Callable[[list[MegatronModule]], list[MegatronModule]]]] | None
+    pre_wrap_hook: (
+        Union[
+            Callable[[list[MegatronModule]], list[MegatronModule]],
+            list[Callable[[list[MegatronModule]], list[MegatronModule]]],
+        ]
+        | None
+    )
     post_wrap_hook: Callable[[list[MegatronModule]], list[MegatronModule]] | None
 
 
@@ -418,7 +430,11 @@ def get_model(
     data_parallel_random_init: bool = True,
     use_cpu_initialization: None | bool = False,
     init_model_with_meta_device: bool | None = None,
-    pre_wrap_hook: Union[Callable[[list[MegatronModule]], list[MegatronModule]], list[Callable[[list[MegatronModule]], list[MegatronModule]]]] | None = None,
+    pre_wrap_hook: Union[
+        Callable[[list[MegatronModule]], list[MegatronModule]],
+        list[Callable[[list[MegatronModule]], list[MegatronModule]]],
+    ]
+    | None = None,
 ) -> list[MegatronModule]:
     """Create and configure a model for distributed training.
 

@@ -66,8 +66,6 @@ class Qwen3Bridge(MegatronModelBridge):
             qk_layernorm=True,  # Qwen3 uses QK layernorm
         )
 
-        provider.gradient_accumulation_fusion = False
-
         return provider
 
     def mapping_registry(self) -> MegatronMappingRegistry:

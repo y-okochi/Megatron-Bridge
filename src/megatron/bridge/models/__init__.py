@@ -26,7 +26,6 @@ from megatron.bridge.models.conversion.param_mapping import (
     RowParallelMapping,
 )
 from megatron.bridge.models.gpt_provider import GPTModelProvider
-from megatron.bridge.models.hf_pretrained.causal_lm import PreTrainedCausalLM
 from megatron.bridge.models.llama import (
     CodeLlamaModelProvider7B,
     CodeLlamaModelProvider13B,
@@ -57,12 +56,14 @@ from megatron.bridge.models.qwen import (
     Qwen2ModelProvider500M,
     Qwen3ModelProvider,
     Qwen3ModelProvider1P7B,
-    Qwen3ModelProvider7B,
+    Qwen3ModelProvider4B,
+    Qwen3ModelProvider8B,
     Qwen3ModelProvider14B,
-    Qwen3ModelProvider28B,
-    Qwen3ModelProvider110B,
+    Qwen3ModelProvider32B,
+    Qwen3ModelProvider600M,
     Qwen3MoEModelProvider,
-    Qwen3MoEModelProvider235B,
+    Qwen3MoEModelProvider30B_A3B,
+    Qwen3MoEModelProvider235B_A22B,
     Qwen25ModelProvider1P5B,
     Qwen25ModelProvider3B,
     Qwen25ModelProvider7B,
@@ -75,7 +76,6 @@ from megatron.bridge.models.t5_provider import T5ModelProvider
 
 
 __all__ = [
-    "PreTrainedCausalLM",
     "AutoBridge",
     "MegatronMappingRegistry",
     "MegatronModelBridge",
@@ -121,11 +121,13 @@ __all__ = [
     "Qwen25ModelProvider32B",
     "Qwen25ModelProvider72B",
     "Qwen3ModelProvider",
+    "Qwen3ModelProvider600M",
     "Qwen3ModelProvider1P7B",
-    "Qwen3ModelProvider7B",
+    "Qwen3ModelProvider4B",
+    "Qwen3ModelProvider8B",
     "Qwen3ModelProvider14B",
-    "Qwen3ModelProvider28B",
-    "Qwen3ModelProvider110B",
+    "Qwen3ModelProvider32B",
     "Qwen3MoEModelProvider",
-    "Qwen3MoEModelProvider235B",
+    "Qwen3MoEModelProvider30B_A3B",
+    "Qwen3MoEModelProvider235B_A22B",
 ]
