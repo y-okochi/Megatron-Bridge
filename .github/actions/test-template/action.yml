@@ -54,7 +54,7 @@ runs:
       shell: bash
       run: |
         sudo apt-get update
-        sudo apt-get install -y curl uuid-runtime systemd
+        sudo apt-get install -y curl uuid-runtime
 
     - name: Install Azure CLI
       if: ${{ inputs.has-azure-credentials == 'true' }}
