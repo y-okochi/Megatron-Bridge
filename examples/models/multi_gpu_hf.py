@@ -92,7 +92,7 @@ def main(
         table.add_column("Device")
         table.add_column("Matches Original", justify="center")
 
-    megatron_model = model_provider(wrap_with_ddp=False)
+    megatron_model = model_provider.provide_distributed_model(wrap_with_ddp=False)
 
     # Debug: Print model info
     if is_rank_0:
