@@ -64,7 +64,7 @@ class AutoBridge(Generic[MegatronModelT]):
         >>> # Load and convert a model to Megatron format
         >>> bridge = AutoBridge.from_hf_pretrained("meta-llama/Llama-3-8B")
         >>> provider = bridge.to_megatron_provider()
-        >>> megatron_model = provider(wrap_with_ddp=False)
+        >>> megatron_model = provider.provide_distributed_model(wrap_with_ddp=False)
 
         >>> # Export a Megatron model back to HuggingFace format
         >>> bridge.save_hf_pretrained(megatron_model, "./exported_model")
@@ -162,7 +162,7 @@ class AutoBridge(Generic[MegatronModelT]):
             >>>
             >>> # Create Megatron model with random initialization
             >>> provider = bridge.to_megatron_provider(load_weights=False)
-            >>> model = provider(wrap_with_ddp=False)
+            >>> model = provider.provide_distributed_model(wrap_with_ddp=False)
 
             >>> # Or use for architecture exploration
             >>> transformer_config = bridge.transformer_config
@@ -633,7 +633,7 @@ class AutoBridge(Generic[MegatronModelT]):
         **kwargs: Unpack[GetModelKwargs],
     ) -> list[MegatronModelT]:
         provider = self.to_megatron_provider(load_weights, hf_path)
-        return provider(**kwargs)
+        return provider.provide_distributed_model(**kwargs)
 
     def to_megatron_provider(self, load_weights: bool = True, hf_path: str | Path | None = None) -> GPTModelProvider:
         """
