@@ -15,9 +15,11 @@
 
 from megatron.bridge.models.auto_bridge import AutoBridge
 from megatron.bridge.models.causal_bridge import CausalLMBridge
+from megatron.bridge.package_info import __version__
 
 
 __all__ = [
     "AutoBridge",
     "CausalLMBridge",
+    "__version__",
 ]
