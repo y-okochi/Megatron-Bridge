@@ -307,3 +307,34 @@ class Qwen3MoEModelProvider235B(Qwen3MoEModelProvider):
     moe_router_topk: int = 8  # 8 experts activated per token
     vocab_size: int = 152064
     seq_length: int = 8192
+
+@dataclass
+class Qwen3MoEModelProvider30B(Qwen3MoEModelProvider):
+    """
+    Config for Qwen3 30B-A3B MoE: https://huggingface.co/Qwen/Qwen3-30B-A3B-Thinking-2507
+
+    This is a 30B total parameter model with 3B active parameters per token.
+    """
+
+    num_layers: int = 48
+    hidden_size: int = 2048
+    num_attention_heads: int = 32
+    num_query_groups: int = 4
+    ffn_hidden_size: int = 6144  # Standard FFN for non-expert layers
+    moe_ffn_hidden_size: int = 768  # Expert FFN hidden size
+
+@dataclass
+class Qwen3MoEModelProvider480B(Qwen3MoEModelProvider):
+    """
+    Config for Qwen3 480B-A35B MoE: https://huggingface.co/Qwen/Qwen3-Coder-480B-A35B-Instruct
+
+    This is a 480B total parameter model with 35B active parameters per token.
+    """
+
+    num_layers: int = 62
+    hidden_size: int = 6144
+    num_attention_heads: int = 96
+    num_query_groups: int = 8
+    ffn_hidden_size: int = 8192  # Standard FFN for non-expert layers
+    moe_ffn_hidden_size: int = 2560  # Expert FFN hidden size
+    num_moe_experts: int = 160

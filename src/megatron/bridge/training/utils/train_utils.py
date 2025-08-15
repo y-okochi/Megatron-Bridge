@@ -448,19 +448,19 @@ def training_log(
             track_names.append("load_balancing_loss")
         if config.model.moe_z_loss_coeff is not None:
             track_names.append("z_loss")
-        track_moe_metrics(
-            loss_scale=moe_loss_scale,
-            iteration=train_state.step,
-            writer=tb_logger,
-            wandb_writer=wandb_logger,
-            total_loss_dict=total_loss_dict,
-            per_layer_logging=config.model.moe_per_layer_logging,
-            force_initialize=True,
-            track_names=track_names,
-            num_layers=config.model.num_layers,
-            moe_layer_freq=config.model.moe_layer_freq,
-            mtp_num_layers=config.model.mtp_num_layers,
-        )
+        # track_moe_metrics(
+        #     loss_scale=moe_loss_scale,
+        #     iteration=train_state.step,
+        #     writer=tb_logger,
+        #     wandb_writer=wandb_logger,
+        #     total_loss_dict=total_loss_dict,
+        #     per_layer_logging=config.model.moe_per_layer_logging,
+        #     force_initialize=True,
+        #     track_names=track_names,
+        #     num_layers=config.model.num_layers,
+        #     moe_layer_freq=config.model.moe_layer_freq,
+        #     mtp_num_layers=config.model.mtp_num_layers,
+        # )
     if config.model.mtp_num_layers is not None:
         mtp_loss_scale = 1 / get_num_microbatches()
         MTPLossLoggingHelper.track_mtp_metrics(

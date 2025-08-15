@@ -332,12 +332,15 @@ def _initialize_distributed(
         if get_rank_safe() == 0:
             print("> initializing torch distributed ...", flush=True)
 
-        # Manually set the device ids.
+        # Robust device management for multi-node training
         if device_count > 0:
             if dist_config.external_gpu_device_mapping:
-                torch.cuda.set_device(0)
+                # Use device 0 for external mapping
+                _safe_set_cuda_device(0, "external_gpu_device_mapping")
             else:
-                torch.cuda.set_device(get_local_rank_preinit())
+                # Use local rank for standard multi-node setup
+                local_rank = _get_validated_local_rank(device_count)
+                _safe_set_cuda_device(local_rank, f"local_rank={local_rank}")
 
         # Call the init process
         init_process_group_kwargs = {
@@ -348,10 +351,16 @@ def _initialize_distributed(
         }
 
         torch.distributed.init_process_group(**init_process_group_kwargs)
+        
+        # Verify device is properly set after distributed init
+        if device_count > 0:
+            _verify_cuda_device_setting()
+            
         if dist_config.external_gpu_device_mapping:
             torch.distributed.barrier(device_ids=[0])
         else:
-            torch.distributed.barrier(device_ids=[get_local_rank_preinit()])
+            local_rank = _get_validated_local_rank(device_count)
+            torch.distributed.barrier(device_ids=[local_rank])
 
     # Set the tensor model-parallel, pipeline model-parallel, and
     # data-parallel communicators.
@@ -412,6 +421,127 @@ def _set_random_seed(
     torch.manual_seed(seed)
     if torch.cuda.device_count() > 0:
         tensor_parallel.model_parallel_cuda_manual_seed(seed, te_rng_tracker, inference_rng_tracker)
+
+
+def _safe_set_cuda_device(device_id: int, context: str) -> None:
+    """Safely set CUDA device with comprehensive error handling and validation.
+    
+    Args:
+        device_id: The CUDA device ID to set
+        context: Context string for error messages
+        
+    Raises:
+        RuntimeError: If device setting fails or device is invalid
+    """
+    try:
+        # Validate device ID
+        device_count = torch.cuda.device_count()
+        if device_id < 0 or device_id >= device_count:
+            raise RuntimeError(
+                f"Invalid CUDA device ID {device_id}. "
+                f"Available devices: 0-{device_count-1}. "
+                f"Context: {context}"
+            )
+        
+        # Check if device is already set to the target
+        current_device = torch.cuda.current_device()
+        if current_device == device_id:
+            if get_rank_safe() == 0:
+                print(f"CUDA device already set to {device_id}, skipping set_device call")
+            return
+            
+        # Set the device
+        torch.cuda.set_device(device_id)
+        
+        # Verify the device was set correctly
+        actual_device = torch.cuda.current_device()
+        if actual_device != device_id:
+            raise RuntimeError(
+                f"Failed to set CUDA device. Requested: {device_id}, "
+                f"Actual: {actual_device}. Context: {context}"
+            )
+            
+        if get_rank_safe() == 0:
+            print(f"Successfully set CUDA device to {device_id} (Context: {context})")
+            
+    except Exception as e:
+        error_msg = (
+            f"Failed to set CUDA device {device_id}. "
+            f"Context: {context}. "
+            f"Error: {str(e)}"
+        )
+        print(f"ERROR: {error_msg}", flush=True)
+        raise RuntimeError(error_msg) from e
+
+
+def _get_validated_local_rank(device_count: int) -> int:
+    """Get and validate local rank for device management.
+    
+    Args:
+        device_count: Number of available CUDA devices
+        
+    Returns:
+        Validated local rank
+        
+    Raises:
+        RuntimeError: If local rank is invalid or cannot be determined
+    """
+    try:
+        local_rank = get_local_rank_preinit()
+        
+        # Validate local rank
+        if local_rank < 0:
+            raise RuntimeError(f"Invalid LOCAL_RANK: {local_rank}. Must be >= 0")
+            
+        if local_rank >= device_count:
+            raise RuntimeError(
+                f"LOCAL_RANK {local_rank} exceeds available devices ({device_count}). "
+                f"Check CUDA_VISIBLE_DEVICES and node configuration."
+            )
+            
+        return local_rank
+        
+    except Exception as e:
+        error_msg = (
+            f"Failed to get valid local rank. "
+            f"Device count: {device_count}. "
+            f"Error: {str(e)}"
+        )
+        print(f"ERROR: {error_msg}", flush=True)
+        raise RuntimeError(error_msg) from e
+
+
+def _verify_cuda_device_setting() -> None:
+    """Verify that CUDA device is properly set after distributed initialization.
+    
+    This function performs post-initialization validation to ensure
+    the device setting was successful and consistent across ranks.
+    """
+    try:
+        current_device = torch.cuda.current_device()
+        device_name = torch.cuda.get_device_name(current_device)
+        
+        if get_rank_safe() == 0:
+            print(f"CUDA device verification: Device {current_device} ({device_name})")
+            
+        # Synchronize across ranks to ensure all have valid devices
+        device_tensor = torch.tensor([current_device], dtype=torch.int, device="cuda")
+        torch.distributed.all_reduce(device_tensor, op=torch.distributed.ReduceOp.MIN)
+        torch.distributed.all_reduce(device_tensor, op=torch.distributed.ReduceOp.MAX)
+        
+        min_device = device_tensor[0].item()
+        max_device = device_tensor[1].item()
+        
+        if min_device != max_device:
+            print(f"WARNING: Device mismatch detected across ranks. "
+                  f"Min: {min_device}, Max: {max_device}", flush=True)
+        else:
+            if get_rank_safe() == 0:
+                print(f"CUDA device verification successful: All ranks using device {current_device}")
+                
+    except Exception as e:
+        print(f"WARNING: CUDA device verification failed: {str(e)}", flush=True)
+        # Don't raise here as this is just verification
 
 
 def _warmup_jit_function(model_config: GPTModelProvider | T5ModelProvider, micro_batch_size: int) -> None:

@@ -188,7 +188,32 @@ class ModelProviderMixin(abc.ABC, Generic[ModelT]):
         """
         if not torch.distributed.is_initialized():
             torch.distributed.init_process_group("nccl")
-            torch.cuda.set_device(torch.distributed.get_rank())
+            try:
+                # Use local rank instead of global rank for device management
+                local_rank = int(os.getenv("LOCAL_RANK", "0"))
+                device_count = torch.cuda.device_count()
+                
+                if device_count > 0:
+                    if local_rank >= device_count:
+                        raise RuntimeError(
+                            f"LOCAL_RANK {local_rank} exceeds available devices ({device_count}). "
+                            f"Check CUDA_VISIBLE_DEVICES configuration."
+                        )
+                    torch.cuda.set_device(local_rank)
+                    
+                    # Verify device was set correctly
+                    actual_device = torch.cuda.current_device()
+                    if actual_device != local_rank:
+                        raise RuntimeError(
+                            f"Failed to set CUDA device. Requested: {local_rank}, "
+                            f"Actual: {actual_device}"
+                        )
+                        
+            except Exception as e:
+                print(f"ERROR: Failed to set CUDA device. LOCAL_RANK={os.getenv('LOCAL_RANK')}, "
+                      f"CUDA_VISIBLE_DEVICES={os.getenv('CUDA_VISIBLE_DEVICES')}, "
+                      f"Device count={torch.cuda.device_count()}")
+                raise e
 
         parallel_state.initialize_model_parallel(
             tensor_model_parallel_size=getattr(self, "tensor_model_parallel_size", 1),
