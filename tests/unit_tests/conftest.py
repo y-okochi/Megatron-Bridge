@@ -18,7 +18,6 @@ from shutil import rmtree
 from unittest.mock import patch
 
 import pytest
-from megatron.core.msc_utils import MultiStorageClientFeature
 
 
 logging.basicConfig(level=logging.INFO)
