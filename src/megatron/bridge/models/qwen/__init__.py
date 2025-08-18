@@ -30,6 +30,7 @@ from megatron.bridge.models.qwen.qwen_provider import (
     Qwen3MoEModelProvider,
     Qwen3MoEModelProvider30B,
     Qwen3MoEModelProvider235B,
+    Qwen3MoEModelProvider480B,
     Qwen25ModelProvider1P5B,
     Qwen25ModelProvider3B,
     Qwen25ModelProvider7B,
@@ -62,4 +63,5 @@ __all__ = [
     "Qwen3MoEModelProvider",
     "Qwen3MoEModelProvider30B",
     "Qwen3MoEModelProvider235B",
+    "Qwen3MoEModelProvider480B",
 ]

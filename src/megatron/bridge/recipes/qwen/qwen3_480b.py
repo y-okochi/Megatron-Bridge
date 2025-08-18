@@ -18,7 +18,7 @@ from typing import List, Optional, Union
 import torch
 from megatron.core.distributed import DistributedDataParallelConfig
 
-from megatron.bridge.models.qwen import Qwen3MoEModelProvider30B
+from megatron.bridge.models.qwen import Qwen3MoEModelProvider480B
 from megatron.bridge.recipes.utils.dataset_utils import get_blend_fields_from_data_paths
 from megatron.bridge.recipes.utils.optimizer_utils import distributed_fused_adam_with_cosine_annealing
 from megatron.bridge.recipes.utils.tokenizer_utils import DEFAULT_NULL_TOKENIZER_VOCAB_SIZE
@@ -36,17 +36,17 @@ from megatron.bridge.training.mixed_precision import MixedPrecisionConfig
 
 
 def model_config(
-    tensor_parallelism: int = 2,
-    pipeline_parallelism: int = 1,
-    pipeline_parallelism_dtype: Optional[torch.dtype] = None,
+    tensor_parallelism: int = 4,
+    pipeline_parallelism: int = 31,
+    pipeline_parallelism_dtype: Optional[torch.dtype] = torch.bfloat16,
     virtual_pipeline_parallelism: Optional[int] = None,
     context_parallelism: int = 1,
     sequence_parallelism: bool = True,
-    expert_tensor_parallelism: int = 2,
-    expert_model_parallelism: int = 4,
-) -> Qwen3MoEModelProvider30B:
+    expert_tensor_parallelism: int = 1,
+    expert_model_parallelism: int = 8,
+) -> Qwen3MoEModelProvider480B:
     """
-    Configure the Qwen3 30B MoE model.
+    Configure the Qwen3 480B MoE model.
 
     Args:
         tensor_parallelism (int): Degree of tensor model parallelism.
@@ -55,11 +55,13 @@ def model_config(
         virtual_pipeline_parallelism (Optional[int]): Size of virtual pipeline parallelism.
         context_parallelism (int): Degree of context parallelism.
         sequence_parallelism (bool): Whether to use sequence parallelism.
+        expert_tensor_parallelism (int): Degree of expert tensor parallelism.
+        expert_model_parallelism (int): Degree of expert model parallelism.
 
     Returns:
-        Qwen3MoEModelProvider30B: Configuration for the Qwen3 30B MoE model.
+        Qwen3MoEModelProvider480B: Configuration for the Qwen3 480B MoE model.
     """
-    return Qwen3MoEModelProvider30B(
+    return Qwen3MoEModelProvider480B(
         tensor_model_parallel_size=tensor_parallelism,
         pipeline_model_parallel_size=pipeline_parallelism,
         pipeline_dtype=pipeline_parallelism_dtype,
@@ -68,9 +70,6 @@ def model_config(
         sequence_parallel=sequence_parallelism,
         expert_tensor_parallel_size=expert_tensor_parallelism,
         expert_model_parallel_size=expert_model_parallelism,
-        recompute_granularity="full", # Note that we use layer recompute in order to fit in single node
-        recompute_method="uniform",
-        recompute_num_layers=1,
     )
 
 
@@ -87,18 +86,18 @@ def pretrain_config(
     mock: bool = False,
     # Model configuration
     tensor_parallelism: int = 4,
-    pipeline_parallelism: int = 2,
+    pipeline_parallelism: int = 31,
     pipeline_parallelism_dtype: Optional[torch.dtype] = torch.bfloat16,
     virtual_pipeline_parallelism: Optional[int] = None,
     context_parallelism: int = 1,
     sequence_parallelism: bool = True,
     expert_tensor_parallelism: int = 1,
-    expert_model_parallelism: int = 4,
+    expert_model_parallelism: int = 8,
     # Training hyperparameters
     train_iters: int = 1_168_251,
-    global_batch_size: int = 8,
+    global_batch_size: int = 16,
     micro_batch_size: int = 1,
-    seq_length: int = 4096,
+    seq_length: int = 8192,
     lr: float = 3e-4,
     min_lr: float = 3e-5,
     lr_warmup_iters: int = 2000,
@@ -107,7 +106,7 @@ def pretrain_config(
     comm_overlap_config: Optional[CommOverlapConfig] = None,
 ) -> ConfigContainer:
     """
-    Create a pre-training configuration for Qwen3 30B MoE model.
+    Create a pre-training configuration for Qwen3 480B MoE model.
 
     Args:
         dir (Optional[str]): Base directory for saving logs and checkpoints.
@@ -125,6 +124,8 @@ def pretrain_config(
         virtual_pipeline_parallelism (Optional[int]): Size of virtual pipeline parallelism.
         context_parallelism (int): Degree of context parallelism to be passed to model_config.
         sequence_parallelism (bool): Whether to use sequence parallelism.
+        expert_tensor_parallelism (int): Degree of expert tensor parallelism.
+        expert_model_parallelism (int): Degree of expert model parallelism.
         train_iters (int): Total number of training iterations.
         global_batch_size (int): Global batch size for training.
         micro_batch_size (int): Micro batch size for training.
@@ -211,7 +212,7 @@ def pretrain_config(
             log_interval=10,
             tensorboard_dir=tensorboard_dir,
         ),
-        tokenizer=TokenizerConfig(tokenizer_type="NullTokenizer", vocab_size=151936),
+        tokenizer=TokenizerConfig(tokenizer_type="NullTokenizer", vocab_size=152064),
         checkpoint=CheckpointConfig(
             save_interval=2000,
             save=checkpoint_dir,
@@ -228,4 +229,4 @@ def pretrain_config(
             tp_comm_overlap=False,
         )
 
-    return cfg
+    return cfg 
