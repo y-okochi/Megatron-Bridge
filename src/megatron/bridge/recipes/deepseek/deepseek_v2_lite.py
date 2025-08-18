@@ -41,7 +41,7 @@ def model_config(
     pipeline_parallelism_dtype: Optional[torch.dtype] = None,
     virtual_pipeline_parallelism: Optional[int] = None,
     context_parallelism: int = 1,
-    expert_parallelism: int = 16,
+    expert_parallelism: int = 8,
     sequence_parallelism: bool = False,
     recompute_granularity: str = "full",
     recompute_method: str = "uniform",
@@ -96,7 +96,7 @@ def pretrain_config(
     pipeline_parallelism_dtype: Optional[torch.dtype] = None,
     virtual_pipeline_parallelism: Optional[int] = None,
     context_parallelism: int = 1,
-    expert_parallelism: int = 16,
+    expert_parallelism: int = 8,
     sequence_parallelism: bool = False,
     # Training hyperparameters
     train_iters: int = 1_000_000,

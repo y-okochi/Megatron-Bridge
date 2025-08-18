@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
 import os
 from typing import List, Optional, Union
 
@@ -35,6 +36,9 @@ from megatron.bridge.training.config import (
 from megatron.bridge.training.mixed_precision import MixedPrecisionConfig
 
 
+logger = logging.getLogger(__name__)
+
+
 def model_config(
     tensor_parallelism: int = 2,
     pipeline_parallelism: int = 16,
@@ -42,7 +46,7 @@ def model_config(
     virtual_pipeline_parallelism: Optional[int] = None,
     context_parallelism: int = 1,
     expert_parallelism: int = 64,
-    sequence_parallelism: bool = False,
+    sequence_parallelism: bool = True,
     # MTP support
     use_mtp: bool = True,
     mtp_num_layers: Optional[int] = 1,
@@ -91,9 +95,11 @@ def model_config(
         recompute_modules = ["mla_up_proj", "layernorm"]
     # Set attribute defensively in case downstream supports selective recomputation lists
     try:
-        setattr(cfg, "recompute_modules", recompute_modules)
+        cfg.recompute_granularity = "selective"
+        cfg.recompute_modules = recompute_modules
     except Exception:
         pass
+        logger.warning(f"Failed to set recompute_modules: {recompute_modules}")
 
     # Pipeline split for asymmetric stages as used in NeMo recipe
     cfg.account_for_embedding_in_pipeline_split = False
@@ -163,7 +169,7 @@ def pretrain_config(
     min_lr: float = 3e-5,
     lr_warmup_iters: int = 2000,
     # Precision recipe
-    precision_config: Optional[Union[MixedPrecisionConfig, str]] = "bf16_mixed",
+    precision_config: Optional[Union[MixedPrecisionConfig, str]] = None,
     comm_overlap_config: Optional[CommOverlapConfig] = None,
 ) -> ConfigContainer:
     """
@@ -204,6 +210,20 @@ def pretrain_config(
         max_lr=lr,
         min_lr=min_lr,
     )
+    opt_config.use_precision_aware_optimizer = True
+    opt_config.main_params_dtype = torch.float32
+    opt_config.main_grads_dtype = torch.bfloat16
+    opt_config.exp_avg_dtype = torch.bfloat16
+    opt_config.exp_avg_sq_dtype = torch.bfloat16
+
+    if precision_config is None:
+        precision_config = MixedPrecisionConfig(
+            bf16=True,
+            params_dtype=torch.bfloat16,
+            pipeline_dtype=torch.bfloat16,
+            autocast_enabled=False,
+            grad_reduce_in_fp32=False,
+        )
 
     cfg = ConfigContainer(
         model=model_cfg,
