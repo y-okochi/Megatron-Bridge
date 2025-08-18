@@ -54,6 +54,7 @@ def model_config(
     # Recomputation
     recompute_granularity: str = "selective",
     recompute_modules: Optional[List[str]] = None,
+    enable_deepep: bool = False,
 ) -> DeepSeekV3Provider:
     """
     Configure the DeepSeek-V3 (671B) model.
@@ -135,6 +136,11 @@ def model_config(
         layout = list([list(x) for x in layout])  # yield all the elements
     cfg.pipeline_model_parallel_layout = layout
 
+    if enable_deepep:
+        cfg.moe_token_dispatcher_type = "flex"
+        cfg.moe_enable_deepep = True
+        cfg.moe_shared_expert_overlap = False
+
     return cfg
 
 
@@ -171,6 +177,7 @@ def pretrain_config(
     # Precision recipe
     precision_config: Optional[Union[MixedPrecisionConfig, str]] = None,
     comm_overlap_config: Optional[CommOverlapConfig] = None,
+    enable_deepep: bool = False,
 ) -> ConfigContainer:
     """
     Create a pre-training configuration for DeepSeek-V3 (671B) model.
@@ -198,6 +205,7 @@ def pretrain_config(
         use_mtp=use_mtp,
         mtp_num_layers=mtp_num_layers,
         mtp_loss_scaling_factor=mtp_loss_scaling_factor,
+        enable_deepep=enable_deepep,
     )
 
     opt_config, scheduler = distributed_fused_adam_with_cosine_annealing(
