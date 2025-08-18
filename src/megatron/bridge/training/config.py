@@ -25,8 +25,10 @@ from megatron.core.optimizer import OptimizerConfig
 
 from megatron.bridge.data.datasets.packed_sequence import PackedSequenceSpecs
 from megatron.bridge.models import GPTModelProvider, T5ModelProvider
+from megatron.bridge.models.mamba.mamba_provider import MambaProvider
 from megatron.bridge.peft.base import PEFT
 from megatron.bridge.training.comm_overlap import CommOverlapConfig
+from megatron.bridge.training.deepep import validate_deepep
 from megatron.bridge.training.mixed_precision import MixedPrecisionConfig
 from megatron.bridge.training.tokenizers.config import TokenizerConfig
 from megatron.bridge.training.utils.config_utils import _ConfigContainerBase as Container
@@ -105,6 +107,16 @@ class DistributedInitConfig:
     are scheduled with higher priority, minimizing the exposed communication when it is
     overlapped with other computation kernels.
     """
+
+    external_gpu_device_mapping: bool = False
+    """If True, indicates that GPU device mapping has been externally managed
+    (e.g., via CUDA_VISIBLE_DEVICES environment variable). When True, uses device 0
+    instead of local rank for CUDA device selection. This is useful when launching
+    with external process managers that handle GPU visibility.
+    """
+
+    enable_megatron_core_experimental: bool = False
+    """Enable experimental features for Megatron Core."""
 
 
 @dataclass
@@ -460,6 +472,7 @@ class CheckpointConfig:
 
         if self.async_save:
             assert self.save is not None, "async_save is enabled, but save is not set. Set save to a valid path."
+            assert self.use_persistent_ckpt_worker, "async_save requires use_persistent_ckpt_worker=True."
 
 
 @dataclass(kw_only=True)
@@ -547,6 +560,9 @@ class LoggerConfig:
 
     set_level_for_all_loggers: bool = False
     """Set the logging level for all loggers. If False, only level for NeMo loggers will be set."""
+
+    log_energy: bool = False
+    """If set, log energy consumption (in Joules)."""
 
 
 @dataclass(kw_only=True)
@@ -697,7 +713,7 @@ class ConfigContainer(Container):
     rng: RNGConfig = field(default_factory=RNGConfig)
     rerun_state_machine: RerunStateMachineConfig = field(default_factory=RerunStateMachineConfig)
     train: TrainingConfig
-    model: GPTModelProvider | T5ModelProvider
+    model: GPTModelProvider | T5ModelProvider | MambaProvider
     optimizer: OptimizerConfig
     ddp: DistributedDataParallelConfig = field(default_factory=DistributedDataParallelConfig)
     scheduler: SchedulerConfig
@@ -717,19 +733,13 @@ class ConfigContainer(Container):
     def get_data_parallel_size(self, world_size: int) -> int:
         """Calculate the data parallel size based on the model configuration."""
         model_cfg = self.model
-        encoder_model_size = (
-            getattr(model_cfg, "encoder_tensor_model_parallel_size", 0)
-            * getattr(model_cfg, "encoder_pipeline_model_parallel_size", 0)
-            * model_cfg.context_parallel_size
-        )
-        decoder_model_size = (
+        total_model_size = (
             model_cfg.tensor_model_parallel_size
             * model_cfg.pipeline_model_parallel_size
             * model_cfg.context_parallel_size
         )
-        total_model_size = encoder_model_size + decoder_model_size
         assert world_size % total_model_size == 0, f"""
-        world size ({world_size}) is not divisible by total_model_size ({encoder_model_size=} + {decoder_model_size=})
+        world size ({world_size}) is not divisible by total_model_size ({model_cfg.tensor_model_parallel_size=} * {model_cfg.pipeline_model_parallel_size=} * {model_cfg.context_parallel_size=})
         """
         return world_size // total_model_size
 
@@ -778,6 +788,22 @@ class ConfigContainer(Container):
         else:
             self.scheduler.lr_warmup_steps = self.scheduler.lr_warmup_iters * self.train.global_batch_size
 
+        if self.model.context_parallel_size > 1:
+            assert self.model.seq_length % (self.model.context_parallel_size * 2) == 0, (
+                "Sequence length must be divisible by 2 * context parallel size if context parallel is used."
+            )
+            if isinstance(self.dataset, FinetuningDatasetConfig):
+                # check calculate_per_token_loss to be True
+                # check average_in_collective to be False
+                # for context parallel to solve the issue of nan loss on ranks with all tokens masked
+                # (only happens in SFT)
+                assert self.model.calculate_per_token_loss, (
+                    "When finetuning with CP>1, calculate_per_token_loss must be True"
+                )
+                assert not self.ddp.average_in_collective, (
+                    "When finetuning with CP>1, average_in_collective must be False"
+                )
+
         if (
             isinstance(self.dataset, FinetuningDatasetConfig)
             and self.dataset.packed_sequence_specs is not None
@@ -801,13 +827,18 @@ class ConfigContainer(Container):
         if self.peft is not None:
             assert self.checkpoint.pretrained_checkpoint is not None, "PEFT requires a pretrained checkpoint path"
 
-        data_seq_length = (
-            self.dataset.seq_length
-            if isinstance(self.dataset, FinetuningDatasetConfig)
-            else self.dataset.sequence_length
-        )
-        assert self.model.seq_length == data_seq_length, (
-            f"Please ensure sequence length configuration in model config and "
-            f"dataset config match.\nSequence length in model config: {self.model.seq_length}, "
-            f"Sequence length in dataset config: {data_seq_length}"
-        )
+        if self.dataset is not None:
+            data_seq_length = (
+                self.dataset.seq_length
+                if isinstance(self.dataset, FinetuningDatasetConfig)
+                else self.dataset.sequence_length
+            )
+
+            assert self.model.seq_length == data_seq_length, (
+                f"Please ensure sequence length configuration in model config and "
+                f"dataset config match.\nSequence length in model config: {self.model.seq_length}, "
+                f"Sequence length in dataset config: {data_seq_length}"
+            )
+
+        # Validate DeepEP is supported for the current GPU architecture
+        validate_deepep(self.model)

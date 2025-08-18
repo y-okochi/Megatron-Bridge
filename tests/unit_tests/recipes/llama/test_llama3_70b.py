@@ -252,7 +252,7 @@ class TestPretrainConfig:
         assert config.checkpoint.save_interval == 2000
         assert config.checkpoint.ckpt_format == "torch_dist"
         assert config.checkpoint.fully_parallel_save is True
-        assert config.checkpoint.async_save is True
+        assert config.checkpoint.async_save is False
 
     def test_pretrain_config_ddp_configuration(self):
         """Test distributed data parallel configuration."""
@@ -300,11 +300,11 @@ class TestPretrainConfig:
         with patch("megatron.bridge.training.comm_overlap.HAVE_TE", True):
             config = pretrain_config(tensor_parallelism=4, sequence_parallelism=True)
 
-            # With TP > 1 and sequence parallelism, comm_overlap should be configured
-            assert config.comm_overlap is not None
-            assert config.comm_overlap.tp_comm_overlap is True
-            assert config.comm_overlap.defer_embedding_wgrad_compute is True
-            assert config.comm_overlap.wgrad_deferral_limit == 22
+        # With TP > 1 and sequence parallelism, comm_overlap should be configured
+        assert config.comm_overlap is not None
+        assert config.comm_overlap.tp_comm_overlap is True
+        assert config.comm_overlap.defer_embedding_wgrad_compute is True
+        assert config.comm_overlap.wgrad_deferral_limit == 22
 
     def test_pretrain_config_scheduler_configuration(self):
         """Test scheduler configuration."""

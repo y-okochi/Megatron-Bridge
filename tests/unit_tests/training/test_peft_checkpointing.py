@@ -491,10 +491,21 @@ class TestPEFTCheckpointLoading:
             patch("megatron.bridge.training.checkpointing.mpu.get_tensor_model_parallel_world_size", return_value=1),
             patch("megatron.bridge.training.checkpointing.mpu.get_pipeline_model_parallel_rank", return_value=0),
             patch("megatron.bridge.training.checkpointing.mpu.get_pipeline_model_parallel_world_size", return_value=1),
+            patch("os.path.exists") as mock_exists,
         ):
             mock_read_train_state.return_value = mock_state.train_state
             mock_get_version.return_value = 3.0
             mock_unwrap_model.return_value = mock_model
+
+            # Mock file existence - run_config.yaml exists, train_state.pt doesn't (to use read_train_state mock)
+            def mock_exists_side_effect(path):
+                if "run_config.yaml" in path:
+                    return True  # run_config.yaml exists
+                elif "train_state.pt" in path:
+                    return False  # train_state.pt doesn't exist, use mock
+                return False
+
+            mock_exists.side_effect = mock_exists_side_effect
 
             # Mock generate_state_dict to return the full state dict (before filtering)
             mock_generate_state_dict.return_value = full_generated_state_dict
@@ -591,10 +602,21 @@ class TestPEFTCheckpointLoading:
             patch("megatron.bridge.training.checkpointing.mpu.get_tensor_model_parallel_world_size", return_value=1),
             patch("megatron.bridge.training.checkpointing.mpu.get_pipeline_model_parallel_rank", return_value=0),
             patch("megatron.bridge.training.checkpointing.mpu.get_pipeline_model_parallel_world_size", return_value=1),
+            patch("os.path.exists") as mock_exists,
         ):
             mock_read_train_state.return_value = mock_state.train_state
             mock_get_version.return_value = 3.0
             mock_unwrap_model.return_value = mock_model
+
+            # Mock file existence - run_config.yaml exists, train_state.pt doesn't (to use read_train_state mock)
+            def mock_exists_side_effect(path):
+                if "run_config.yaml" in path:
+                    return True  # run_config.yaml exists
+                elif "train_state.pt" in path:
+                    return False  # train_state.pt doesn't exist, use mock
+                return False
+
+            mock_exists.side_effect = mock_exists_side_effect
 
             # Mock run config for non-PEFT scenario
             mock_run_config = {
@@ -708,10 +730,21 @@ class TestPEFTCheckpointLoading:
             patch("megatron.bridge.training.checkpointing.mpu.get_tensor_model_parallel_world_size", return_value=1),
             patch("megatron.bridge.training.checkpointing.mpu.get_pipeline_model_parallel_rank", return_value=0),
             patch("megatron.bridge.training.checkpointing.mpu.get_pipeline_model_parallel_world_size", return_value=1),
+            patch("os.path.exists") as mock_exists,
         ):
             mock_read_train_state.return_value = mock_state.train_state
             mock_get_version.return_value = 3.0
             mock_unwrap_model.return_value = mock_model
+
+            # Mock file existence - run_config.yaml exists, train_state.pt doesn't (to use read_train_state mock)
+            def mock_exists_side_effect(path):
+                if "run_config.yaml" in path:
+                    return True  # run_config.yaml exists
+                elif "train_state.pt" in path:
+                    return False  # train_state.pt doesn't exist, use mock
+                return False
+
+            mock_exists.side_effect = mock_exists_side_effect
 
             # Mock generate_state_dict to return the full state dict (before filtering)
             mock_generate_state_dict.return_value = full_generated_state_dict
@@ -744,7 +777,6 @@ class TestPEFTCheckpointLoading:
             mock_model[1].load_state_dict.assert_called_once_with(filtered_sharded_state_dict["model1"], strict=False)
 
 
-@pytest.mark.run_only_on("GPU")
 class TestPEFTCheckpointingIntegration:
     """Integration tests using real GPT models and LoRA PEFT configurations."""
 
@@ -860,7 +892,7 @@ class TestPEFTCheckpointingIntegration:
         # Register LoRA pre-wrap hook and get model with PEFT applied
         lora_hook = self._create_lora_pre_wrap_hook(lora_config)
         model_provider.register_pre_wrap_hook(lora_hook)
-        peft_model = model_provider(ddp_config=None, wrap_with_ddp=False)
+        peft_model = model_provider.provide_distributed_model(ddp_config=None, wrap_with_ddp=False)
 
         # Verify we got Megatron modules
         assert isinstance(peft_model, list)
@@ -919,7 +951,7 @@ class TestPEFTCheckpointingIntegration:
         # Register LoRA pre-wrap hook and get model with PEFT applied
         lora_hook = self._create_lora_pre_wrap_hook(lora_config)
         model_provider.register_pre_wrap_hook(lora_hook)
-        peft_model = model_provider(ddp_config=None, wrap_with_ddp=False)
+        peft_model = model_provider.provide_distributed_model(ddp_config=None, wrap_with_ddp=False)
         peft_model = [chunk.cuda() for chunk in peft_model]
         lora_config.set_params_to_save(peft_model)
 
@@ -968,7 +1000,7 @@ class TestPEFTCheckpointingIntegration:
         ddp_config = DistributedDataParallelConfig()
 
         # Get the model with distributed wrappers (DDP) and PEFT applied via hook
-        distributed_model = model_provider(
+        distributed_model = model_provider.provide_distributed_model(
             ddp_config=ddp_config,
             overlap_param_gather_with_optimizer_step=False,
             use_torch_fsdp2=False,

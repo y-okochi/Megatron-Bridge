@@ -18,18 +18,16 @@ import pytest
 import torch
 from megatron.core.transformer.transformer_config import TransformerConfig
 
-from megatron.bridge.models.param_mapping import (
+from megatron.bridge.models.conversion.param_mapping import (
+    AutoMapping,
     ColumnParallelMapping,
     DirectMapping,
     GatedMLPMapping,
     QKVMapping,
     ReplicatedMapping,
     RowParallelMapping,
-    TPAwareMapping,
-    merge_gated_mlp_weights,
     merge_qkv_biases,
     merge_qkv_weights,
-    split_gated_mlp_weights,
     split_qkv_biases,
     split_qkv_weights,
 )
@@ -39,18 +37,41 @@ from megatron.bridge.models.param_mapping import (
 def mock_distributed_env():
     """Mocks the distributed environment for single-process testing."""
     with (
-        patch("megatron.bridge.models.param_mapping.mpu") as mock_mpu,
+        patch("megatron.bridge.models.conversion.param_mapping.mpu") as mock_mpu,
         patch("torch.distributed") as mock_dist,
         patch("torch.cuda.current_device", return_value=0),
     ):
 
         def setup_mocks(tp_size=1, tp_rank=0, pp_size=1, pp_rank=0):
+            # Ensure Megatron and torch.distributed appear initialized
+            mock_mpu.is_initialized.return_value = True
+            mock_dist.is_initialized.return_value = True
+
+            # Simple process group mock with size() and rank()
+            class _MockGroup:
+                def __init__(self, size, rank):
+                    self._size = size
+                    self._rank = rank
+
+                def size(self):
+                    return self._size
+
+                def rank(self):
+                    return self._rank
+
+            tp_group = _MockGroup(tp_size, tp_rank)
+            pp_group = _MockGroup(pp_size, pp_rank)
+
             mock_mpu.get_tensor_model_parallel_world_size.return_value = tp_size
             mock_mpu.get_tensor_model_parallel_rank.return_value = tp_rank
             mock_mpu.get_pipeline_model_parallel_world_size.return_value = pp_size
             mock_mpu.get_pipeline_model_parallel_rank.return_value = pp_rank
-            mock_mpu.get_tensor_model_parallel_group.return_value = "tp_group"
-            mock_mpu.get_pipeline_model_parallel_group.return_value = "pp_group"
+            mock_mpu.get_tensor_model_parallel_group.return_value = tp_group
+            mock_mpu.get_pipeline_model_parallel_group.return_value = pp_group
+
+            # Utility fns used by mapping helpers
+            mock_dist.get_global_rank.side_effect = lambda group, group_rank: group_rank
+            mock_dist.get_process_group_ranks.side_effect = lambda group: list(range(group.size()))
             return mock_mpu, mock_dist
 
         yield setup_mocks
@@ -107,11 +128,8 @@ class TestReplicatedMapping:
         megatron_weight = torch.randn(16, 16)
         result = mapping.megatron_to_hf(megatron_weight, None)
 
-        if tp_rank == 0:
-            assert "hf.weight" in result
-            assert torch.equal(result["hf.weight"], megatron_weight)
-        else:
-            assert not result
+        assert "hf.weight" in result
+        assert torch.equal(result["hf.weight"], megatron_weight)
 
     def test_hf_to_megatron_broadcast(self, mock_distributed_env, transformer_config):
         mock_mpu, mock_dist = mock_distributed_env(tp_size=2, tp_rank=0)
@@ -126,7 +144,18 @@ class TestReplicatedMapping:
 
         with patch.object(mapping, "broadcast_tensor_to_tp_ranks", return_value=hf_weight) as mock_broadcast_method:
             result = mapping.hf_to_megatron(hf_weight, megatron_module)
-            mock_broadcast_method.assert_called_once_with(hf_weight, src_rank=0)
+            # Verify the method was called once
+            mock_broadcast_method.assert_called_once()
+
+            # Check the arguments more robustly
+            args, kwargs = mock_broadcast_method.call_args
+            called_tensor = args[0]
+            assert "src_rank" in kwargs
+            assert kwargs["src_rank"] == 0
+
+            # Verify the tensor shapes match and values are the same (accounting for device movement)
+            assert called_tensor.shape == hf_weight.shape
+            assert torch.equal(called_tensor.cpu(), hf_weight.cpu())
             assert torch.equal(result, hf_weight)
 
 
@@ -167,11 +196,8 @@ class TestColumnParallelMapping:
             mock_gather.return_value = list(torch.chunk(full_weight, 2, dim=0))
             result = mapping.megatron_to_hf(megatron_shard, None)
 
-            if tp_rank == 0:
-                assert "hf.weight" in result
-                assert torch.equal(result["hf.weight"], full_weight)
-            else:
-                assert not result
+            assert "hf.weight" in result
+            assert torch.equal(result["hf.weight"], full_weight)
 
 
 class TestRowParallelMapping:
@@ -205,17 +231,14 @@ class TestRowParallelMapping:
             mock_gather.return_value = list(torch.chunk(full_weight, 2, dim=1))
             result = mapping.megatron_to_hf(megatron_shard, None)
 
-            if tp_rank == 0:
-                assert "hf.weight" in result
-                assert torch.equal(result["hf.weight"], full_weight)
-            else:
-                assert not result
+            assert "hf.weight" in result
+            assert torch.equal(result["hf.weight"], full_weight)
 
 
-class TestTPAwareMapping:
+class TestAutoMapping:
     def test_detect_parallelism_type(self, mock_distributed_env, transformer_config):
         mock_distributed_env()
-        mapping = TPAwareMapping(megatron_param="some.weight", hf_param="hf.weight")
+        mapping = AutoMapping(megatron_param="some.weight", hf_param="hf.weight")
 
         # Mock modules with different characteristics
         class MyCol(torch.nn.Module):
@@ -229,7 +252,7 @@ class TestTPAwareMapping:
         class MyRep(torch.nn.Module):
             tensor_model_parallel = False
 
-        TPAwareMapping.register_module_type("MyCustomRow", "row")
+        AutoMapping.register_module_type("MyCustomRow", "row")
 
         class MyCustomRow(torch.nn.Module):
             pass
@@ -258,17 +281,6 @@ class TestHelperFunctions:
         assert torch.equal(k, k_s)
         assert torch.equal(v, v_s)
 
-    def test_gated_mlp_merge_split(self, transformer_config):
-        gate = torch.randn(64, 32)
-        up = torch.randn(64, 32)
-
-        merged = merge_gated_mlp_weights(transformer_config, gate, up)
-        assert merged.shape == (128, 32)
-
-        gate_s, up_s = split_gated_mlp_weights(transformer_config, merged)
-        assert torch.equal(gate, gate_s)
-        assert torch.equal(up, up_s)
-
 
 class TestQKVMapping:
     def test_hf_to_megatron(self, mock_distributed_env, transformer_config):
@@ -289,7 +301,8 @@ class TestQKVMapping:
 
 
 class TestGatedMLPMapping:
-    def test_hf_to_megatron(self, mock_distributed_env, transformer_config):
+    def test_hf_to_megatron_single_tp(self, mock_distributed_env, transformer_config):
+        """Test gate+up merging with single TP rank."""
         mock_distributed_env()
         mapping = GatedMLPMapping(megatron_param="gated.weight", gate="gate.weight", up="up.weight")
         weights = {
@@ -298,26 +311,107 @@ class TestGatedMLPMapping:
         }
         megatron_module = MockModule(transformer_config, weight_shape=(256, 32))
 
-        with patch.object(mapping._tp_mapping, "hf_to_megatron") as mock_hf_to_megatron:
-            mapping.hf_to_megatron(weights, megatron_module)
-            mock_hf_to_megatron.assert_called_once()
-            merged_weight = mock_hf_to_megatron.call_args[0][0]
-            assert merged_weight.shape == (256, 32)
+        # Test single TP case
+        result = mapping.hf_to_megatron(weights, megatron_module)
+        assert result.shape == (256, 32)
 
-    def test_megatron_to_hf(self, mock_distributed_env, transformer_config):
+        # Verify that gate and up are properly concatenated
+        expected = torch.cat([weights["gate"], weights["up"]], dim=0)
+        assert torch.equal(result, expected)
+
+    def test_hf_to_megatron_multi_tp(self, mock_distributed_env, transformer_config):
+        """Test gate+up merging with multiple TP ranks."""
+        # Test with TP size = 2, rank 0
+        mock_mpu, mock_dist = mock_distributed_env(tp_size=2, tp_rank=0)
+        mapping = GatedMLPMapping(megatron_param="gated.weight", gate="gate.weight", up="up.weight")
+
+        # Create test weights - each component 128x32, so full concat will be 256x32
+        # Each TP rank should get 128x32 (half of each component concatenated)
+        weights = {
+            "gate": torch.randn(128, 32),
+            "up": torch.randn(128, 32),
+        }
+        megatron_module = MockModule(transformer_config, weight_shape=(128, 32))  # Each rank gets half
+
+        with patch.object(mapping, "scatter_to_tp_ranks") as mock_scatter:
+            mock_scatter.return_value = torch.randn(128, 32)
+            mapping.hf_to_megatron(weights, megatron_module)
+
+            # Verify scatter was called with proper splits
+            mock_scatter.assert_called_once()
+            call_args = mock_scatter.call_args[0]
+            splits = call_args[0]  # First argument should be the splits
+
+            # Should have 2 splits (one per TP rank)
+            assert len(splits) == 2
+            # Each split should be concatenated [gate_shard; up_shard]
+            assert splits[0].shape == (128, 32)  # Half of 128 gate + half of 128 up = 64 + 64 = 128
+            assert splits[1].shape == (128, 32)
+
+    def test_megatron_to_hf_single_tp(self, mock_distributed_env, transformer_config):
+        """Test splitting concatenated weights back to gate+up with single TP."""
         mock_distributed_env()
         mapping = GatedMLPMapping(megatron_param="gated.weight", gate="gate.weight", up="up.weight")
-        merged_weight = torch.randn(256, 32)
+
+        # Create a concatenated tensor [gate; up]
+        gate = torch.randn(128, 32)
+        up = torch.randn(128, 32)
+        merged_weight = torch.cat([gate, up], dim=0)
         megatron_module = MockModule(transformer_config, weight_shape=(256, 32))
 
-        with patch.object(mapping._tp_mapping, "megatron_to_hf") as mock_megatron_to_hf:
-            mock_megatron_to_hf.return_value = {"gated.weight": merged_weight}
-            result = mapping.megatron_to_hf(merged_weight, megatron_module)
+        result = mapping.megatron_to_hf(merged_weight, megatron_module)
 
-            assert "gate.weight" in result
-            assert "up.weight" in result
-            assert result["gate.weight"].shape == (128, 32)
-            assert result["up.weight"].shape == (128, 32)
+        assert "gate.weight" in result
+        assert "up.weight" in result
+        assert result["gate.weight"].shape == (128, 32)
+        assert result["up.weight"].shape == (128, 32)
+
+        # Verify the split is correct
+        assert torch.equal(result["gate.weight"], gate)
+        assert torch.equal(result["up.weight"], up)
+
+    def test_hf_to_megatron_bias_single_tp(self, mock_distributed_env, transformer_config):
+        """Test gate+up bias merging with single TP rank."""
+        mock_distributed_env()
+        mapping = GatedMLPMapping(megatron_param="gated.bias", gate="gate.bias", up="up.bias")
+        weights = {
+            "gate": torch.randn(128),  # 1D bias tensors
+            "up": torch.randn(128),
+        }
+        megatron_module = MockModule(transformer_config, weight_shape=(256, 32), has_bias=True)
+        # Override bias shape to match expected concatenated size
+        megatron_module.bias = torch.nn.Parameter(torch.randn(256))
+
+        # Test single TP case for bias
+        result = mapping.hf_to_megatron(weights, megatron_module)
+        assert result.shape == (256,)  # Concatenated bias shape
+
+        # Verify that gate and up biases are properly concatenated
+        expected = torch.cat([weights["gate"], weights["up"]], dim=0)
+        assert torch.equal(result, expected)
+
+    def test_megatron_to_hf_bias_single_tp(self, mock_distributed_env, transformer_config):
+        """Test splitting concatenated bias back to gate+up with single TP."""
+        mock_distributed_env()
+        mapping = GatedMLPMapping(megatron_param="gated.bias", gate="gate.bias", up="up.bias")
+
+        # Create concatenated bias tensor [gate_bias; up_bias]
+        gate_bias = torch.randn(128)
+        up_bias = torch.randn(128)
+        merged_bias = torch.cat([gate_bias, up_bias], dim=0)
+        megatron_module = MockModule(transformer_config, weight_shape=(256, 32), has_bias=True)
+        megatron_module.bias = torch.nn.Parameter(torch.randn(256))
+
+        result = mapping.megatron_to_hf(merged_bias, megatron_module)
+
+        assert "gate.bias" in result
+        assert "up.bias" in result
+        assert result["gate.bias"].shape == (128,)
+        assert result["up.bias"].shape == (128,)
+
+        # Verify the split is correct
+        assert torch.equal(result["gate.bias"], gate_bias)
+        assert torch.equal(result["up.bias"], up_bias)
 
 
 class TestMappingEdgeCases:
@@ -390,8 +484,8 @@ class TestMappingEdgeCases:
                 mapping.broadcast_from_pp_rank(None)
 
     def test_tp_aware_unknown_module_error(self, transformer_config):
-        """Test TPAwareMapping error for unknown module types."""
-        mapping = TPAwareMapping("weight", "hf.weight")
+        """Test AutoMapping error for unknown module types."""
+        mapping = AutoMapping("weight", "hf.weight")
 
         # Create an unknown module type
         unknown_module = torch.nn.Linear(10, 10)
