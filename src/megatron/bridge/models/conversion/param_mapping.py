@@ -889,6 +889,8 @@ class AutoMapping(MegatronParamMapping[torch.Tensor]):
             "TELayerNormColumnParallelLinear",
             "TEColumnParallelGroupedLinear",
             "VocabParallelEmbedding",
+            "DotProductAttention",  # for attention sink only
+            "TEDotProductAttention",  # for attention sink only
         },
         "row": {
             "RowParallelLinear",
@@ -905,8 +907,6 @@ class AutoMapping(MegatronParamMapping[torch.Tensor]):
             "L2Norm",
             # Other non-parallel modules
             "IdentityOp",
-            "DotProductAttention",
-            "TEDotProductAttention",
             "TopKRouter",
         },
     }
