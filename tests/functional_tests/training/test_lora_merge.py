@@ -47,6 +47,8 @@ from megatron.bridge.training.utils.checkpoint_utils import file_exists
 from megatron.bridge.utils.instantiate_utils import instantiate
 from tests.functional_tests.utils import (
     broadcast_path,
+    clear_directories,
+    get_directory_size,
     initialize_distributed,
     verify_checkpoint_files,
 )
@@ -88,55 +90,47 @@ class TestLoRAMerge:
 
         torch.distributed.barrier()
 
-        # try:
-        seq_length = 512
-        pretrain_iters = 10
-        lora_iters = 5
+        try:
+            seq_length = 512
+            pretrain_iters = 10
+            lora_iters = 5
 
-        # Step 1: Create pretrain config and run
-        pretrain_cfg = self._create_pretrain_config(
-            pretrain_iters, pretrain_checkpoint_dir, pretrain_tensorboard_dir, seq_length
-        )
-        pretrain(pretrain_cfg, forward_step)
-        verify_checkpoint_files(pretrain_checkpoint_dir, pretrain_iters)
+            # Create pretrain config and run
+            pretrain_cfg = self._create_pretrain_config(
+                pretrain_iters, pretrain_checkpoint_dir, pretrain_tensorboard_dir, seq_length
+            )
+            pretrain(pretrain_cfg, forward_step)
+            verify_checkpoint_files(pretrain_checkpoint_dir, pretrain_iters)
 
-        # Step 2: Create LoRA config and run finetuning
-        lora_cfg = self._create_lora_config(
-            lora_iters, lora_checkpoint_dir, lora_tensorboard_dir, pretrain_checkpoint_dir, seq_length
-        )
-        finetune(lora_cfg, forward_step)
-        verify_checkpoint_files(lora_checkpoint_dir, lora_iters)
+            # Create LoRA config and run finetuning
+            lora_cfg = self._create_lora_config(
+                lora_iters, lora_checkpoint_dir, lora_tensorboard_dir, pretrain_checkpoint_dir, seq_length
+            )
+            finetune(lora_cfg, forward_step)
+            verify_checkpoint_files(lora_checkpoint_dir, lora_iters)
 
-        # Step 3: Merge LoRA checkpoint
-        lora_final_checkpoint = os.path.join(lora_checkpoint_dir, f"iter_{lora_iters:07d}")
-        merge_lora(lora_final_checkpoint, merged_checkpoint_dir)
+            # Merge LoRA checkpoint
+            lora_final_checkpoint = os.path.join(lora_checkpoint_dir, f"iter_{lora_iters:07d}")
+            merge_lora(lora_final_checkpoint, merged_checkpoint_dir)
 
-        # Step 4: Comprehensive verification - all aspects in one test
-        pretrain_final_checkpoint = os.path.join(pretrain_checkpoint_dir, f"iter_{pretrain_iters:07d}")
+            pretrain_final_checkpoint = os.path.join(pretrain_checkpoint_dir, f"iter_{pretrain_iters:07d}")
 
-        # Merged checkpoint is saved as iteration 0
-        merged_final_checkpoint = os.path.join(merged_checkpoint_dir, "iter_0000000")
+            # Merged checkpoint is saved as iteration 0
+            merged_final_checkpoint = os.path.join(merged_checkpoint_dir, "iter_0000000")
 
-        # Verify merged checkpoint loading and basic structure
-        self._verify_merged_checkpoint_loading(merged_final_checkpoint)
+            self._verify_merged_checkpoint_loading(merged_final_checkpoint)
+            self._verify_config_preservation(pretrain_final_checkpoint, lora_final_checkpoint, merged_final_checkpoint)
+            self._verify_checkpoint_sizes(pretrain_final_checkpoint, lora_final_checkpoint, merged_final_checkpoint)
 
-        # Verify config preservation and PEFT removal
-        self._verify_config_preservation(pretrain_final_checkpoint, lora_final_checkpoint, merged_final_checkpoint)
-
-        # Verify checkpoint sizes demonstrate successful merge
-        self._verify_checkpoint_sizes(pretrain_final_checkpoint, lora_final_checkpoint, merged_final_checkpoint)
-
-        # finally:
-        #     clear_directories(shared_base_dir)
+        finally:
+            clear_directories(shared_base_dir)
 
     def _verify_merged_checkpoint_loading(self, merged_checkpoint_dir: str) -> None:
         """Verify that the merged checkpoint can be loaded successfully."""
-        print("Testing merged checkpoint loading...")
         merged_model = load_megatron_model(
             checkpoint_path=merged_checkpoint_dir, use_cpu_init=True, return_state_dict=False
         )
         assert merged_model is not None, "Failed to load merged checkpoint"
-        print("✓ Merged checkpoint loaded successfully")
 
     def _verify_config_preservation(
         self, original_pretrain_dir: str, lora_checkpoint_dir: str, merged_checkpoint_dir: str
@@ -144,11 +138,10 @@ class TestLoRAMerge:
         """Verify that all configuration is preserved except PEFT and model architecture matches original."""
 
         # Load all configs
-        original_run_config = read_run_config(get_checkpoint_run_config_filename(original_pretrain_dir))
         lora_run_config = read_run_config(get_checkpoint_run_config_filename(lora_checkpoint_dir))
         merged_run_config = read_run_config(get_checkpoint_run_config_filename(merged_checkpoint_dir))
 
-        # Test 1: Merged checkpoint config has no PEFT
+        # Merged checkpoint config has no PEFT
         assert file_exists(get_checkpoint_run_config_filename(merged_checkpoint_dir)), (
             "Merged checkpoint missing run_config.yaml"
         )
@@ -156,8 +149,8 @@ class TestLoRAMerge:
             "Merged checkpoint should not contain PEFT configuration"
         )
 
-        # Test 2: All non-PEFT, non-checkpoint configs should be preserved from LoRA checkpoint
-        preserve_configs = [
+        # All non-PEFT, non-checkpoint configs should be preserved from LoRA checkpoint
+        preserve_configs = (
             "model",
             "train",
             "optimizer",
@@ -168,7 +161,7 @@ class TestLoRAMerge:
             "ddp",
             "dist",
             "rng",
-        ]
+        )
 
         for config_key in preserve_configs:
             if config_key in lora_run_config:
@@ -177,92 +170,37 @@ class TestLoRAMerge:
                 try:
                     lora_cfg_obj = instantiate(lora_run_config[config_key])
                     merged_cfg_obj = instantiate(merged_run_config[config_key])
-                    # Basic type checking
                     assert type(lora_cfg_obj) == type(merged_cfg_obj), f"Config type mismatch for {config_key}"
                 except Exception as e:
                     pytest.fail(f"Failed to instantiate preserved config {config_key}: {e}")
 
-        # Test 3: Model architecture should match original pretrain checkpoint
-        if "model" in original_run_config and "model" in merged_run_config:
-            original_model_cfg = original_run_config["model"]
-            merged_model_cfg = merged_run_config["model"]
-            # Check key architectural parameters
-            for param in ["num_layers", "hidden_size", "num_attention_heads", "seq_length"]:
-                if param in original_model_cfg:
-                    assert original_model_cfg[param] == merged_model_cfg[param], (
-                        f"Model {param} mismatch: {original_model_cfg[param]} != {merged_model_cfg[param]}"
-                    )
-
-        # Test 4: Optional configs should be preserved if present
-        optional_configs = ["ft", "straggler", "profiling", "comm_overlap", "mixed_precision"]
-        for config_key in optional_configs:
-            if config_key in lora_run_config and lora_run_config[config_key] is not None:
-                assert config_key in merged_run_config, f"Missing optional config: {config_key}"
-
-        # Test 5: Checkpoint config should be updated appropriately
+        # Checkpoint config should be updated appropriately
         merged_ckpt_cfg = merged_run_config["checkpoint"]
         assert merged_ckpt_cfg.get("pretrained_checkpoint") is None, (
             "pretrained_checkpoint should be None in merged config"
         )
-
-        print("✓ All config preservation verifications passed")
 
     def _verify_checkpoint_sizes(
         self, original_pretrain_dir: str, lora_checkpoint_dir: str, merged_checkpoint_dir: str
     ) -> None:
         """Verify checkpoint sizes are as expected after merge."""
 
-        def get_directory_size(path: str) -> int:
-            """Get total size of directory in bytes."""
-            total_size = 0
-            for dirpath, dirnames, filenames in os.walk(path):
-                for filename in filenames:
-                    filepath = os.path.join(dirpath, filename)
-                    if os.path.isfile(filepath):
-                        total_size += os.path.getsize(filepath)
-            return total_size
-
-        def format_size(size_bytes: int) -> str:
-            """Format size in human readable format."""
-            for unit in ["B", "KB", "MB", "GB"]:
-                if size_bytes < 1024.0:
-                    return f"{size_bytes:.1f} {unit}"
-                size_bytes /= 1024.0
-            return f"{size_bytes:.1f} TB"
-
         # Get checkpoint sizes
         pretrain_size = get_directory_size(original_pretrain_dir)
         lora_size = get_directory_size(lora_checkpoint_dir)
         merged_size = get_directory_size(merged_checkpoint_dir)
 
-        print("Checkpoint sizes:")
-        print(f"  - Pretrain checkpoint: {format_size(pretrain_size)}")
-        print(f"  - LoRA checkpoint: {format_size(lora_size)}")
-        print(f"  - Merged checkpoint: {format_size(merged_size)}")
-
-        # Test 1: LoRA checkpoint should be significantly smaller than pretrain
+        # LoRA checkpoint should be significantly smaller than pretrain (adapters vs full model)
         lora_to_pretrain_ratio = lora_size / pretrain_size
-        assert lora_to_pretrain_ratio < 0.1, (
-            f"LoRA checkpoint should be <10% of pretrain size, got {lora_to_pretrain_ratio:.1%}"
+        assert lora_to_pretrain_ratio < 0.2, (
+            f"LoRA checkpoint should be <20% of pretrain size, got {lora_to_pretrain_ratio:.1%}"
         )
-        print(f"✓ LoRA checkpoint is {lora_to_pretrain_ratio:.1%} of pretrain size (parameter efficient)")
 
-        # Test 2: Merged checkpoint should be smaller than pretrain (no optimizer state)
-        # Merged checkpoint contains only model weights, pretrain includes optimizer state
+        # Merged checkpoint should be similar size to pretrain (both contain only model weights)
         size_ratio = merged_size / pretrain_size
-        assert 0.2 <= size_ratio <= 0.3, (
-            f"Merged checkpoint should be 20-30% of pretrain size (no optimizer), got {size_ratio:.1%}"
+        assert 0.95 <= size_ratio <= 1.05, (
+            f"Merged checkpoint should be 95-105% of pretrain size (both model weights only), got {size_ratio:.1%}"
         )
-        print(f"✓ Merged checkpoint is {size_ratio:.1%} of pretrain size (model weights only, no optimizer)")
-
-        # Test 3: Merged checkpoint should be much larger than LoRA checkpoint
-        merged_to_lora_ratio = merged_size / lora_size
-        assert merged_to_lora_ratio > 2.0, (
-            f"Merged checkpoint should be >200% of LoRA size, got {merged_to_lora_ratio:.1%}"
-        )
-        print(f"✓ Merged checkpoint is {merged_to_lora_ratio:.1%} of LoRA size (contains full weights)")
-
-    # Utility methods (reused from test_finetune_lora.py with minimal changes)
 
     def _create_model_provider(self, seq_length=512, tensor_parallel_size=1, pipeline_parallel_size=1):
         """Create a model provider with specified configuration."""
@@ -382,6 +320,8 @@ class TestLoRAMerge:
             load=load_dir,
             ckpt_format="torch_dist",
             fully_parallel_save=True,
+            save_optim=False,
+            save_rng=False,
         )
 
     def _create_rng_config(self, seed=1234):

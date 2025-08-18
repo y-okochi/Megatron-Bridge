@@ -14,10 +14,11 @@
 
 import logging
 from dataclasses import replace
-from typing import Any, Optional
+from typing import Optional
 
 import torch
 import torch.nn as nn
+from megatron.core.transformer.module import MegatronModule
 
 from megatron.bridge.peft.base import PEFT
 from megatron.bridge.peft.lora_layers import LoRALinear
@@ -27,8 +28,6 @@ from megatron.bridge.training.model_load_save import (
     load_megatron_model,
     temporary_distributed_context,
 )
-from megatron.bridge.training.state import GlobalState
-from megatron.bridge.utils.common_utils import print_rank_0
 
 
 class LoRAMerge(PEFT):
@@ -102,9 +101,8 @@ def merge_lora(lora_checkpoint_path: str, output_path: str) -> None:
         if not peft_config:
             raise ValueError(f"No PEFT configuration found in {lora_checkpoint_path}")
 
-        # Step 2: Resolve pretrained path to specific iteration if it's a base directory
+        # Resolve pretrained path to specific iteration if it's a base directory
         resolved_pretrained_path = _resolve_checkpoint_path(pretrained_path)
-        print_rank_0(f"Loading base model from {resolved_pretrained_path}")
         base_model = load_megatron_model(
             checkpoint_path=resolved_pretrained_path,
             use_cpu_init=True,
@@ -116,23 +114,16 @@ def merge_lora(lora_checkpoint_path: str, output_path: str) -> None:
         if not isinstance(base_model, list):
             base_model = [base_model]
 
-        # Step 3: Apply PEFT transformation and load adapter weights
-        print_rank_0("Applying LoRA adapters to base model")
+        # Apply PEFT transformation and load adapter weights
         _apply_adapters_to_model_with_full_config(base_model, config_from_checkpoint)
 
-        # Step 4: Apply LoRAMerge transformation
-        print_rank_0("Merging LoRA weights with base model")
+        # Apply LoRAMerge transformation
         lora_merge = LoRAMerge()
         merged_model = lora_merge(base_model, training=False)
 
-        # Step 5: Prepare config for merged checkpoint
         merged_config = _prepare_merged_config(config_from_checkpoint, output_path)
 
-        # Step 6: Save merged model with full metadata preservation
-        print_rank_0(f"Saving merged model to {output_path}")
         _save_merged_model_with_metadata(merged_model, merged_config, output_path)
-
-        print_rank_0(f"✓ LoRA checkpoint merged and saved to {output_path}")
 
     # Check if distributed is already initialized
     skip_temp_context = torch.distributed.is_available() and torch.distributed.is_initialized()
@@ -197,7 +188,6 @@ def _modify_checkpoint_config_for_merge(
     modified_config = replace(
         original_checkpoint_config,
         load=lora_checkpoint_path,  # Load from LoRA checkpoint
-        finetune=False,  # We want to load adapter states
         load_optim=False,  # Don't need optimizer
         load_rng=False,  # Don't need RNG state
         # Preserve all other checkpoint metadata (formats, paths, etc.)
@@ -217,7 +207,7 @@ def _prepare_merged_config(original_config: ConfigContainer, output_path: str) -
         finetune=False,  # Reset finetune flag
         save_optim=False,  # Don't save optimizer in merged checkpoint
         save_rng=False,  # Don't save RNG in merged checkpoint
-        ckpt_format="torch_dist",  # Hardcoded format
+        ckpt_format="torch_dist",
     )
 
     # Create merged config (same as original but without PEFT)
@@ -225,7 +215,6 @@ def _prepare_merged_config(original_config: ConfigContainer, output_path: str) -
         original_config,
         checkpoint=merged_checkpoint_config,
         peft=None,  # Remove PEFT - merged model doesn't need adapters anymore
-        # All other configs preserved exactly as they were!
     )
 
     return merged_config
@@ -236,11 +225,9 @@ def _save_merged_model_with_metadata(model: list, config: ConfigContainer, outpu
     from megatron.bridge.training.checkpointing import init_checkpointing_context
     from megatron.bridge.training.state import GlobalState, TrainState
 
-    # Create GlobalState with the full preserved config
+    # Create GlobalState with config and train state initialized
     state = GlobalState()
     state.cfg = config
-
-    # Initialize train state - required for save_checkpoint
     state.train_state = TrainState()
 
     # Initialize checkpointing context
@@ -257,30 +244,25 @@ def _save_merged_model_with_metadata(model: list, config: ConfigContainer, outpu
     )
 
 
-def _apply_adapters_to_model_with_full_config(model: list, full_config: ConfigContainer) -> None:
+def _apply_adapters_to_model_with_full_config(model: list[MegatronModule], full_config: ConfigContainer) -> None:
     """Apply PEFT transformation and load adapter weights using full config."""
     peft_config = full_config.peft
     lora_checkpoint_path = full_config.checkpoint.load
 
-    # Step 1: Apply PEFT transformation to model structure
-    print_rank_0("Applying PEFT transformation for merging...")
+    # Apply original PEFT transformation from LoRA checkpoint config
     transformed_model = peft_config(model, training=False)
 
-    # Step 2: Create GlobalState with full config (not minimal!)
-    state = GlobalState()
-    state.cfg = full_config
-
-    # Step 3: Load only adapter weights using existing logic
-    _load_adapter_weights_only(transformed_model, lora_checkpoint_path, state, peft_config)
+    # Load only adapter weights
+    _load_adapter_weights_only(transformed_model, lora_checkpoint_path, peft_config)
 
 
-def _load_adapter_weights_only(model: list, lora_checkpoint_path: str, state: GlobalState, peft_config: Any) -> None:
+def _load_adapter_weights_only(model: list[MegatronModule], lora_checkpoint_path: str, peft_config: PEFT) -> None:
     """Load only adapter weights directly using distributed checkpoint loading."""
     from megatron.core import dist_checkpointing
 
     from megatron.bridge.training.checkpointing import (
         _generate_model_state_dict,
-        _load_model_state_dict,
+        _load_state_dict_into_model_list,
         apply_peft_adapter_filter_to_state_dict,
         get_default_load_sharded_strategy,
     )
@@ -289,13 +271,13 @@ def _load_adapter_weights_only(model: list, lora_checkpoint_path: str, state: Gl
     if not isinstance(model, list):
         model = [model]
 
-    # Step 1: Generate model state dict template from transformed model (with adapters)
+    # Generate model state dict template from transformed model (with adapters)
     complete_sharded_state_dict = _generate_model_state_dict(model)
 
-    # Step 2: Filter template to only adapter parameters
+    # Filter sharded state dict keys to only load adapter states
     filtered_sharded_state_dict = apply_peft_adapter_filter_to_state_dict(complete_sharded_state_dict, peft_config)
 
-    # Step 3: Load adapter weights directly using distributed checkpoint system
+    # Load adapter weights directly using distributed checkpoint
     load_strategy = get_default_load_sharded_strategy(lora_checkpoint_path)
     loaded_state_dict = dist_checkpointing.load(
         filtered_sharded_state_dict,
@@ -304,17 +286,8 @@ def _load_adapter_weights_only(model: list, lora_checkpoint_path: str, state: Gl
         strict=dist_checkpointing.validation.StrictHandling.LOG_UNEXPECTED,
     )
 
-    # Step 4: Load adapter weights into model
-    if len(model) == 1:
-        _load_model_state_dict(model[0], loaded_state_dict["model"], strict=False)
-    else:
-        for i in range(len(model)):
-            # If there is no corresponding model in the state_dict, it will be ignored.
-            # It means that this is an empty stage.
-            model_key = "model%d" % i
-            if model_key not in loaded_state_dict:
-                continue
-            _load_model_state_dict(model[i], loaded_state_dict[model_key], strict=False)
+    # Load adapter weights into model using shared utility
+    _load_state_dict_into_model_list(model, loaded_state_dict, strict=False)
 
 
 def _resolve_checkpoint_path(checkpoint_path: str) -> str:
@@ -332,37 +305,30 @@ def _resolve_checkpoint_path(checkpoint_path: str) -> str:
     """
     import os
 
-    from megatron.bridge.training.checkpointing import (
+    from megatron.bridge.training.checkpointing import TRACKER_PREFIX
+    from megatron.bridge.training.utils.checkpoint_utils import (
+        CONFIG_FILE,
+        file_exists,
+        get_checkpoint_name,
         get_checkpoint_train_state_filename,
         read_train_state,
     )
-    from megatron.bridge.training.utils.checkpoint_utils import (
-        file_exists,
-        get_checkpoint_name,
-    )
 
-    # Check if this is already a specific iteration directory
-    # (contains run_config.yaml directly)
-    run_config_file = os.path.join(checkpoint_path, "run_config.yaml")
+    # Check if this is already a specific iteration directory (contains run config)
+    run_config_file = os.path.join(checkpoint_path, CONFIG_FILE)
     if file_exists(run_config_file):
         # This is already a specific iteration directory
         return checkpoint_path
 
-    # This is a base directory - resolve to latest iteration
-    print_rank_0(f"Resolving base checkpoint directory {checkpoint_path} to latest iteration")
+    tracker_filename = get_checkpoint_train_state_filename(checkpoint_path, prefix=TRACKER_PREFIX)
+    if not file_exists(tracker_filename):
+        raise ValueError(
+            f"Cannot resolve checkpoint path {checkpoint_path}. "
+            f"Expected either a specific iteration directory (containing run_config.yaml) "
+            f"or a base directory with tracker files (latest_train_state.pt or latest_checkpointed_iteration.txt)"
+        )
 
-    # Try modern MBridge tracker file first
-    tracker_filename = get_checkpoint_train_state_filename(checkpoint_path, prefix="latest")
-    if file_exists(tracker_filename):
-        train_state = read_train_state(tracker_filename)
-        iteration = train_state.step
-        resolved_path = get_checkpoint_name(checkpoint_path, iteration, release=False)
-        print_rank_0(f"Found latest iteration {iteration} from MBridge tracker")
-        return resolved_path
-
-    # No tracker files found - raise error
-    raise ValueError(
-        f"Cannot resolve checkpoint path {checkpoint_path}. "
-        f"Expected either a specific iteration directory (containing run_config.yaml) "
-        f"or a base directory with tracker files (latest_train_state.pt or latest_checkpointed_iteration.txt)"
-    )
+    train_state = read_train_state(tracker_filename)
+    iteration = train_state.step
+    resolved_path = get_checkpoint_name(checkpoint_path, iteration, release=False)
+    return resolved_path
