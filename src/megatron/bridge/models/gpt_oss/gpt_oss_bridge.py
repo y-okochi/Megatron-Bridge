@@ -97,7 +97,6 @@ class GPTOSSBridge(MegatronModelBridge):
             global_expert_number = extract_expert_number_from_param(task.param_name)
         except ValueError:
             # not an expert weight
-            print(f"Not an expert weight: {task.param_name}")
             return converted_weights_dict
         
         assert len(converted_weights_dict) == 1, "There should be only one key in the converted_weights_dict"
@@ -106,11 +105,11 @@ class GPTOSSBridge(MegatronModelBridge):
             if key not in self.hf_weights_cache:
                 self.hf_weights_cache[key] = {}
             self.hf_weights_cache[key][global_expert_number] = value
-            print(f"Loaded {key} for expert {global_expert_number}")
+            logging.debug(f"Loaded {key} for expert {global_expert_number}")
             if len(self.hf_weights_cache[key]) == num_experts: 
-                print(f"All experts are loaded for {key}")
+                logging.debug(f"All experts are loaded for {key}")
                 # all experts are loaded
-                merged_hf_weights = torch.cat([self.hf_weights_cache[key][i] for i in range(num_experts)], dim=0)
+                merged_hf_weights = torch.cat([self.hf_weights_cache[key][i].unsqueeze(0) for i in range(num_experts)], dim=0)
                 return {key: merged_hf_weights}
             else:
                 # not all experts are loaded yet, return empty dict
@@ -192,6 +191,9 @@ class GPTOSSMLPDownProjMapping(AutoMapping):
         return super().hf_to_megatron(hf_weights[global_expert_number], megatron_module)
     
     def megatron_to_hf(self, megatron_weights: torch.Tensor, megatron_module: nn.Module) -> Dict[str, torch.Tensor]:
+        if len(megatron_weights.shape) == 2 and isinstance(self.hf_param, str):
+            # for BF16 export
+            megatron_weights = megatron_weights.transpose(0, 1)
         return super().megatron_to_hf(megatron_weights, megatron_module)
 
     def _validate_patterns(self, *args, **kwargs):
@@ -207,11 +209,20 @@ class GPTOSSMLPGateUpProjMapping(AutoMapping):
             hf_param = {"blocks": hf_param, "scales": hf_scales}
         super().__init__(megatron_param, hf_param)
 
+    @staticmethod
+    def _interleave(up_proj):
+        return torch.cat((up_proj[::2, ...], up_proj[1::2, ...]), dim=0)
+
+
+
     def hf_to_megatron(self, hf_weights: Union[torch.Tensor, Dict], megatron_module: nn.Module) -> torch.Tensor:
         global_expert_number = extract_expert_number_from_param(self.megatron_param)
-        return torch.cat((hf_weights[global_expert_number][::2, ...], hf_weights[global_expert_number][1::2, ...]), dim=0)
+        return super().hf_to_megatron(self._interleave(hf_weights[global_expert_number]), megatron_module)
     
     def megatron_to_hf(self, megatron_weights: torch.Tensor, megatron_module: nn.Module) -> Dict[str, torch.Tensor]:
+        if len(megatron_weights.shape) == 2 and isinstance(self.hf_param, str):
+            # for BF16 export
+            megatron_weights = megatron_weights.transpose(0, 1)
         return super().megatron_to_hf(megatron_weights, megatron_module)
 
     def _validate_patterns(self, *args, **kwargs):

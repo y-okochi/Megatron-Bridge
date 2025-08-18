@@ -180,7 +180,7 @@ def export_megatron_to_hf(
 
     # For demonstration, we'll create a bridge from a known config
     # This would typically be extracted from the checkpoint metadata
-    bridge = AutoBridge.from_hf_pretrained(hf_model)
+    bridge = AutoBridge.from_hf_pretrained(hf_model, quantized=quantized)
 
     # Export using the convenience method
     print("📤 Exporting to HuggingFace format...")
