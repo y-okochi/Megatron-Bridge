@@ -18,6 +18,8 @@ from megatron.bridge.models.deepseek.deepseek_provider import (
     DeepSeekV3Provider,
 )
 
+from megatron.bridge.models.deepseek.deepseek_v2_bridge import register_deepseek_v2_bridge
+register_deepseek_v2_bridge()
 
 __all__ = [
     "DeepSeekV2LiteProvider",
