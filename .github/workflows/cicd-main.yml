@@ -91,7 +91,7 @@ jobs:
       )
       && !cancelled()
     needs: [pre-flight, cicd-wait-in-queue]
-    runs-on: nemo-ci-aws-gpu-x2
+    runs-on: nemo-ci-aws-gpu-x8
     name: Launch_Unit_Tests
     environment: nemo-ci
     steps:
