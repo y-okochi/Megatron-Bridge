@@ -406,7 +406,7 @@ class Qwen3MoEModelProvider235B_A22B(Qwen3MoEModelProvider):
 @dataclass
 class Qwen3MoEModelProvider480B_A35B(Qwen3MoEModelProvider):
     """
-    Provider for Qwen 3 480B-A35B: https://huggingface.co/Qwen/Qwen3-480B-A35B-Instruct
+    Provider for Qwen 3 480B-A35B: https://huggingface.co/Qwen/Qwen3-Coder-480B-A35B-Instruct
     """
 
     num_layers: int = 62
