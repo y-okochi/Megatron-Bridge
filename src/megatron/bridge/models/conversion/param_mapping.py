@@ -799,9 +799,8 @@ class ReplicatedMapping(MegatronParamMapping[torch.Tensor]):
             target_device = megatron_module.weight.device
         except AttributeError:
             # the parameter may not be called "weight"
-            parameter_name = [k for k, v in megatron_module.named_parameters()][0]
-            target_device = getattr(megatron_module, parameter_name).device
-
+            target_device = next(megatron_module.parameters()).device
+        print(f"{self.hf_param=} {target_device=}")
         hf_weights = hf_weights.to(device=target_device)
         if self.tp_size == 1:
             return hf_weights
