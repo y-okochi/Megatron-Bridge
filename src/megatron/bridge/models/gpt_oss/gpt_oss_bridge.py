@@ -210,16 +210,22 @@ class GPTOSSMLPGateUpProjMapping(AutoMapping):
         super().__init__(megatron_param, hf_param)
 
     @staticmethod
-    def _interleave(up_proj):
-        return torch.cat((up_proj[::2, ...], up_proj[1::2, ...]), dim=0)
+    def _interleave(gate_up_proj):
+        return torch.cat((gate_up_proj[::2, ...], gate_up_proj[1::2, ...]), dim=0)
 
-
+    def _uninterleave(self, elem):
+        gate, up = torch.chunk(elem, 2, dim=0)
+        output = torch.empty_like(elem)
+        output[::2, ...] = gate
+        output[1::2, ...] = up
+        return output
 
     def hf_to_megatron(self, hf_weights: Union[torch.Tensor, Dict], megatron_module: nn.Module) -> torch.Tensor:
         global_expert_number = extract_expert_number_from_param(self.megatron_param)
         return super().hf_to_megatron(self._interleave(hf_weights[global_expert_number]), megatron_module)
     
     def megatron_to_hf(self, megatron_weights: torch.Tensor, megatron_module: nn.Module) -> Dict[str, torch.Tensor]:
+        megatron_weights = self._uninterleave(megatron_weights)
         if len(megatron_weights.shape) == 2 and isinstance(self.hf_param, str):
             # for BF16 export
             megatron_weights = megatron_weights.transpose(0, 1)
