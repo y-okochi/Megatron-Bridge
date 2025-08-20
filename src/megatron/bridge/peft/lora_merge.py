@@ -52,15 +52,21 @@ class LoRAMerge(PEFT):
             return module
 
         logging.info(f"merging {(prefix if prefix else '') + '.' + (name if name else '')}")
-        base_weight = module.to_wrap.weight
         lora_weight = (
             module.adapter.alpha
             / module.adapter.dim
-            * module.adapter.linear_out.weight.to(base_weight.device)
-            @ module.adapter.linear_in.weight.to(base_weight.device)
+            * module.adapter.linear_out.weight
+            @ module.adapter.linear_in.weight
         )
-        merged_weight = base_weight + lora_weight
-        module.to_wrap.weight.data = merged_weight
+        if hasattr(module.to_wrap, "weight"):
+            base_weight = module.to_wrap.weight
+            merged_weight = base_weight + lora_weight.to(base_weight.device)
+            module.to_wrap.weight.data = merged_weight
+        else:  # TE Grouped Linear
+            for i in range(module.to_wrap.num_gemms):
+                base_weight = getattr(module.to_wrap, f"weight{i}")
+                merged_weight = base_weight + lora_weight.to(base_weight.device)
+                getattr(module.to_wrap, f"weight{i}").data = merged_weight
         return module
 
 
