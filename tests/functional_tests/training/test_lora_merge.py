@@ -41,6 +41,7 @@ from megatron.bridge.training.config import (
 )
 from megatron.bridge.training.finetune import finetune
 from megatron.bridge.training.gpt_step import forward_step
+from megatron.bridge.training.initialize import destroy_global_state
 from megatron.bridge.training.model_load_save import load_megatron_model
 from megatron.bridge.training.pretrain import pretrain
 from megatron.bridge.training.utils.checkpoint_utils import file_exists
@@ -124,6 +125,7 @@ class TestLoRAMerge:
 
         finally:
             clear_directories(shared_base_dir)
+            destroy_global_state()
 
     def _verify_merged_checkpoint_loading(self, merged_checkpoint_dir: str) -> None:
         """Verify that the merged checkpoint can be loaded successfully."""

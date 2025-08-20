@@ -69,7 +69,7 @@ def merge_lora(lora_checkpoint_path: str, output_path: str) -> None:
     Merge LoRA adapter weights into base model weights, preserving all metadata.
 
     This function loads a LoRA checkpoint, extracts the base model and adapter weights,
-    merges them into a single model, and saves the result as a standard checkpoint
+    merges them into a single model, and saves the result as a Megatron-Bridge checkpoint
     that can be used for inference or further training without PEFT.
 
     Args:
@@ -184,13 +184,11 @@ def _modify_checkpoint_config_for_merge(
     # Create a modified checkpoint config for merging
     # - load from the LoRA checkpoint path (to get adapter weights)
     # - don't load optimizer/rng (not needed for merging)
-    # - set finetune=False so we can load adapter states properly
     modified_config = replace(
         original_checkpoint_config,
         load=lora_checkpoint_path,  # Load from LoRA checkpoint
         load_optim=False,  # Don't need optimizer
         load_rng=False,  # Don't need RNG state
-        # Preserve all other checkpoint metadata (formats, paths, etc.)
     )
 
     return modified_config
@@ -204,7 +202,6 @@ def _prepare_merged_config(original_config: ConfigContainer, output_path: str) -
         original_config.checkpoint,
         save=output_path,  # New save location
         pretrained_checkpoint=None,  # Merged model is now self-contained
-        finetune=False,  # Reset finetune flag
         save_optim=False,  # Don't save optimizer in merged checkpoint
         save_rng=False,  # Don't save RNG in merged checkpoint
         ckpt_format="torch_dist",
@@ -325,7 +322,7 @@ def _resolve_checkpoint_path(checkpoint_path: str) -> str:
         raise ValueError(
             f"Cannot resolve checkpoint path {checkpoint_path}. "
             f"Expected either a specific iteration directory (containing run_config.yaml) "
-            f"or a base directory with tracker files (latest_train_state.pt or latest_checkpointed_iteration.txt)"
+            f"or a base directory with tracker file (latest_train_state.pt)"
         )
 
     train_state = read_train_state(tracker_filename)
