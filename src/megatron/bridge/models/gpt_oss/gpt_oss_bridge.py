@@ -99,7 +99,7 @@ class GPTOSSBridge(MegatronModelBridge):
             # not an expert weight
             return converted_weights_dict
         
-        assert len(converted_weights_dict) == 1, "There should be only one key in the converted_weights_dict"
+        assert len(converted_weights_dict) == 1, f"There should be only one key in the converted_weights_dict, got keys: {converted_weights_dict.keys()}"
         for key, value in converted_weights_dict.items():
             # there should be only one key in this dict
             if key not in self.hf_weights_cache:
@@ -191,10 +191,13 @@ class GPTOSSMLPDownProjMapping(AutoMapping):
         return super().hf_to_megatron(hf_weights[global_expert_number], megatron_module)
     
     def megatron_to_hf(self, megatron_weights: torch.Tensor, megatron_module: nn.Module) -> Dict[str, torch.Tensor]:
+        if megatron_weights is None:
+            return super().megatron_to_hf(megatron_weights, megatron_module)
+
         if len(megatron_weights.shape) == 2 and isinstance(self.hf_param, str):
             # for BF16 export
             megatron_weights = megatron_weights.transpose(0, 1)
-        return super().megatron_to_hf(megatron_weights, megatron_module)
+        return super().megatron_to_hf(megatron_weights.contiguous(), megatron_module)
 
     def _validate_patterns(self, *args, **kwargs):
         # allow number of wildcards to mismatch in this mapping
@@ -225,11 +228,14 @@ class GPTOSSMLPGateUpProjMapping(AutoMapping):
         return super().hf_to_megatron(self._interleave(hf_weights[global_expert_number]), megatron_module)
     
     def megatron_to_hf(self, megatron_weights: torch.Tensor, megatron_module: nn.Module) -> Dict[str, torch.Tensor]:
+        if megatron_weights is None:
+            return super().megatron_to_hf(megatron_weights, megatron_module)
+
         megatron_weights = self._uninterleave(megatron_weights)
         if len(megatron_weights.shape) == 2 and isinstance(self.hf_param, str):
             # for BF16 export
             megatron_weights = megatron_weights.transpose(0, 1)
-        return super().megatron_to_hf(megatron_weights, megatron_module)
+        return super().megatron_to_hf(megatron_weights.contiguous(), megatron_module)
 
     def _validate_patterns(self, *args, **kwargs):
         # allow number of wildcards to mismatch in this mapping
