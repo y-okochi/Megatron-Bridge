@@ -540,7 +540,7 @@ class MegatronParamMapping(ABC, Generic[WeightType]):
             )
             for i in range(self.ep_size)
         ]
-        assert hf_param_name in gathered_expert_param_names, (
+        assert str(hf_param_name) in gathered_expert_param_names, (
             f"hf_param_name {hf_param_name} not in gathered_expert_param_names {gathered_expert_param_names}"
         )
 
