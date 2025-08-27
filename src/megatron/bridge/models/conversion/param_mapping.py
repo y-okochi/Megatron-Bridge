@@ -766,7 +766,8 @@ class RowParallelMapping(MegatronParamMapping[torch.Tensor]):
         if megatron_weights is None:
             return {}
 
-        if self.tp_size == 1:
+        if self.tp_size == 1 or len(megatron_weights.shape) == 1:
+            # bias is unsharded in row parallel, so we can just return it
             full_weights = megatron_weights
         else:
             gathered = self.gather_from_tp_ranks(megatron_weights)
