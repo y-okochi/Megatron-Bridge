@@ -575,7 +575,10 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         megatron_to_hf_tasks = conversion_tasks
         model_config = unwrap_model(megatron_model)[0].config
         embeddings_are_tied = model_config.share_embeddings_and_output_weights
-        for task in self._with_progress_tracking(megatron_to_hf_tasks, "Converting to HuggingFace", show_progress):
+        if show_progress:
+            # self._with_progress_tracking prints an empty line even when show_progress is False, so we manually disable it here
+            megatron_to_hf_tasks = self._with_progress_tracking(megatron_to_hf_tasks, "Converting to HuggingFace")
+        for task in megatron_to_hf_tasks:
             converted_weights_dict = task.mapping.megatron_to_hf(task.param_weight, task.megatron_module)
 
             # All ranks get the full tensor
