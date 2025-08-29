@@ -17,14 +17,14 @@
 # Top-level ConfigContainer fields are dataclasses themselves
 
 model:
-  tensor_model_parallel_size: 4
-  pipeline_model_parallel_size: 4
-  context_parallel_size: 2
-  virtual_pipeline_model_parallel_size: 5
+  tensor_model_parallel_size: 1
+  pipeline_model_parallel_size: 1
+  context_parallel_size: 1
+  virtual_pipeline_model_parallel_size: null
+  sequence_parallel: false
   cross_entropy_fusion_impl: "te"
   enable_cuda_graph: false
   use_te_rng_tracker: false
-  use_custom_fsdp: true # This will set ALL the FSDP related configs
 
 rng:
   te_rng_tracker: false
@@ -45,6 +45,7 @@ logger:
 ddp:
   check_for_nan_in_grad: false
   check_for_large_grads: false
+  use_custom_fsdp: true # This will set ALL the FSDP related configs
 
 mixed_precision:
   grad_reduce_in_fp32: false

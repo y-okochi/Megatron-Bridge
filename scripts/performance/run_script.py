@@ -94,7 +94,7 @@ def main():
     # Apply overrides while preserving excluded fields
     apply_overrides(recipe, final_overrides_as_dict, excluded_fields)
 
-    if recipe.model.use_custom_fsdp:
+    if recipe.ddp.use_custom_fsdp:
         recipe = set_mcore_fsdp_configs(recipe)
     # Display final configuration
 
