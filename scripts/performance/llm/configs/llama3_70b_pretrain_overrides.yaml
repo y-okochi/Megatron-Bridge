@@ -25,6 +25,8 @@ model:
   cross_entropy_fusion_impl: "te"
   enable_cuda_graph: false
   use_te_rng_tracker: false
+  recompute_num_layers: null # Set to > 0 (DO NOT set to 0 if you don't want recomputation) to set ALL recompute related configs
+  cpu_offloading_num_layers: 0 # Set to > 0 to set ALL cpu offloading related configs
 
 rng:
   te_rng_tracker: false

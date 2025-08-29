@@ -99,3 +99,16 @@ def set_mcore_fsdp_configs(recipe):
         recipe.rng.te_rng_tracker = False
 
     return recipe
+
+def set_recompute_configs(recipe):
+    """
+    Set recompute related configs.
+    """
+    if recipe.model.recompute_num_layers is not None:
+        recipe.model.recompute_method = "block"
+        recipe.model.recompute_granularity = "full"
+    if recipe.model.cpu_offloading_num_layers > 0:
+        recipe.model.cpu_offloafding = True
+        recipe.model.cpu_offloading_weights = False
+
+    return recipe
