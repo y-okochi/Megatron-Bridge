@@ -108,7 +108,7 @@ def main():
     if args.model_name == "deepseek" and args.model_size == "v3":
         tp = recipe.model.tensor_model_parallel_size
         pp = recipe.model.pipeline_model_parallel_size
-        vp = recipe.model.virtual_pipeline_model_parallel_size
+        vp = recipe.model.virtual_pipeline_model_parallel_size if recipe.model.virtual_pipeline_model_parallel_size is not None else 1
         dp = args.num_gpus / (tp * pp * vp)
         recipe.comm_overlap.data_parallel_size = dp
 
