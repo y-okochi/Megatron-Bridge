@@ -31,6 +31,7 @@ from megatron.bridge.recipes.llama.llama3_70b import pretrain_config as llama3_7
 from megatron.bridge.recipes.llama.llama31_405b import pretrain_config as llama31_405b_pretrain_config
 from megatron.bridge.training.gpt_step import forward_step
 from megatron.bridge.training.pretrain import pretrain
+from megatron.bridge.utils.common_utils import get_rank_safe
 from megatron.bridge.training.utils.omegaconf_utils import (
     apply_overrides,
     create_omegaconf_dict_config,
@@ -77,7 +78,7 @@ def main():
     if args.compute_dtype == "bf16":
         recipe.optimizer.use_precision_aware_optimizer = True
 
-    recipe.to_yaml()
+    # recipe.to_yaml()
     merged_omega_conf, excluded_fields = create_omegaconf_dict_config(recipe)
     # Load and merge YAML overrides if a config file is provided
     if args.config_file:
@@ -104,12 +105,20 @@ def main():
     if recipe.model.recompute_num_layers is not None or recipe.model.cpu_offloading_num_layers > 0:
         recipe = set_recompute_configs(recipe)
 
-    # Display final configuration
-    logger.info("--- Final Merged Configuration ---")
-    recipe.to_yaml()
-    logger.info("----------------------------------")
-    # Start training
-    logger.info("Starting pretraining...")
+    if args.model_name == "deepseek" and args.model_size == "v3":
+        tp = recipe.model.tensor_model_parallel_size
+        pp = recipe.model.pipeline_model_parallel_size
+        vp = recipe.model.virtual_pipeline_model_parallel_size
+        dp = args.num_gpus / (tp * pp * vp)
+        recipe.comm_overlap.data_parallel_size = dp
+
+    if get_rank_safe() == 0:
+        # Display final configuration
+        logger.info("--- Final Merged Configuration ---")
+        recipe.to_yaml()
+        logger.info("----------------------------------")
+        # Start training
+        logger.info("Starting pretraining...")
 
     pretrain(config=recipe, forward_step_func=forward_step)
 
