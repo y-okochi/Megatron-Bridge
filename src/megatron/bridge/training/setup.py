@@ -120,8 +120,6 @@ def setup(
     if cfg.comm_overlap is not None:
         cfg.comm_overlap.setup(cfg.model, cfg.optimizer, cfg.ddp)
 
-    cfg.validate()
-
     state = GlobalState()
     state.cfg = cfg
 
@@ -257,6 +255,8 @@ def setup(
     #     ft_integration.get_rank_monitor_client().init_workload_monitoring()
     #     ft_timeouts = ft_integration.get_rank_monitor_client().timeouts
     #     print_rank_0(f"Fault tolerance client initialized. Timeouts: {ft_timeouts}")
+
+    cfg.validate()
 
     # Print setup timing.
     print_rank_0("done with setup ...")
