@@ -105,7 +105,7 @@ def main():
     if recipe.model.recompute_num_layers is not None or recipe.model.cpu_offloading_num_layers > 0:
         recipe = set_recompute_configs(recipe)
 
-    if args.model_name == "deepseek" and args.model_size == "v3":
+    if args.model_name in ["deepseek", "llama3"] and args.model_size in ["v3", "70b"]:
         tp = recipe.model.tensor_model_parallel_size
         pp = recipe.model.pipeline_model_parallel_size
         vp = recipe.model.virtual_pipeline_model_parallel_size if recipe.model.virtual_pipeline_model_parallel_size is not None else 1
