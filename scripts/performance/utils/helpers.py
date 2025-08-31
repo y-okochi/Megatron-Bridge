@@ -90,6 +90,7 @@ def set_mcore_fsdp_configs(recipe):
         and recipe.model.defer_embedding_wgrad_compute
     ):
         logging.warning("Disabling deferring embedding wgrad compute because it cannot work with FSDP together.")
+        recipe.comm_overlap.defer_embedding_wgrad_compute = False
         recipe.model.defer_embedding_wgrad_compute = False
 
     if recipe.model.enable_cuda_graph:
