@@ -87,7 +87,7 @@ def set_mcore_fsdp_configs(recipe):
     recipe.model.gradient_accumulation_fusion = False
     if (
         recipe.comm_overlap is not None
-        and recipe.model.defer_embedding_wgrad_compute
+        and (recipe.model.defer_embedding_wgrad_compute or recipe.comm_overlap.defer_embedding_wgrad_compute)
     ):
         logging.warning("Disabling deferring embedding wgrad compute because it cannot work with FSDP together.")
         recipe.comm_overlap.defer_embedding_wgrad_compute = False
