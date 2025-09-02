@@ -110,6 +110,8 @@ def setup(
     """
     # TODO: Freeze state.cfg
 
+    cfg.validate()
+
     # Apply mixed precision configuration if provided
     if cfg.mixed_precision is not None:
         if isinstance(cfg.mixed_precision, str):
@@ -135,8 +137,6 @@ def setup(
         modules_to_filter=cfg.logger.modules_to_filter,
         set_level_for_all_loggers=cfg.logger.set_level_for_all_loggers,
     )
-
-    cfg.validate()
 
     initialize_megatron(
         cfg=cfg,
@@ -261,6 +261,7 @@ def setup(
     # Print setup timing.
     print_rank_0("done with setup ...")
     timers.log(["model-and-optimizer-setup", "train/valid/test-data-iterators-setup"], barrier=True)
+    print_rank_0(cfg.to_yaml())
 
     return SetupOutput(
         state,

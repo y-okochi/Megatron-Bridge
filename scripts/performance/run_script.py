@@ -112,13 +112,13 @@ def main():
         dp = args.num_gpus / (tp * pp * vp)
         recipe.comm_overlap.data_parallel_size = dp
 
-    if get_rank_safe() == 0:
-        # Display final configuration
-        logger.info("--- Final Merged Configuration ---")
-        recipe.to_yaml()
-        logger.info("----------------------------------")
-        # Start training
-        logger.info("Starting pretraining...")
+    # if get_rank_safe() == 0:
+    #     # Display final configuration
+    #     logger.info("--- Final Merged Configuration ---")
+    #     recipe.to_yaml()
+    #     logger.info("----------------------------------")
+    #     # Start training
+    #     logger.info("Starting pretraining...")
 
     pretrain(config=recipe, forward_step_func=forward_step)
 

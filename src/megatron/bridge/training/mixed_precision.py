@@ -100,17 +100,14 @@ class MixedPrecisionConfig:
         """
         # Update model config
         model_config = update_config_with_precision_overrides(self, model_config)
-        model_config.__post_init__()
 
         # Update optimizer config if provided
         if optimizer_config is not None:
             optimizer_config = update_config_with_precision_overrides(self, optimizer_config)
-            optimizer_config.__post_init__()
 
         # Update DDP config if provided
         if ddp_config is not None:
             ddp_config = update_config_with_precision_overrides(self, ddp_config)
-            ddp_config.__post_init__()
 
 
 def update_config_with_precision_overrides(mixed_precision_config: MixedPrecisionConfig, config):
