@@ -483,23 +483,6 @@ def get_model(
             model = _create_model(model_provider, model_type)
     else:
         model = _create_model(model_provider, model_type)
-
-    if pre_wrap_hook:
-        if isinstance(pre_wrap_hook, list):
-            # Execute hooks in order
-            for hook in pre_wrap_hook:
-                if not callable(hook):
-                    raise RuntimeError("All elements in pre_wrap_hook list must be callable")
-                _model = hook(model)
-                if _model is not None:
-                    model = _model
-        else:
-            if not callable(pre_wrap_hook):
-                raise RuntimeError("pre_wrap_hook must be a callable or a list of callables")
-            _model = pre_wrap_hook(model)
-            if _model is not None:
-                model = _model
-
     # Set tensor model parallel attributes if not set
     # In case pre_wrap_hook augmented the model (e.g. adding PEFT adapters)
     for model_module in model:
@@ -519,6 +502,22 @@ def get_model(
 
     if (model_config.fp16 or model_config.bf16) and wrap_cast_model_output_to_fp32:
         model = [Float16Module(model_config, model_module) for model_module in model]
+
+    if pre_wrap_hook:
+        if isinstance(pre_wrap_hook, list):
+            # Execute hooks in order
+            for hook in pre_wrap_hook:
+                if not callable(hook):
+                    raise RuntimeError("All elements in pre_wrap_hook list must be callable")
+                _model = hook(model)
+                if _model is not None:
+                    model = _model
+        else:
+            if not callable(pre_wrap_hook):
+                raise RuntimeError("pre_wrap_hook must be a callable or a list of callables")
+            _model = pre_wrap_hook(model)
+            if _model is not None:
+                model = _model
 
     if correct_amax_history_if_needed is not None:
         correct_amax_history_if_needed(model)
