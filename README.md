@@ -2,6 +2,8 @@
 
 # Megatron Bridge
 
+hello,world
+
 [![codecov](https://codecov.io/github/NVIDIA-NeMo/Megatron-Bridge/graph/badge.svg?token=4NMKZVOW2Z)](https://codecov.io/github/NVIDIA-NeMo/Megatron-Bridge)
 [![CICD NeMo](https://github.com/NVIDIA-NeMo/Megatron-Bridge/actions/workflows/cicd-main.yml/badge.svg)](https://github.com/NVIDIA-NeMo/Megatron-Bridge/actions/workflows/cicd-main.yml)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/release/python-3100/)
@@ -64,11 +66,13 @@ For installing Megatron Bridge with uv, please refer to our [Contribution guide]
 To get started, first install Megatron Bridge or download a NeMo Framework container as described [above](#-installation).
 
 Log in to HuggingFace Hub:
+
 ```sh
 huggingface-cli login --token <your token>
 ```
 
 You can then run the following to import a model from HuggingFace and start training with mock data:
+
 ```python
 from megatron.bridge import AutoBridge
 
@@ -93,6 +97,7 @@ if __name__ == "__main__":
 ```
 
 You can launch the above script with:
+
 ```sh
 torchrun --nproc-per-node=<num devices> /path/to/script.py
 ```
