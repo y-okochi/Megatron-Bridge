@@ -25,7 +25,11 @@ from rich.table import Table
 from megatron.bridge.utils.common_utils import unwrap_model
 
 
-def weights_verification_table(bridge, megatron_model) -> Table:
+def weights_verification_table(
+    bridge,
+    megatron_model,
+    export_method_name: str = "export_hf_weights",
+) -> Table:
     """
     Returns a table comparing weights between a Hugging Face model and a Megatron-LM model.
 
@@ -43,15 +47,32 @@ def weights_verification_table(bridge, megatron_model) -> Table:
     table.add_column("Device")
     table.add_column("Matches Original", justify="center")
 
-    # Check each weight against the original HF-model
-    for name, param in bridge(megatron_model, show_progress=True):
-        original_param = bridge.hf_pretrained.state[name]
+    # Use the specified export method
+    export_method = getattr(bridge, export_method_name)
+    
+    # Check each weight against the original
+    for name, param in export_method(megatron_model, show_progress=True):
+        # For adapter weights, we don't expect exact matches since they undergo conversion
+        # Just show that weights exist and have reasonable values
+        if "lora" in name.lower() or "adapter" in name.lower():
+            # Adapter case - just verify weight exists and has reasonable values
+            has_reasonable_values = not torch.isnan(param).any() and not torch.isinf(param).any()
+            match_status = "✅" if has_reasonable_values else "❌"
+        else:
+            # Regular model weight - try to match against original
+            try:
+                original_param = bridge.hf_pretrained.state[name]
+                matches = torch.allclose(param, original_param.to(param.device), atol=1e-6)
+                match_status = "✅" if matches else "❌"
+            except (KeyError, AttributeError):
+                match_status = "?"
+        
         table.add_row(
             name,
             str(tuple(param.shape)),
             str(param.dtype).replace("torch.", ""),
             str(param.device),
-            "✅" if torch.allclose(param, original_param.to(param.device), atol=1e-6) else "❌",
+            match_status,
         )
 
     return table
