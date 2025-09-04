@@ -33,7 +33,7 @@ model:
   pipeline_model_parallel_layout: null
   moe_router_num_groups: 1
   moe_router_group_topk: 1
-  #moe_router_fusion: true
+  moe_router_fusion: true
   moe_permute_fusion: true
   apply_rope_fusion: true
 
