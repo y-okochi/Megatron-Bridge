@@ -49,7 +49,7 @@ def weights_verification_table(
 
     # Use the specified export method
     export_method = getattr(bridge, export_method_name)
-    
+
     # Check each weight against the original
     for name, param in export_method(megatron_model, show_progress=True):
         # For adapter weights, we don't expect exact matches since they undergo conversion
@@ -66,7 +66,7 @@ def weights_verification_table(
                 match_status = "✅" if matches else "❌"
             except (KeyError, AttributeError):
                 match_status = "?"
-        
+
         table.add_row(
             name,
             str(tuple(param.shape)),

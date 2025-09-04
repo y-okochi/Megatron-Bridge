@@ -16,9 +16,9 @@ import os
 from typing import Type, Union
 
 import torch
-import torch.distributed
 from megatron.core import DistributedDataParallel as DDP
 from megatron.core.transformer.module import Float16Module
+from torch.nn import ModuleList
 
 
 try:
@@ -120,22 +120,22 @@ def unwrap_model(
         The unwrapped model or list of models.
     """
     return_list = True
-    
+
     # Handle PEFTModel - extract stages and treat as ModuleList
-    if hasattr(model, 'stages'):
+    if hasattr(model, "stages"):
         model_list = list(model.stages)
     elif not isinstance(model, (list, ModuleList)):
         model_list = [model]
         return_list = False
     else:
         model_list = list(model)
-    
+
     unwrapped_model = []
     for model_module in model_list:
         while isinstance(model_module, module_instances):
             model_module = model_module.module
         unwrapped_model.append(model_module)
-    
+
     if not return_list:
         return unwrapped_model[0]
     return unwrapped_model
