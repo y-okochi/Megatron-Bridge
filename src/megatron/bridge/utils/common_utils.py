@@ -113,7 +113,7 @@ def unwrap_model(
     """Recursively unwraps a model or list of models from common wrapper modules.
 
     Args:
-        model: The model or list of models to unwrap. Supports PEFTModel, list[MegatronModule], or single Module.
+        model: The model or list of models to unwrap. Supports MegatronPEFTModel, list[MegatronModule], or single Module.
         module_instances: A tuple of wrapper module types to remove (e.g., DDP, Float16Module).
 
     Returns:
@@ -121,7 +121,7 @@ def unwrap_model(
     """
     return_list = True
 
-    # Handle PEFTModel - extract stages and treat as ModuleList
+    # Handle MegatronPEFTModel - extract stages and treat as ModuleList
     if hasattr(model, "stages"):
         model_list = list(model.stages)
     elif not isinstance(model, (list, ModuleList)):
