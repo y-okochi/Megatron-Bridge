@@ -55,6 +55,7 @@ checkpoint:
 
 logger:
   log_interval: 1
+  set_level_for_all_loggers: true
 
 ddp:
   check_for_nan_in_grad: false
