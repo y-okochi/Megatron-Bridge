@@ -150,6 +150,7 @@ jobs:
 
       - name: Get workflow result
         id: result
+        shell: bash -x -e -u -o pipefail {0}
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_ID: ${{ github.run_id }}
