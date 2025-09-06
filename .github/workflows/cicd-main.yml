@@ -25,9 +25,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ github.event.label.name || 'main' }}-${{ github.event_name }}
   cancel-in-progress: true
 
-env:
-  RUNNER_LABEL: ${{ vars.RUNNER_LABEL || 'self-hosted-nemo' }}
-
 permissions:
   id-token: write
   contents: read
@@ -76,7 +73,7 @@ jobs:
       )
       && !cancelled()
     needs: [pre-flight, cicd-wait-in-queue]
-    runs-on: ${{ env.RUNNER_LABEL }}
+    runs-on: ${{ vars.RUNNER_LABEL || 'self-hosted-nemo' }}
     name: Launch_Unit_Tests
     environment: nemo-ci
     steps:
@@ -106,7 +103,7 @@ jobs:
           - script: L2_Launch_models
             timeout: 60
     needs: [cicd-unit-tests]
-    runs-on: ${{ env.RUNNER_LABEL }}
+    runs-on: ${{ vars.RUNNER_LABEL || 'self-hosted-nemo' }}
     if: |
       (
         success()
