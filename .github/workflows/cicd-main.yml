@@ -73,7 +73,7 @@ jobs:
       )
       && !cancelled()
     needs: [pre-flight, cicd-wait-in-queue]
-    runs-on: ${{ vars.RUNNER_LABEL || 'self-hosted-nemo' }}
+    runs-on: ${{ vars.GPU_RUNNER_LABEL || 'self-hosted-nemo' }}
     name: Launch_Unit_Tests
     environment: nemo-ci
     steps:
@@ -103,7 +103,7 @@ jobs:
           - script: L2_Launch_models
             timeout: 60
     needs: [cicd-unit-tests]
-    runs-on: ${{ vars.RUNNER_LABEL || 'self-hosted-nemo' }}
+    runs-on: ${{ vars.GPU_RUNNER_LABEL || 'self-hosted-nemo' }}
     if: |
       (
         success()
