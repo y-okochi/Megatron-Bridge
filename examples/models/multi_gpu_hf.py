@@ -76,7 +76,7 @@ def main(
     else:
         save_path = model_name
 
-    bridge = AutoBridge.from_hf_pretrained(hf_model_id)
+    bridge = AutoBridge.from_hf_pretrained(hf_model_id, trust_remote_code=True)
 
     if megatron_load_path:
         model_provider = bridge.to_megatron_provider(load_weights=False)
@@ -94,7 +94,7 @@ def main(
         model_provider.pipeline_model_parallel_size = pp
         model_provider.expert_model_parallel_size = ep
         model_provider.initialize_model_parallel(seed=0)
-        megatron_model = model_provider(wrap_with_ddp=False)
+        megatron_model = model_provider.provide_distributed_model(wrap_with_ddp=False)
 
     # Now we can check for rank
     is_rank_0 = torch.distributed.get_rank() == 0

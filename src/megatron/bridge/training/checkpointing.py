@@ -610,6 +610,17 @@ def save_checkpoint(
         else:
             train_state_finalize_fn()
 
+    # Ensure all ranks see a fully written checkpoint (e.g., run_config.yaml) before W&B scans.
+    def _post_save_global_barrier() -> None:
+        if torch.distributed.is_initialized():
+            torch.distributed.barrier()
+
+    if ckpt_cfg.async_save:
+        assert async_save_request is not None
+        async_save_request.add_finalize_fn(_post_save_global_barrier)
+    else:
+        _post_save_global_barrier()
+
     # Additional callback for wandb (last rank)
     if not torch.distributed.is_initialized() or is_last_rank():
 
@@ -630,10 +641,6 @@ def save_checkpoint(
     if ckpt_cfg.async_save:
         schedule_async_save(state, async_save_request)
         print_rank_0(f"  scheduled an async checkpoint save at iteration {train_state.step:7d} to {save_dir}")
-
-    # Wait so everyone is done (not necessary)
-    if torch.distributed.is_initialized():
-        torch.distributed.barrier()
 
     end_misc = time()
     logger.debug(f"rank: {rank}, takes {end_misc - start_misc} to finalize ckpt save ")
@@ -1642,6 +1649,8 @@ def _build_sharded_state_dict_metadata(use_distributed_optimizer: bool, ckpt_ful
             metadata["distrib_optim_sharding_type"] = "fully_sharded_model_space"
         else:
             metadata["distrib_optim_sharding_type"] = "dp_zero_gather_scatter"
+    metadata["chained_optim_avoid_prefix"] = True
+    metadata["singleton_local_shards"] = False
     return metadata
 
 

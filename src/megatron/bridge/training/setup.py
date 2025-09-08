@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import inspect
+import logging
 import time
 from functools import partial
 from typing import Any, Callable, NamedTuple, Optional
@@ -42,15 +43,7 @@ from megatron.bridge.training.optim import setup_optimizer
 from megatron.bridge.training.state import GlobalState
 from megatron.bridge.training.tokenizers.tokenizer import build_tokenizer
 from megatron.bridge.training.utils.log_utils import append_to_progress_log, barrier_and_log, setup_logging
-from megatron.bridge.utils.common_utils import print_rank_0
-
-try:
-    from megatron.core.distributed import TorchFullyShardedDataParallel  # noqa: F401 pylint: disable=unused-import
-
-    HAVE_FSDP2 = True
-except ImportError:
-    HAVE_FSDP2 = False
-
+from megatron.bridge.utils.common_utils import print_rank_0, get_rank_safe
 
 class SetupOutput(NamedTuple):
     """Represents the output of the main setup function.
@@ -110,6 +103,7 @@ def setup(
     # TODO: Freeze state.cfg
 
     cfg.validate()
+
     # Apply mixed precision configuration if provided
     if cfg.mixed_precision is not None:
         if isinstance(cfg.mixed_precision, str):
@@ -119,6 +113,8 @@ def setup(
     # Apply communication overlap configuration if provided at the very beginning
     if cfg.comm_overlap is not None:
         cfg.comm_overlap.setup(cfg.model, cfg.optimizer, cfg.ddp)
+
+    cfg.validate()
 
     state = GlobalState()
     state.cfg = cfg
@@ -169,18 +165,11 @@ def setup(
 
     # Tokenizer
     timers("tokenizer-setup", log_level=0).start(barrier=True)
-    tokenizer = build_tokenizer(
-        cfg.tokenizer,
-        make_vocab_size_divisible_by=cfg.model.make_vocab_size_divisible_by,
-        tensor_model_parallel_size=cfg.model.tensor_model_parallel_size,
-    )
-    if not cfg.model.vocab_size:
-        cfg.model.vocab_size = tokenizer.vocab_size
-    assert cfg.model.vocab_size == tokenizer.vocab_size, (
-        f"Please ensure vocab sizes in model config and tokenizer match. To use "
-        f"tokenizer's vocab size, please ensure that vocab size in model config "
-        f"is None.\nVocab size from model config: {cfg.model.vocab_size}, Vocab "
-        f"size from tokenizer: {tokenizer.vocab_size}"
+    tokenizer = build_tokenizer(cfg.tokenizer)
+    # Handle model vocab_size configuration with proper validation
+    cfg.model.vocab_size, cfg.model.should_pad_vocab = _validate_and_set_vocab_size(
+        model_vocab_size=cfg.model.vocab_size,
+        tokenizer_vocab_size=tokenizer.vocab_size,
     )
 
     cfg.dataset.tokenizer = tokenizer
@@ -198,6 +187,7 @@ def setup(
 
     model = cfg.model.provide_distributed_model(
         ddp_config=cfg.ddp,
+        use_megatron_fsdp=cfg.dist.use_megatron_fsdp,
         use_torch_fsdp2=cfg.dist.use_torch_fsdp2,
         overlap_param_gather_with_optimizer_step=cfg.optimizer.overlap_param_gather_with_optimizer_step,
         data_parallel_random_init=cfg.rng.data_parallel_random_init,
@@ -231,7 +221,7 @@ def setup(
             optimizer,
             scheduler,
             checkpointing_context=checkpointing_context,
-            skip_load_to_model_and_opt=HAVE_FSDP2 and cfg.dist.use_torch_fsdp2,
+            skip_load_to_model_and_opt=cfg.dist.use_torch_fsdp2 or cfg.dist.use_megatron_fsdp,
         )
         timers("load-checkpoint").stop(barrier=True)
         timers.log(["load-checkpoint"])
@@ -266,6 +256,11 @@ def setup(
     # Print setup timing.
     print_rank_0("done with setup ...")
     timers.log(["model-and-optimizer-setup", "train/valid/test-data-iterators-setup"], barrier=True)
+    if get_rank_safe() == 0:
+        # Print final resolved/updated/overridden configs
+        print("------- Task Configuration -------")
+        cfg.to_yaml()
+        print("----------------------------------")
 
     return SetupOutput(
         state,
@@ -400,3 +395,39 @@ def _apply_peft_transformation(peft, base_model: list[MegatronModule]) -> list[M
     print_rank_0(f"  Trainable percentage: {100 * trainable_params / total_params:.2f}%")
 
     return transformed_model
+
+
+def _validate_and_set_vocab_size(model_vocab_size: Optional[int], tokenizer_vocab_size: int) -> tuple[int, bool]:
+    """Validate and determine the correct vocab size for the model.
+
+    Args:
+        model_vocab_size: Vocab size set in model config (can be None)
+        tokenizer_vocab_size: Unpadded tokenizer vocab size
+
+    Returns:
+        tuple[int, bool]: The validated unpadded vocab size and padding flag
+            - vocab_size: The validated unpadded vocab size to use for the model
+            - should_pad_vocab: True if vocab should be padded, False otherwise
+
+    Raises:
+        ValueError: If model vocab size is invalid
+    """
+    if model_vocab_size is None:
+        # If model vocab size is not set, use the tokenizer's vocab size
+        # Enable padding since this came from tokenizer
+        return tokenizer_vocab_size, True
+    elif model_vocab_size < tokenizer_vocab_size:
+        # Vocab size smaller than tokenizer
+        raise ValueError(
+            f"Model vocab_size ({model_vocab_size}) cannot be smaller than tokenizer's vocab_size "
+            f"({tokenizer_vocab_size})."
+        )
+    else:
+        # Model vocab size is explicitly set and is >= tokenizer vocab size
+        # Disable padding since this was explicitly set
+        if model_vocab_size > tokenizer_vocab_size:
+            logging.info(
+                f"Using preset vocab_size: {model_vocab_size} over the tokenizer vocab_size: {tokenizer_vocab_size}, dummy tokens:"
+                f" {model_vocab_size - tokenizer_vocab_size}."
+            )
+        return model_vocab_size, False
