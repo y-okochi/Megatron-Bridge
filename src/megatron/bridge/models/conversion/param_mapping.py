@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import json
-import os
 import re
 from abc import ABC, abstractmethod
 from functools import lru_cache
@@ -94,6 +93,7 @@ class MegatronParamMapping(ABC, Generic[WeightType]):
 
         # Cache for broadcast_obj_from_pp_rank results
         self._broadcast_obj_cache = {}
+        self._broadcast_from_pp_rank_tensor_spec_cache = {}
 
         if mpu.is_initialized():
             self.pp_group = mpu.get_pipeline_model_parallel_group()
@@ -239,7 +239,7 @@ class MegatronParamMapping(ABC, Generic[WeightType]):
         """
         ...
 
-    def broadcast_from_pp_rank(self, tensor: Optional[torch.Tensor]) -> Optional[torch.Tensor]:
+    def broadcast_from_pp_rank(self, tensor: Optional[torch.Tensor], cache_key: Optional[str] = None) -> Optional[torch.Tensor]:
         """Broadcast a tensor from the pipeline-parallel rank that owns it.
 
         Broadcasts to **all** PP ranks. This mirrors the behaviour of
@@ -265,17 +265,21 @@ class MegatronParamMapping(ABC, Generic[WeightType]):
         # 1.  Gather (shape, dtype, tensor_parallel flag, partition_dim) from
         #     every PP rank so that we can find the source rank.
         # ------------------------------------------------------------------
-        if tensor is not None:
-            shape = tensor.shape
-            dtype = tensor.dtype
-            tensor_parallel = getattr(tensor, "tensor_model_parallel", None)
-            partition_dim = getattr(tensor, "partition_dim", None)
-            tensor_spec = (shape, dtype, tensor_parallel, partition_dim)
+        if cache_key is not None and cache_key in self._broadcast_from_pp_rank_tensor_spec_cache:
+            tensor_spec_output = self._broadcast_from_pp_rank_tensor_spec_cache[cache_key]
         else:
-            tensor_spec = None
+            if tensor is not None:
+                shape = tensor.shape
+                dtype = tensor.dtype
+                tensor_parallel = getattr(tensor, "tensor_model_parallel", None)
+                partition_dim = getattr(tensor, "partition_dim", None)
+                tensor_spec = (shape, dtype, tensor_parallel, partition_dim)
+            else:
+                tensor_spec = None
 
-        tensor_spec_output: list[Optional[tuple]] = [None] * self.pp_size
-        torch.distributed.all_gather_object(tensor_spec_output, tensor_spec, group=self.pp_group)
+            tensor_spec_output: list[Optional[tuple]] = [None] * self.pp_size
+            torch.distributed.all_gather_object(tensor_spec_output, tensor_spec, group=self.pp_group)
+            self._broadcast_from_pp_rank_tensor_spec_cache[cache_key] = tensor_spec_output
 
         # ------------------------------------------------------------------
         # 2.  Identify the owning rank (the only rank with a non-None spec).
@@ -337,9 +341,8 @@ class MegatronParamMapping(ABC, Generic[WeightType]):
             return obj
 
         # Check if we already have a cached result (only if cache_key is provided)
-        if os.getenv("NRL_CACHE", "False") == "True":
-            if cache_key is not None and cache_key in self._broadcast_obj_cache:
-                return self._broadcast_obj_cache[cache_key]
+        if cache_key is not None and cache_key in self._broadcast_obj_cache:
+            return self._broadcast_obj_cache[cache_key]
 
         # ------------------------------------------------------------------
         # 1. Gather presence flags from all PP ranks to find the source rank
@@ -597,7 +600,7 @@ class DirectMapping(MegatronParamMapping[torch.Tensor]):
     ) -> Dict[str, torch.Tensor]:
         """Direct copy with PP broadcast."""
         # Handle cross-PP broadcast
-        megatron_weights = self.broadcast_from_pp_rank(megatron_weights)
+        megatron_weights = self.broadcast_from_pp_rank(megatron_weights, cache_key=str(self.hf_param))
 
         if megatron_weights is None:
             return {}
@@ -693,7 +696,7 @@ class ColumnParallelMapping(MegatronParamMapping[torch.Tensor]):
     ) -> Dict[str, torch.Tensor]:
         """Gather from all TP ranks and concatenate."""
         # Handle cross-PP broadcast
-        megatron_weights = self.broadcast_from_pp_rank(megatron_weights)
+        megatron_weights = self.broadcast_from_pp_rank(megatron_weights, cache_key=str(self.hf_param))
 
         if megatron_weights is None:
             return {}
@@ -788,7 +791,7 @@ class RowParallelMapping(MegatronParamMapping[torch.Tensor]):
     ) -> Dict[str, torch.Tensor]:
         """Gather from all TP ranks and concatenate."""
         # Handle cross-PP broadcast
-        megatron_weights = self.broadcast_from_pp_rank(megatron_weights)
+        megatron_weights = self.broadcast_from_pp_rank(megatron_weights, cache_key=str(self.hf_param))
 
         if megatron_weights is None:
             return {}
@@ -846,7 +849,7 @@ class ReplicatedMapping(MegatronParamMapping[torch.Tensor]):
     ) -> Dict[str, torch.Tensor]:
         """Return weight only from rank 0 to avoid duplication."""
         # Handle cross-PP broadcast
-        megatron_weights = self.broadcast_from_pp_rank(megatron_weights)
+        megatron_weights = self.broadcast_from_pp_rank(megatron_weights, cache_key=str(self.hf_param))
 
         if megatron_weights is None:
             return {}
@@ -1292,7 +1295,7 @@ class GatedMLPMapping(MegatronParamMapping[Dict[str, torch.Tensor]]):
     ) -> Dict[str, torch.Tensor]:
         """Gather concatenated shards and split into gate and up."""
         # Handle cross-PP broadcast first
-        megatron_weights = self.broadcast_from_pp_rank(megatron_weights)
+        megatron_weights = self.broadcast_from_pp_rank(megatron_weights, cache_key=str(self.hf_param))
 
         if megatron_weights is None:
             return {}
