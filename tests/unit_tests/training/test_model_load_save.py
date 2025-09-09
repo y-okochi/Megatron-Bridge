@@ -217,6 +217,7 @@ class TestLoadMegatronModel:
         mock_model_cfg.fp16 = False
         mock_model_cfg.provide_distributed_model.return_value = [mock_model]
         mock_model_cfg.use_cpu_initialization = False
+        mock_model_cfg.restore_modelopt_state = False
 
         mock_instantiate.return_value = mock_model_cfg
         expected_result = {"layer.weight": torch.randn(2, 2)}
