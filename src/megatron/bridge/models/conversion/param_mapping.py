@@ -13,8 +13,10 @@
 # limitations under the License.
 
 import json
+import os
 import re
 from abc import ABC, abstractmethod
+from functools import lru_cache
 from typing import Any, Dict, Generic, List, Optional, Tuple, TypeVar, Union
 
 import torch
@@ -335,8 +337,9 @@ class MegatronParamMapping(ABC, Generic[WeightType]):
             return obj
 
         # Check if we already have a cached result (only if cache_key is provided)
-        if cache_key is not None and cache_key in self._broadcast_obj_cache:
-            return self._broadcast_obj_cache[cache_key]
+        if os.getenv("NRL_CACHE", "False") == "True":
+            if cache_key is not None and cache_key in self._broadcast_obj_cache:
+                return self._broadcast_obj_cache[cache_key]
 
         # ------------------------------------------------------------------
         # 1. Gather presence flags from all PP ranks to find the source rank
@@ -517,7 +520,7 @@ class MegatronParamMapping(ABC, Generic[WeightType]):
             f"Could not find config in module hierarchy for {module.__class__.__name__}. "
             f"Ensure the module or its parent has a 'config' attribute."
         )
-
+    
     def gather_from_ep_ranks(
         self,
         megatron_weights: Optional[torch.Tensor],

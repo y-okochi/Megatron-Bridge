@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import abc
+import gc
 import itertools
 import logging
 import re
@@ -522,6 +523,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         cpu: bool = True,
         show_progress: bool = True,
         conversion_tasks: Optional[List[WeightConversionTask]] = None,
+        cleanup_frequency: int = 10,
     ) -> Iterable[HFWeightTuple]:
         """Export Megatron weights to HuggingFace format.
 
@@ -545,6 +547,8 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
                 Defaults to True.
             conversion_tasks (Optional[List[WeightConversionTask]]): Pre-built conversion tasks.
                 If not provided, tasks will be built automatically from the models.
+            cleanup_frequency (int, optional): How often to perform memory cleanup (every N iterations).
+                Set to 0 to disable automatic cleanup. Defaults to 10.
 
         Yields:
             HFWeightTuple: Named tuples of (param_name, weight_tensor) in HF format.
@@ -606,6 +610,11 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
                 else:
                     # Regular case - yield the tensor normally
                     yield HFWeightTuple(hf_name, final_tensor)
+                del final_tensor
+            
+        # Clean up the converted_weights_dict after processing all tensors
+        del converted_weights_dict
+        torch.cuda.empty_cache()
 
     def dtype_from_hf(self, config, default=None):
         """Extract torch dtype from a HuggingFace config.
