@@ -30,6 +30,8 @@ from megatron.bridge.utils.vocab_utils import calculate_padded_vocab_size
 
 logger = logging.getLogger(__name__)
 
+def get_default_mamba_stack_spec() -> ModuleSpec:
+    return default_mamba_stack_spec
 
 @dataclass
 class MambaProvider(TransformerConfig, ModelProviderMixin[MCoreMambaModel]):
@@ -70,9 +72,9 @@ class MambaProvider(TransformerConfig, ModelProviderMixin[MCoreMambaModel]):
     deallocate_pipeline_outputs: bool = True
     bias_dropout_fusion: bool = True
     cross_entropy_loss_fusion: bool = True
-    mamba_stack_spec: Union[ModuleSpec, Callable[[], ModuleSpec]] = field(
-        default_factory=lambda: default_mamba_stack_spec
-    )
+    # Changed from field(default_factory=...) to direct function assignment for OmegaConf compatibility. 
+    # Using default_factory initializes the MambaStack, which is not compatible with OmegaConf.
+    mamba_stack_spec: Union[ModuleSpec, Callable[[], ModuleSpec]] = get_default_mamba_stack_spec
     vocab_size: Optional[int] = None
     should_pad_vocab: bool = False
 
