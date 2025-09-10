@@ -764,12 +764,33 @@ class ConfigContainer(Container):
         """
         return world_size // total_model_size
 
+    def _reset_dependent_attributes(self) -> None:
+        """Reset attributes that are auto-calculated based on other attributes.
+        
+        This ensures that when recipe overrides change the base attributes,
+        the dependent attributes get recalculated properly in __post_init__.
+        
+        This fixes issues like microbatch_group_size_per_vp_stage not being
+        updated when pipeline_model_parallel_size changes via recipe overrides.
+        """
+        # These are set in Megatron-LM's ModelParallelConfig.__post_init__()
+        if hasattr(self.model, 'microbatch_group_size_per_vp_stage'):
+            self.model.microbatch_group_size_per_vp_stage = None
+
+        if hasattr(self.model, 'expert_tensor_parallel_size'):
+            self.model.expert_tensor_parallel_size = None
+
+        if hasattr(self.model, 'autocast_dtype'):
+            self.model.autocast_dtype = None
+
     def validate(self) -> None:
         """Performs validation checks on the combined configuration.
 
         Calculates dependent values like data_parallel_size and scheduler steps.
         Ensures compatibility between different configuration settings.
         """
+        self._reset_dependent_attributes()
+
         # Re-run post-inits of sub-configs
         for f in fields(self):
             sub_cfg = getattr(self, f.name)
