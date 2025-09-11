@@ -15,8 +15,12 @@
 import json
 
 from megatron.bridge.data.loaders import (
+    build_train_valid_test_data_loaders,
     get_blend_and_blend_per_split,
 )
+from megatron.bridge.data.utils import get_dataset_provider
+from megatron.bridge.recipes.llama.llama3_8b import pretrain_config
+from megatron.bridge.training.state import TrainState
 
 
 class TestDataLoaders:
@@ -71,3 +75,29 @@ class TestDataLoaders:
             ([data_path], None),
             ([data_path], None),
         ]
+
+    def test_build_train_valid_test_data_loaders(self):
+        # Setup dataloader params
+        cfg = pretrain_config()
+        cfg.train.train_iters = 1000
+        dataset_provider = get_dataset_provider(cfg.dataset)
+        train_dataloader, valid_dataloader, test_dataloader = build_train_valid_test_data_loaders(
+            cfg=cfg, train_state=TrainState(), build_train_valid_test_datasets_provider=dataset_provider
+        )
+
+        assert train_dataloader is not None
+        assert valid_dataloader is not None
+        assert test_dataloader is not None
+
+    def test_build_train_valid_test_data_iterators_eval_iters_0(self):
+        cfg = pretrain_config()
+        cfg.train.train_iters = 1000
+        cfg.train.eval_iters = 0
+        dataset_provider = get_dataset_provider(cfg.dataset)
+        train_dataloader, valid_dataloader, test_dataloader = build_train_valid_test_data_loaders(
+            cfg=cfg, train_state=TrainState(), build_train_valid_test_datasets_provider=dataset_provider
+        )
+
+        assert train_dataloader is not None
+        assert valid_dataloader is None
+        assert test_dataloader is None
