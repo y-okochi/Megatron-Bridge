@@ -131,7 +131,8 @@ def apply_perf_matrix_overrides(yaml_root: Any, recipe: Any, args: Any, excluded
     common = preset.get("common") or {}
     compute_dtype = args.compute_dtype if args.compute_dtype == "bf16" else f"{args.compute_dtype}_{args.fp8_recipe}"
     dtype_cfg = preset.get(compute_dtype) if compute_dtype in preset else None
-    print("\n\n\n", dtype_cfg, "\n\n\n")
+    print(f"\n\n\n {common=} \n\n\n")
+    print(f"\n\n\n {dtype_cfg=} \n\n\n")
     # dtype_cfg = preset.get(args.compute_dtype) if args.compute_dtype in preset else None
     # Deep-merge so dtype-specific values override common
     merged_perf = OmegaConf.merge(OmegaConf.create(common), OmegaConf.create(dtype_cfg or {}))
