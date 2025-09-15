@@ -418,7 +418,9 @@ def _set_random_seed(
     np.random.seed(seed)
     torch.manual_seed(seed)
     if torch.cuda.device_count() > 0:
-        tensor_parallel.model_parallel_cuda_manual_seed(seed, te_rng_tracker, inference_rng_tracker, use_cudagraphable_rng)
+        tensor_parallel.model_parallel_cuda_manual_seed(
+            seed, te_rng_tracker, inference_rng_tracker, use_cudagraphable_rng
+        )
 
 
 def _warmup_jit_function(model_config: GPTModelProvider | T5ModelProvider, micro_batch_size: int) -> None:
