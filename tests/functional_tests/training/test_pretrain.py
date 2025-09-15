@@ -383,8 +383,7 @@ class TestPretrain:
                 num_workers=1,
             ),
             logger=LoggerConfig(
-                log_interval=5,
-                tensorboard_dir=tensorboard_dir,
+                log_interval=1,
             ),
             tokenizer=TokenizerConfig(
                 tokenizer_type="NullTokenizer",
