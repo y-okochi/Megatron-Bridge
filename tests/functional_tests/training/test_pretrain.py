@@ -326,7 +326,7 @@ class TestPretrain:
             seq_length=seq_length,
             make_vocab_size_divisible_by=128,
             vocab_size=None,
-            external_cudagraph=True,
+            external_cuda_graph=True,
         )
 
         # Config Container
