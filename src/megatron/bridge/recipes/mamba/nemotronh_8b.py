@@ -170,10 +170,13 @@ def pretrain_config(
         optimizer=opt_config,
         scheduler=scheduler,
         ddp=DistributedDataParallelConfig(
-            check_for_nan_in_grad=True,
+           check_for_nan_in_grad=True,
             grad_reduce_in_fp32=True,
             overlap_grad_reduce=True,
-            overlap_param_gather=False,
+            overlap_param_gather=True,
+            average_in_collective=True,
+            use_distributed_optimizer=True,
+            use_megatron_fsdp=False,
         ),
         dataset=GPTDatasetConfig(
             random_seed=1234,
