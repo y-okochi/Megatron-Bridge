@@ -89,6 +89,7 @@ def model_config(
     # Performance optimization knobs
     cfg.moe_permute_fusion = True
     cfg.apply_rope_fusion = True
+    cfg.dist.enable_megatron_core_experimental = True  # for mla rope fusion
 
     # Pipeline parallelism configs. We infer PP layout from the provided PP and VP size
     map_pp_vp_to_layout = {
@@ -247,7 +248,7 @@ def pretrain_config(
             tensorboard_dir=tensorboard_dir,
             log_timers_to_tensorboard=True,
         ),
-        tokenizer=TokenizerConfig(tokenizer_type="NullTokenizer", vocab_size=DEFAULT_NULL_TOKENIZER_VOCAB_SIZE),
+        tokenizer=TokenizerConfig(tokenizer_type="HuggingFaceTokenizer", tokenizer_model="Kimi-K2-Instruct"),
         checkpoint=CheckpointConfig(
             save_interval=2000,
             save=checkpoint_dir,
