@@ -20,6 +20,68 @@ Additionally, it can serve as a **standalone converter** for seamless bidirectio
 
 ![image](Repo-Mbridge.png)
 
+## Bridge & Conversion (HF ↔ Megatron-Core)
+
+Beyond the training loop, this repo includes a production bridge that converts popular 🤗 Hugging Face models to Megatron-Core format and back. This lets you:
+
+- Load HF models and run them with Megatron-Core parallelism
+- Save Megatron checkpoints or export back to HF format for inference engines
+- Integrate with external RL frameworks (e.g., NeMo-RL, veRL) via a common model interface
+
+### Bridge Feature Highlights
+
+- **Comprehensive model coverage**: Llama, Qwen2/3 (incl. MoE), DeepSeek V2/V3, Qwen2.5-VL, Nemotron-H (Mamba), and more
+- **Online import/export**: Stream HF → Megatron and Megatron → HF without intermediate full checkpoints
+- **Parallelism aware**: Handles TP/PP/VPP/CP/EP/ETP distributions during conversion
+- **Memory efficient**: Per-parameter streaming to minimize peak memory
+- **Simple API**: High-level `AutoBridge` for architecture auto-detection
+- **Transformer Engine ready**: Optimized paths when TE is available
+
+### Bridge Quickstart
+
+```python
+from megatron.bridge import AutoBridge
+
+# 1) Create a bridge from a Hugging Face model (hub or local path)
+bridge = AutoBridge.from_hf_pretrained("meta-llama/Llama-3.2-1B", trust_remote_code=True)
+
+# 2) Get a Megatron provider and configure parallelism before instantiation
+provider = bridge.to_megatron_provider()
+provider.tensor_model_parallel_size = 2
+provider.pipeline_model_parallel_size = 1
+
+# 3) Materialize Megatron-Core model(s)
+model = provider.provide_distributed_model(wrap_with_ddp=False)
+
+# 4a) Export Megatron → Hugging Face (full HF folder with config/tokenizer/weights)
+bridge.save_hf_pretrained(model, "./hf_exports/llama32_1b")
+
+# 4b) Or stream only weights (Megatron → HF) if you want to handle files yourself
+for name, weight in bridge.export_hf_weights(model, cpu=True):
+    print(name, tuple(weight.shape))
+```
+
+### Supported Bridge Models
+
+- **Llama2 / Llama3** family
+- **Qwen2 / Qwen3** and **Qwen3-MoE**
+- **Qwen2.5-VL** (vision-language)
+- **DeepSeek V2 / DeepSeek V3**
+- **Nemotron-H** (Mamba-based)
+- **GPT-OSS** variants
+
+Refer to `src/megatron/bridge/models/` for the latest set of bridges.
+
+### Conversion Examples
+
+- Import/Export checkpoints: `examples/models/checkpoint_conversion.py`
+- Single-GPU generation from HF: `examples/models/generate_from_hf.py`
+- Multi-GPU loading from HF: `examples/models/multi_gpu_hf.py`
+- VLM example (Qwen2.5-VL): `examples/models/generate_from_hf_vlm.py`
+- Compare HF vs Megatron outputs: `examples/models/compare_models.py`
+
+For a deeper dive into the conversion design and advanced usage, see `src/megatron/bridge/models/README.md`.
+
 ## 🔧 Installation
 
 ### 🐳 NeMo-FW container
@@ -77,7 +139,7 @@ Log in to Hugging Face Hub:
 huggingface-cli login --token <your token>
 ```
 
-You can then run the following to import a model from HuggingFace and start training with mock data:
+You can then run the following to import a model from HuggingFace and start training with mock data. If you only need conversion (HF ↔ Megatron) and not training, see the Bridge Quickstart above.
 ```python
 from megatron.bridge import AutoBridge
 
