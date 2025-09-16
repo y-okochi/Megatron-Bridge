@@ -138,12 +138,12 @@ def pretrain_config(
     )
 
     model_cfg = model_config(
-        tensor_parallelism=tensor_parallelism,
+        tensor_parallelism=1, #tensor_parallelism,
         pipeline_parallelism=pipeline_parallelism,
         pipeline_parallelism_dtype=pipeline_parallelism_dtype,
         virtual_pipeline_parallelism=virtual_pipeline_parallelism,
         context_parallelism=context_parallelism,
-        sequence_parallelism=sequence_parallelism,
+        sequence_parallelism=False, #sequence_parallelism,
     )
 
     opt_config, scheduler = distributed_fused_adam_with_cosine_annealing(
@@ -210,10 +210,10 @@ def pretrain_config(
         mixed_precision=precision_config,
     )
 
-    if cfg.comm_overlap is None:
-        cfg.comm_overlap = CommOverlapConfig(
-            tp_comm_bootstrap_backend="nccl",
-            tp_comm_overlap=True,
-        )
+    # if cfg.comm_overlap is None:
+    #     cfg.comm_overlap = CommOverlapConfig(
+    #         tp_comm_bootstrap_backend="nccl",
+    #         tp_comm_overlap=True,
+    #     )
 
     return cfg
