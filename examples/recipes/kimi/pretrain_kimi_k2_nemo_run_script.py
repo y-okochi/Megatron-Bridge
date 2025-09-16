@@ -221,6 +221,11 @@ def main() -> None:
         partition="batch",
         time="01:00:00",
         container_image="/lustre/fsw/coreai_dlalgo_llm/aot/sqsh/mbridge-kimi.sqsh",
+        custom_mounts=[
+            "/lustre:/lustre",
+            "/lustre/fsw/coreai_dlalgo_llm/aot:/aot",
+            "/lustre/fsw/coreai_dlalgo_llm/aot/codebases/Megatron-Bridge:/opt/mbridge",
+        ],
     )
 
     breakpoint()
