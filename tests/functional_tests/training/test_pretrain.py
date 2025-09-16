@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
+#import os
 
 import pytest
 import torch
@@ -33,10 +33,10 @@ from megatron.bridge.training.config import (
 from megatron.bridge.training.gpt_step import forward_step
 from megatron.bridge.training.pretrain import pretrain
 from tests.functional_tests.utils import (
-    broadcast_path,
-    clear_directories,
+    #broadcast_path,
+    #clear_directories,
     initialize_distributed,
-    verify_checkpoint_files,
+    #verify_checkpoint_files,
 )
 
 
