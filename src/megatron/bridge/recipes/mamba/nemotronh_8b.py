@@ -143,7 +143,7 @@ def pretrain_config(
         pipeline_parallelism_dtype=pipeline_parallelism_dtype,
         virtual_pipeline_parallelism=virtual_pipeline_parallelism,
         context_parallelism=context_parallelism,
-        sequence_parallelism=False, #sequence_parallelism,
+        sequence_parallelism=sequence_parallelism,
     )
 
     opt_config, scheduler = distributed_fused_adam_with_cosine_annealing(
