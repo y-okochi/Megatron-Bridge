@@ -14,9 +14,9 @@
 
 NeMo Megatron Bridge is a PyTorch native library under [NeMo Framework](https://github.com/NVIDIA-NeMo) that leverages [Megatron Core](https://github.com/NVIDIA/Megatron-LM/tree/main/megatron/core) to provide state-of-the-art training throughput for top models. It enables researchers and community developers to do both pre and post training using a performant and scalable training loop, with features like model parallelism and mixed precisions (FP8, BF16, FP4 etc.).  NeMo Megatron Bridge users can either leverage existing 🤗Hugging Face models or define their custom PyTorch model definitions for end-to-end workflows with flexibility.
 
-NeMo Megatron Bridge is a refactor of the [previous NeMo](https://github.com/NVIDIA/NeMo) that adopts a PyTorch native training loop to provide more flexibility and customizability for developers.
+Beyond training, Megatron Bridge serves as a powerful **conversion and verification tool** for other repositories and frameworks. It provides bidirectional checkpoint conversion between Hugging Face and Megatron-Core formats, enabling other projects to leverage Megatron's parallelism capabilities or export models for various inference engines. The bridge includes built-in verification mechanisms to ensure conversion accuracy and checkpoint integrity across different model formats.
 
-Additionally, it can serve as a **standalone converter** for seamless bidirectional conversion between Hugging Face and Megatron checkpoint formats. 
+NeMo Megatron Bridge is a refactor of the [previous NeMo](https://github.com/NVIDIA/NeMo) that adopts a PyTorch native training loop to provide more flexibility and customizability for developers.
 
 ![image](Repo-Mbridge.png)
 
@@ -47,7 +47,7 @@ bridge = AutoBridge.from_hf_pretrained("meta-llama/Llama-3.2-1B", trust_remote_c
 
 # 2) Get a Megatron provider and configure parallelism before instantiation
 provider = bridge.to_megatron_provider()
-provider.tensor_model_parallel_size = 2
+provider.tensor_model_parallel_size = 1 # more than 1 GPU will require torchrun or multi-GPU run
 provider.pipeline_model_parallel_size = 1
 
 # 3) Materialize Megatron-Core model(s)
@@ -67,18 +67,16 @@ for name, weight in bridge.export_hf_weights(model, cpu=True):
 - **Qwen2 / Qwen3** and **Qwen3-MoE**
 - **Qwen2.5-VL** (vision-language)
 - **DeepSeek V2 / DeepSeek V3**
-- **Nemotron-H** (Mamba-based)
-- **GPT-OSS** variants
 
 Refer to `src/megatron/bridge/models/` for the latest set of bridges.
 
 ### Conversion Examples
 
 - Import/Export checkpoints: `examples/models/checkpoint_conversion.py`
-- Single-GPU generation from HF: `examples/models/generate_from_hf.py`
-- Multi-GPU loading from HF: `examples/models/multi_gpu_hf.py`
+- Generation with bridge: `examples/models/generate_from_hf.py`
 - VLM example (Qwen2.5-VL): `examples/models/generate_from_hf_vlm.py`
-- Compare HF vs Megatron outputs: `examples/models/compare_models.py`
+- Multi-GPU loading from HF: `examples/models/multi_gpu_hf.py`
+- Compare HF vs Megatron outputs: `examples/models/compare_models`
 
 For a deeper dive into the conversion design and advanced usage, see `src/megatron/bridge/models/README.md`.
 
