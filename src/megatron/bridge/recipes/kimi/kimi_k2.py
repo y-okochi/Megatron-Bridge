@@ -88,7 +88,6 @@ def model_config(
     # Performance optimization knobs
     cfg.moe_permute_fusion = True
     cfg.apply_rope_fusion = True
-    cfg.dist.enable_megatron_core_experimental = True  # for mla rope fusion
 
     # Pipeline parallelism configs. We infer PP layout from the provided PP and VP size
     map_pp_vp_to_layout = {
@@ -260,6 +259,7 @@ def pretrain_config(
         comm_overlap=comm_overlap_config,
         mixed_precision=precision_config,
     )
+    cfg.dist.enable_megatron_core_experimental = True  # for mla rope fusion
 
     if cfg.comm_overlap is None:
         cfg.comm_overlap = CommOverlapConfig(
