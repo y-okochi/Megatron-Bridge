@@ -389,6 +389,7 @@ class TestPretrain:
                 tokenizer_type="NullTokenizer",
                 vocab_size=10000,
             ),
+            checkpoint=CheckpointConfig(),
             rng=RNGConfig(seed=1234),
         )
 
