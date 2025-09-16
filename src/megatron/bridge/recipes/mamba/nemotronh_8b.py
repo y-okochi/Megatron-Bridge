@@ -138,7 +138,7 @@ def pretrain_config(
     )
 
     model_cfg = model_config(
-        tensor_parallelism=1, #tensor_parallelism,
+        tensor_parallelism=tensor_parallelism,
         pipeline_parallelism=pipeline_parallelism,
         pipeline_parallelism_dtype=pipeline_parallelism_dtype,
         virtual_pipeline_parallelism=virtual_pipeline_parallelism,
@@ -213,10 +213,10 @@ def pretrain_config(
         mixed_precision=precision_config,
     )
 
-    # if cfg.comm_overlap is None:
-    #     cfg.comm_overlap = CommOverlapConfig(
-    #         tp_comm_bootstrap_backend="nccl",
-    #         tp_comm_overlap=True,
-    #     )
+    if cfg.comm_overlap is None:
+        cfg.comm_overlap = CommOverlapConfig(
+            tp_comm_bootstrap_backend="nccl",
+            tp_comm_overlap=True,
+        )
 
     return cfg

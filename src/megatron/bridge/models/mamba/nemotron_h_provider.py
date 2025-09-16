@@ -61,9 +61,8 @@ class NemotronHModel4BProvider(NemotronHModelProvider):
 class NemotronHModel8BProvider(NemotronHModelProvider):
     """Configuration for a 8B parameter Nemotron-H model."""
 
-    # hybrid_override_pattern: str = "M-M-M-M*-M-M-M-M-M*-M-M-M-M-M*-M-M-M-M-M*-M-M-M-M-M-"
-    hybrid_override_pattern: str = "M"
-    num_layers: int = 1
+    hybrid_override_pattern: str = "M-M-M-M*-M-M-M-M-M*-M-M-M-M-M*-M-M-M-M-M*-M-M-M-M-M-"
+    num_layers: int = 52
     hidden_size: int = 4096
     mamba_state_dim: int = 128
     mamba_num_heads: int = 128

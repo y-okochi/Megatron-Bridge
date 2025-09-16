@@ -57,7 +57,7 @@ def parse_cli_args() -> Tuple[argparse.Namespace, list[str]]:
 def main() -> None:
     args, cli_overrides = parse_cli_args()
 
-    cfg: ConfigContainer = pretrain_config(train_iters=20, global_batch_size=8, micro_batch_size=1, lr_warmup_iters=10)
+    cfg: ConfigContainer = pretrain_config(train_iters=20, global_batch_size=8, micro_batch_size=1, lr_warmup_iters=10, tensor_parallelism=2, pipeline_parallelism=2)
     logger.info("Loaded base configuration")
     cfg.to_yaml()
 
