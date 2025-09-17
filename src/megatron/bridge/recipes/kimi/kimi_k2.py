@@ -73,6 +73,7 @@ def model_config(
         expert_model_parallel_size=expert_parallelism,
         sequence_parallel=sequence_parallelism,
     )
+    cfg.expert_tensor_parallel_size = 1 # Do not use ETP
 
     # Always use full layer recompute to squueze in 64 nodes
     cfg.recompute_granularity = "full"
