@@ -13,13 +13,16 @@
 # limitations under the License.
 
 from typing import Any, Optional, Union
+from unittest.mock import MagicMock, patch
 
 import pytest
 import torch
+from megatron.core.distributed import DistributedDataParallelConfig
 from megatron.core.optimizer import OptimizerConfig
 
 from megatron.bridge.models.gpt_provider import GPTModelProvider
 from megatron.bridge.models.t5_provider import T5ModelProvider
+from megatron.bridge.training.comm_overlap import CommOverlapConfig
 from megatron.bridge.training.config import (
     CheckpointConfig,
     ConfigContainer,
@@ -156,6 +159,11 @@ def create_test_distributed_init_config(**kwargs: Any) -> DistributedInitConfig:
     return DistributedInitConfig(**defaults)
 
 
+def create_test_ddp_config(**kwargs: Any) -> DistributedDataParallelConfig:
+    """Creates an instance of DistributedDataParallelConfig with defaults for testing."""
+    return DistributedDataParallelConfig(**kwargs)
+
+
 def create_test_profiling_config(**kwargs: Any) -> ProfilingConfig:
     """Creates an instance of ProfilingConfig with defaults for testing."""
     defaults = {
@@ -188,6 +196,7 @@ def create_test_config_container(
     checkpoint_config: Optional[CheckpointConfig] = None,
     dist_config: Optional[DistributedInitConfig] = None,
     profiling_config: Optional[ProfilingConfig] = None,
+    ddp_config: Optional[DistributedDataParallelConfig] = None,
 ):
     """
     Helper to create a ConfigContainer with specified or default test configurations.
@@ -220,8 +229,6 @@ def create_test_config_container(
     else:
         raise ValueError(f"Unsupported model_config type for default dataset_config: {type(model_config)}")
 
-    from megatron.core.distributed import DistributedDataParallelConfig
-
     container = ConfigContainer(
         train=train_config or create_test_training_config(),
         model=model_config,
@@ -232,7 +239,7 @@ def create_test_config_container(
         tokenizer=tokenizer_config or create_test_tokenizer_config(),
         checkpoint=checkpoint_config or create_test_checkpoint_config(),
         dist=dist_config or create_test_distributed_init_config(),
-        ddp=DistributedDataParallelConfig(),
+        ddp=ddp_config or create_test_ddp_config(),
         rng=RNGConfig(),
         rerun_state_machine=RerunStateMachineConfig(),
         profiling=profiling_config,
@@ -468,6 +475,7 @@ class TestConfigContainerValidation:
         dist_cfg = create_test_distributed_init_config(use_gloo_process_groups=False)
         opt_cfg = create_test_optimizer_config(use_distributed_optimizer=True)
         chkpt_cfg = create_test_checkpoint_config(ckpt_format="torch_dist")
+        ddp_cfg = create_test_ddp_config(use_distributed_optimizer=True)
 
         container, og_ws, cfg_mod = create_test_config_container(
             world_size_override=4,
@@ -475,6 +483,7 @@ class TestConfigContainerValidation:
             dist_config=dist_cfg,
             optimizer_config=opt_cfg,
             checkpoint_config=chkpt_cfg,
+            ddp_config=ddp_cfg,
         )
         try:
             container.validate()
@@ -807,6 +816,116 @@ class TestConfigContainerValidation:
         finally:
             restore_get_world_size_safe(og_ws, cfg_mod)
 
+    @pytest.mark.parametrize(
+        "gpu_major, moe_enable_deepep, expect_error",
+        [
+            (8, True, False),  # Ampere GPU with DeepEP enabled - should pass
+            (9, True, False),  # Hopper GPU with DeepEP enabled - should pass
+            (7, True, True),  # Volta GPU with DeepEP enabled - should raise ValueError
+            (6, True, True),  # Pascal GPU with DeepEP enabled - should raise ValueError
+            (10, True, True),  # Future unsupported GPU with DeepEP enabled - should raise ValueError
+            (7, False, False),  # Volta GPU with DeepEP disabled - should pass
+            (6, False, False),  # Pascal GPU with DeepEP disabled - should pass
+        ],
+    )
+    @patch("torch.cuda.get_device_properties")
+    def test_deepep_validation(
+        self, mock_get_device_properties, monkeypatch, gpu_major, moe_enable_deepep, expect_error
+    ):
+        """Test DeepEP validation during config container validation."""
+        # Mock GPU device properties
+        mock_properties = MagicMock()
+        mock_properties.major = gpu_major
+        mock_get_device_properties.return_value = mock_properties
+
+        # Create a GPT model config with MoE settings
+        gpt_model_cfg = create_test_gpt_config(
+            tensor_model_parallel_size=1,
+            pipeline_model_parallel_size=1,
+            moe_token_dispatcher_type="flex" if moe_enable_deepep else "alltoall",
+            moe_enable_deepep=moe_enable_deepep,
+            moe_shared_expert_overlap=not moe_enable_deepep,  # DeepEP requires this to be False
+        )
+
+        container, og_ws, cfg_mod = create_test_config_container(world_size_override=1, model_config=gpt_model_cfg)
+
+        try:
+            if expect_error:
+                with pytest.raises(ValueError, match="DeepEP is supported for Ampere"):
+                    container.validate()
+            else:
+                container.validate()  # Should pass without error
+        finally:
+            restore_get_world_size_safe(og_ws, cfg_mod)
+
+    @patch("torch.cuda.get_device_properties")
+    def test_deepep_validation_disabled_skips_hardware_check(self, mock_get_device_properties, monkeypatch):
+        """Test that DeepEP validation is skipped when DeepEP is disabled, even on unsupported hardware."""
+        # Mock unsupported GPU (should not be called since DeepEP is disabled)
+        mock_properties = MagicMock()
+        mock_properties.major = 7  # Volta
+        mock_get_device_properties.return_value = mock_properties
+
+        # Create a GPT model config with DeepEP disabled
+        gpt_model_cfg = create_test_gpt_config(
+            tensor_model_parallel_size=1,
+            pipeline_model_parallel_size=1,
+            moe_enable_deepep=False,  # DeepEP disabled
+        )
+
+        container, og_ws, cfg_mod = create_test_config_container(world_size_override=1, model_config=gpt_model_cfg)
+
+        try:
+            # Should pass without error and without calling get_device_properties
+            container.validate()
+            # Verify get_device_properties was not called since DeepEP is disabled
+            mock_get_device_properties.assert_not_called()
+        finally:
+            restore_get_world_size_safe(og_ws, cfg_mod)
+
+    def test_megatron_fsdp_config(self, monkeypatch):
+        """Test MegatronFSDP config."""
+        gpt_model_cfg = create_test_gpt_config()
+        train_cfg = create_test_training_config(train_iters=500, global_batch_size=16)
+        sched_cfg = create_test_scheduler_config()
+        dist_cfg = create_test_distributed_init_config(use_megatron_fsdp=True)
+
+        container, og_ws, cfg_mod = create_test_config_container(
+            world_size_override=1,
+            model_config=gpt_model_cfg,
+            train_config=train_cfg,
+            scheduler_config=sched_cfg,
+            dist_config=dist_cfg,
+        )
+        try:
+            container.model.gradient_accumulation_fusion = True
+            container.ddp.average_in_collective = True
+            container.validate()
+            assert container.model.gradient_accumulation_fusion is False
+            assert container.ddp.average_in_collective is False
+        finally:
+            restore_get_world_size_safe(og_ws, cfg_mod)
+
+    def test_megatron_fsdp_config_with_torch_fsdp2(self, monkeypatch):
+        """Test MegatronFSDP config with torch_fsdp2, should raise ValueError."""
+        gpt_model_cfg = create_test_gpt_config()
+        train_cfg = create_test_training_config(train_iters=500, global_batch_size=16)
+        sched_cfg = create_test_scheduler_config()
+        dist_cfg = create_test_distributed_init_config(use_megatron_fsdp=True, use_torch_fsdp2=True)
+
+        container, og_ws, cfg_mod = create_test_config_container(
+            world_size_override=1,
+            model_config=gpt_model_cfg,
+            train_config=train_cfg,
+            scheduler_config=sched_cfg,
+            dist_config=dist_cfg,
+        )
+        try:
+            with pytest.raises(ValueError):
+                container.validate()
+        finally:
+            restore_get_world_size_safe(og_ws, cfg_mod)
+
 
 class TestRerunConfigValidation:
     """
@@ -898,6 +1017,28 @@ class TestRerunConfigValidation:
         cfg.grad_reduce_in_fp32 = False
         cfg.__post_init__()
 
+    def test_comm_overlap_config(self):
+        """Test that CommOverlapConfig.__post_init__() is idempotent and preserves user configuration."""
+
+        def create_comm_overlap_config():
+            return CommOverlapConfig(
+                tp_comm_overlap=True,
+                tp_comm_bootstrap_backend="nccl",
+            )
+
+        # Use the standard idempotency check
+        self._check_post_init_idempotency(create_comm_overlap_config)
+
+        cfg = create_comm_overlap_config()
+        assert cfg.user_comm_overlap_cfg.tp_comm_bootstrap_backend == "nccl"
+        assert cfg.user_comm_overlap_cfg.tp_comm_overlap is True
+        cfg.__post_init__()
+        cfg.__post_init__()
+
+        # The user configuration should be preserved across all re-runs
+        assert cfg.user_comm_overlap_cfg.tp_comm_bootstrap_backend == "nccl"
+        assert cfg.user_comm_overlap_cfg.tp_comm_overlap is True
+
     def test_rerun_validate_config_container(self):
         import copy
         from dataclasses import fields
@@ -981,3 +1122,163 @@ class TestCheckpointConfig:
         create_test_checkpoint_config(
             async_save=True, save="/tmp/test_checkpoint_config", use_persistent_ckpt_worker=True
         )
+
+    def test_async_save_format_validation_torch_dist(self, monkeypatch):
+        """Test that async_save works with torch_dist format."""
+        gpt_model_cfg = create_test_gpt_config()
+        train_cfg = create_test_training_config(train_iters=500, global_batch_size=16)
+        sched_cfg = create_test_scheduler_config()
+        ckpt_cfg = create_test_checkpoint_config(
+            async_save=True, save="/tmp/test_checkpoint", ckpt_format="torch_dist"
+        )
+
+        container, og_ws, cfg_mod = create_test_config_container(
+            world_size_override=1,
+            model_config=gpt_model_cfg,
+            train_config=train_cfg,
+            scheduler_config=sched_cfg,
+            checkpoint_config=ckpt_cfg,
+        )
+        try:
+            # Should not raise error - async_save with torch_dist is allowed
+            container.validate()
+        finally:
+            restore_get_world_size_safe(og_ws, cfg_mod)
+
+    def test_async_save_format_validation_fsdp_dtensor_fails(self, monkeypatch):
+        """Test that async_save fails with fsdp_dtensor format."""
+        gpt_model_cfg = create_test_gpt_config()
+        train_cfg = create_test_training_config(train_iters=500, global_batch_size=16)
+        sched_cfg = create_test_scheduler_config()
+        ckpt_cfg = create_test_checkpoint_config(
+            async_save=True, save="/tmp/test_checkpoint", ckpt_format="fsdp_dtensor"
+        )
+        # Enable Megatron FSDP so the format validation passes and we reach the async_save check
+        dist_cfg = create_test_distributed_init_config(use_megatron_fsdp=True)
+
+        container, og_ws, cfg_mod = create_test_config_container(
+            world_size_override=1,
+            model_config=gpt_model_cfg,
+            train_config=train_cfg,
+            scheduler_config=sched_cfg,
+            checkpoint_config=ckpt_cfg,
+            dist_config=dist_cfg,
+        )
+        try:
+            # Should raise error - async_save with fsdp_dtensor is not allowed
+            with pytest.raises(AssertionError, match="async_save is only supported with ckpt_format='torch_dist'"):
+                container.validate()
+        finally:
+            restore_get_world_size_safe(og_ws, cfg_mod)
+
+    def test_fsdp_dtensor_format_validation_with_megatron_fsdp(self, monkeypatch):
+        """Test that fsdp_dtensor format requires Megatron FSDP."""
+        gpt_model_cfg = create_test_gpt_config()
+        train_cfg = create_test_training_config(train_iters=500, global_batch_size=16)
+        sched_cfg = create_test_scheduler_config()
+        ckpt_cfg = create_test_checkpoint_config(save="/tmp/test_checkpoint", ckpt_format="fsdp_dtensor")
+        dist_cfg = create_test_distributed_init_config(use_megatron_fsdp=True)
+
+        container, og_ws, cfg_mod = create_test_config_container(
+            world_size_override=1,
+            model_config=gpt_model_cfg,
+            train_config=train_cfg,
+            scheduler_config=sched_cfg,
+            checkpoint_config=ckpt_cfg,
+            dist_config=dist_cfg,
+        )
+        try:
+            # Should not raise error - fsdp_dtensor with Megatron FSDP is allowed
+            container.validate()
+            assert container.checkpoint.ckpt_format == "fsdp_dtensor"
+            assert container.dist.use_megatron_fsdp is True
+            assert container.ddp.use_megatron_fsdp is True
+        finally:
+            restore_get_world_size_safe(og_ws, cfg_mod)
+
+    def test_fsdp_dtensor_format_validation_without_megatron_fsdp_fails(self, monkeypatch):
+        """Test that fsdp_dtensor format fails without Megatron FSDP."""
+        gpt_model_cfg = create_test_gpt_config()
+        train_cfg = create_test_training_config(train_iters=500, global_batch_size=16)
+        sched_cfg = create_test_scheduler_config()
+        ckpt_cfg = create_test_checkpoint_config(save="/tmp/test_checkpoint", ckpt_format="fsdp_dtensor")
+        dist_cfg = create_test_distributed_init_config(use_megatron_fsdp=False)
+
+        container, og_ws, cfg_mod = create_test_config_container(
+            world_size_override=1,
+            model_config=gpt_model_cfg,
+            train_config=train_cfg,
+            scheduler_config=sched_cfg,
+            checkpoint_config=ckpt_cfg,
+            dist_config=dist_cfg,
+        )
+        try:
+            # Should raise error - fsdp_dtensor without Megatron FSDP is not allowed
+            with pytest.raises(AssertionError, match="fsdp_dtensor checkpoint format only supports Megatron FSDP"):
+                container.validate()
+        finally:
+            restore_get_world_size_safe(og_ws, cfg_mod)
+
+    def test_megatron_fsdp_with_precision_aware_optimizer(self, monkeypatch):
+        """Test that Megatron FSDP with precision aware optimizer sets preserve_fp32_weights=False."""
+        gpt_model_cfg = create_test_gpt_config()
+        train_cfg = create_test_training_config(train_iters=500, global_batch_size=16)
+        sched_cfg = create_test_scheduler_config()
+
+        # Create optimizer config with precision aware optimizer enabled
+        optim_cfg = create_test_optimizer_config()
+        optim_cfg.use_precision_aware_optimizer = True
+        optim_cfg.use_distributed_optimizer = True  # Required for precision aware optimizer
+
+        dist_cfg = create_test_distributed_init_config(use_megatron_fsdp=True)
+        ddp_cfg = create_test_ddp_config(use_distributed_optimizer=True)
+
+        container, og_ws, cfg_mod = create_test_config_container(
+            world_size_override=1,
+            model_config=gpt_model_cfg,
+            train_config=train_cfg,
+            scheduler_config=sched_cfg,
+            optimizer_config=optim_cfg,
+            dist_config=dist_cfg,
+            ddp_config=ddp_cfg,
+        )
+        try:
+            container.validate()
+            # Should automatically set preserve_fp32_weights=False when using precision aware optimizer with FSDP
+            assert container.ddp.preserve_fp32_weights is False
+            assert container.optimizer.use_precision_aware_optimizer is True
+            assert container.dist.use_megatron_fsdp is True
+        finally:
+            restore_get_world_size_safe(og_ws, cfg_mod)
+
+    def test_megatron_fsdp_without_precision_aware_optimizer(self, monkeypatch):
+        """Test that Megatron FSDP without precision aware optimizer doesn't modify preserve_fp32_weights."""
+        gpt_model_cfg = create_test_gpt_config()
+        train_cfg = create_test_training_config(train_iters=500, global_batch_size=16)
+        sched_cfg = create_test_scheduler_config()
+
+        # Create optimizer config with precision aware optimizer disabled
+        optim_cfg = create_test_optimizer_config()
+        optim_cfg.use_precision_aware_optimizer = False
+        optim_cfg.use_distributed_optimizer = True  # Enable distributed optimizer for consistency
+
+        dist_cfg = create_test_distributed_init_config(use_megatron_fsdp=True)
+        ddp_cfg = create_test_ddp_config(use_distributed_optimizer=True)
+
+        container, og_ws, cfg_mod = create_test_config_container(
+            world_size_override=1,
+            model_config=gpt_model_cfg,
+            train_config=train_cfg,
+            scheduler_config=sched_cfg,
+            optimizer_config=optim_cfg,
+            dist_config=dist_cfg,
+            ddp_config=ddp_cfg,
+        )
+        try:
+            container.validate()
+            # preserve_fp32_weights should keep its default value when precision aware optimizer is disabled
+            assert container.optimizer.use_precision_aware_optimizer is False
+            assert container.dist.use_megatron_fsdp is True
+            # preserve_fp32_weights should remain at its default
+        finally:
+            restore_get_world_size_safe(og_ws, cfg_mod)

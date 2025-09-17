@@ -20,6 +20,7 @@ from typing import Iterable, List, Optional, Tuple
 
 import torch
 from megatron.core.transformer.module import MegatronModule
+from megatron.core.utils import unwrap_model
 from rich.table import Table
 from transformers.configuration_utils import PretrainedConfig
 
