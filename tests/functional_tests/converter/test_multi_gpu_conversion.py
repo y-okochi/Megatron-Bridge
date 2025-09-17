@@ -59,7 +59,7 @@ class TestMultiGPUConversion:
             "--data-file=/workspace/.coverage",
             "--source=/workspace/",
             "--parallel-mode",
-            "examples/models/multi_gpu_hf.py",
+            "examples/conversion/multi_gpu_hf.py",
             "--hf-model-id",
             "meta-llama/Llama-3.2-1B",
             "--output-dir",

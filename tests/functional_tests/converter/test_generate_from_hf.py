@@ -60,7 +60,7 @@ class TestGenerateFromHF:
             "--data-file=/workspace/.coverage",
             "--source=/workspace/",
             "--parallel-mode",
-            "examples/models/generate_from_hf.py",
+            "examples/conversion/generate_from_hf.py",
             "--hf_model_path",
             "meta-llama/Llama-3.2-1B",
             "--prompt",

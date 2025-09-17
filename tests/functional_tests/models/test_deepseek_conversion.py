@@ -108,7 +108,7 @@ class TestDeepSeekConversion:
             "--data-file=/workspace/.coverage",
             "--source=/workspace/",
             "--parallel-mode",
-            "examples/models/multi_gpu_hf.py",
+            "examples/conversion/multi_gpu_hf.py",
             "--hf-model-id",
             deepseek_toy_model_path,
             "--output-dir",

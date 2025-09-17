@@ -187,7 +187,7 @@ transformer_config = bridge.transformer_config
 print(f"Hidden size: {transformer_config.hidden_size}")
 ```
 
-For more examples and advanced usage patterns, see the `examples/models/` directory in the repository.
+For more examples and advanced usage patterns, see the `examples/conversion/` directory in the repository.
 
 ## Convenience Workflows (Commands)
 
@@ -226,7 +226,7 @@ PY
 ### Launch with multiple GPUs (example)
 
 ```bash
-torchrun --nproc-per-node=2 -m examples.models.generate_from_hf
+torchrun --nproc-per-node=2 -m examples.conversion.generate_from_hf
 ```
 
 ## AutoBridge API Reference

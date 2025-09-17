@@ -148,7 +148,7 @@ for i, (name, tensor) in enumerate(bridge.export_hf_weights(model, cpu=True)):
 
 
 ## 6) Validate with examples (optional)
-Use the examples in `examples/models/` to verify bidirectional conversion and basic generation with more complex model parallel setups.
+Use the examples in `examples/conversion/` to verify bidirectional conversion and basic generation with more complex model parallel setups.
 
 
 - Generate from HF directly with the bridge
@@ -156,8 +156,8 @@ Use the examples in `examples/models/` to verify bidirectional conversion and ba
 - Multi-GPU HF load to Megatron
 
 ```sh
-python examples/models/generate_from_hf.py --model <org>/<model-id> | cat
-python examples/models/checkpoint_conversion.py --model <org>/<model-id> | cat
+python examples/conversion/generate_from_hf.py --model <org>/<model-id> | cat
+python examples/conversion/checkpoint_conversion.py --model <org>/<model-id> | cat
 ```
 ## 7) Add tests
 
@@ -215,7 +215,7 @@ logging.getLogger("megatron.bridge").setLevel(logging.DEBUG)
 
 - User guide: [docs/bridge-guide.md](https://github.com/NVIDIA-NeMo/Megatron-Bridge/blob/main/docs/bridge-guide.md)
 - Technical deep-dive: [docs/bridge-tech-details.md](https://github.com/NVIDIA-NeMo/Megatron-Bridge/blob/main/docs/bridge-tech-details.md)
-- Code examples: [examples/models/](https://github.com/NVIDIA-NeMo/Megatron-Bridge/tree/main/examples/models)
+- Code examples: [examples/conversion/](https://github.com/NVIDIA-NeMo/Megatron-Bridge/tree/main/examples/conversion)
 - Providers and bridges: [src/megatron/bridge/models/](https://github.com/NVIDIA-NeMo/Megatron-Bridge/tree/main/src/megatron/bridge/models)
 - GitHub source tree: [Megatron Bridge src/megatron/bridge](https://github.com/NVIDIA-NeMo/Megatron-Bridge/tree/main/src/megatron/bridge)
 

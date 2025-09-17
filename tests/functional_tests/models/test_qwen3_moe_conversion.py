@@ -231,7 +231,7 @@ class TestQwen3MoEConversion:
             "--data-file=/workspace/.coverage",
             "--source=/workspace/",
             "--parallel-mode",
-            "examples/models/multi_gpu_hf.py",
+            "examples/conversion/multi_gpu_hf.py",
             "--hf-model-id",
             qwen3_moe_toy_model_path,  # Use our local toy MoE model instead of downloading
             "--output-dir",
