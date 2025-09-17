@@ -5,7 +5,6 @@ Megatron Bridge provides a robust, parallelism-aware pathway to convert models a
 Megatron Bridge performs on-the-fly, model-parallel-aware, per-parameter conversion—unlike traditional converters that require a single GPU and full in-memory loading of both Megatron-Core and HF models.
 
 - For API-centric usage, see the guide: [Bridge with 🤗 Hugging Face](./bridge-guide.md)
-- For component overview and mapping patterns, see: `src/megatron/bridge/models/README.md`
 
 ## Architecture at a glance
 
@@ -149,31 +148,42 @@ sequenceDiagram
 
 ## Param mappings and parallelism
 
-Mapping types available via `megatron.bridge.models.conversion.param_mapping`:
+Mapping types available via [param_mapping.py](https://github.com/NVIDIA-NeMo/Megatron-Bridge/tree/main/src/megatron/bridge/models/conversion/param_mapping.py):
 
-- AutoMapping: General purpose 1:1 name mapping with wildcard support.
-- ColumnParallelMapping: Splits along output dimension (dim 0) for TP.
-- RowParallelMapping: Splits along input dimension (dim 1) for TP.
-- QKVMapping: Fuses/splits HF Q, K, V projections to Megatron QKV and vice-versa.
-- GatedMLPMapping: Concatenates/splits gated MLP projections.
-- ReplicatedMapping: Replicates parameters across ranks (e.g., LayerNorm).
+- AutoMapping: General-purpose 1:1 parameter mapping with automatic TP-type detection; dispatches to ColumnParallelMapping, RowParallelMapping, or ReplicatedMapping based on the layer/module type (wildcards supported). Participates in PP broadcast and EP gather when applicable.
+- ColumnParallelMapping: Splits along the output dimension (dim 0) under TP. Participates in PP broadcast and EP gather when applicable.
+- RowParallelMapping: Splits along the input dimension (dim 1) under TP. Participates in PP broadcast and EP gather when applicable.
+- QKVMapping: Fuses/splits HF Q, K, V projections to Megatron's interleaved QKV format and vice versa. Uses PP broadcast as needed and delegates TP to the underlying mapping.
+- GatedMLPMapping: Concatenates/splits gate and up projections. Participates in PP broadcast and EP gather when applicable.
+- ReplicatedMapping: Keeps parameters fully replicated across TP ranks (e.g., LayerNorm). Participates in PP broadcast and EP gather when applicable.
 
-Shape intuition under TP of size `N`:
+Note: If you need a one-to-many or many-to-one mapping that is not covered by QKVMapping or GatedMLPMapping, implement a custom mapping.
 
-```python
-# Column-parallel (output split)
-# [out_dim, in_dim] -> [out_dim/N, in_dim] per rank
+### Example Mapping - ColumnParallelMapping: PP, TP, EP in practice
 
-# Row-parallel (input split)
-# [out_dim, in_dim] -> [out_dim, in_dim/N] per rank
+- HF → Megatron (import):
+  - HF tensors are available from storage to all ranks; TP rank 0 reads the full tensor and performs the split/scatter.
+  - TP: Rank 0 splits along dim 0 into `tp_size` chunks and scatters shards to TP ranks so each rank receives a tensor matching its local parameter shape/dtype/device.
+  - PP: No PP collectives are needed; the owning PP stage writes its shard directly.
+  - EP: For expert parameters, each EP rank receives its local experts by name; no cross-EP collectives are required on import.
 
-# Replicated
-# [d] -> [d] on all ranks
-```
+- Megatron → HF (export):
+  - Only the owning PP stage initially holds the local Megatron shard; it broadcasts to all PP ranks before TP gather.
+  - PP: The owning PP stage first broadcasts the tensor to all PP ranks so every rank participates in the collectives.
+  - TP: All TP shards are gathered and concatenated along dim 0 to reconstruct the full tensor.
+  - EP: For expert parameters, shards are gathered across EP ranks and one HF tensor per expert is emitted with the correct names.
+    - Let total experts be E and EP size be S (assume E % S == 0). Each EP rank owns E/S experts. For a given local expert index L on each EP rank, the global expert ids are L, L+E/S, ..., L+(S-1)*E/S. We gather tensors from all EP ranks and emit one HF tensor per global expert id by substituting that id into the HF parameter name.
+
+This mirrors [ColumnParallelMapping.hf_to_megatron](https://github.com/NVIDIA-NeMo/Megatron-Bridge/tree/main/src/megatron/bridge/models/conversion/param_mapping.py) and [ColumnParallelMapping.megatron_to_hf](https://github.com/NVIDIA-NeMo/Megatron-Bridge/tree/main/src/megatron/bridge/models/conversion/param_mapping.py) in [param_mapping.py](https://github.com/NVIDIA-NeMo/Megatron-Bridge/tree/main/src/megatron/bridge/models/conversion/param_mapping.py).
+
+Implementation notes (from code):
+- Dtype handling: When HF and Megatron dtypes differ, weights are cast to the Megatron parameter dtype with a warning before TP scatter (see ColumnParallelMapping.hf_to_megatron in [param_mapping.py](https://github.com/NVIDIA-NeMo/Megatron-Bridge/tree/main/src/megatron/bridge/models/conversion/param_mapping.py)).
+- FP8 export: Tensors are dequantized on export when using FP8 tensor classes (see `maybe_dequantize` in [param_mapping.py](https://github.com/NVIDIA-NeMo/Megatron-Bridge/tree/main/src/megatron/bridge/models/conversion/param_mapping.py)).
+- MoE experts: Expert parameter names are normalized for lookup and expert shards are gathered across EP ranks and re-emitted per global expert id (see `gather_from_ep_ranks` in [param_mapping.py](https://github.com/NVIDIA-NeMo/Megatron-Bridge/tree/main/src/megatron/bridge/models/conversion/param_mapping.py)).
 
 ## Architecture-specific bridge example: Qwen3
 
-Path: `src/megatron/bridge/models/qwen/qwen3_bridge.py`
+Path: [src/megatron/bridge/models/qwen/qwen3_bridge.py](https://github.com/NVIDIA-NeMo/Megatron-Bridge/tree/main/src/megatron/bridge/models/qwen/qwen3_bridge.py)
 
 ```python
 from megatron.core.models.gpt.gpt_model import GPTModel
@@ -250,114 +260,3 @@ Notes:
 
 - `provider_bridge`: Translate HF config into a Megatron-compatible provider, including architecture quirks (e.g., `qk_layernorm=True`).
 - `mapping_registry`: Define exact name patterns and transformation mappings. Wildcards `*` apply the same rule across layers.
-
-## Code examples
-
-### Load HF and convert to Megatron
-
-```python
-import torch
-from megatron.bridge import AutoBridge
-
-# Auto-detect architecture and prepare bridge
-bridge = AutoBridge.from_hf_pretrained(
-    "meta-llama/Llama-3.2-1B",
-    torch_dtype=torch.bfloat16,
-    trust_remote_code=True,
-)
-
-# Build provider and configure parallelism before instantiation
-provider = bridge.to_megatron_provider()
-provider.tensor_model_parallel_size = 1
-provider.pipeline_model_parallel_size = 1
-
-# Instantiate Megatron model(s)
-megatron_model = provider.provide_distributed_model(wrap_with_ddp=False)
-
-# Load weights HF -> Megatron (per-parameter streaming)
-bridge.load_hf_weights(megatron_model)
-```
-
-### Export Megatron back to HF
-
-```python
-# Save complete HF model directory (config + tokenizer + safetensors)
-bridge.save_hf_pretrained(megatron_model, "./exported-llama")
-
-# Or save just the weights (safetensors)
-bridge.save_hf_weights(megatron_model, "./weights", show_progress=False)
-
-# Or stream tensors on-the-fly without saving to disk
-for name, tensor in bridge.export_hf_weights(megatron_model, cpu=True):
-    print(name, tuple(tensor.shape))
-```
-
-### Check support before loading
-
-```python
-from megatron.bridge import AutoBridge
-
-if AutoBridge.can_handle("meta-llama/Llama-3.2-1B"):
-    bridge = AutoBridge.from_hf_pretrained("meta-llama/Llama-3.2-1B")
-else:
-    raise RuntimeError("Model requires a custom bridge implementation")
-```
-
-### Skeleton for a custom bridge
-
-```python
-from megatron.bridge.models.conversion.model_bridge import MegatronModelBridge
-from megatron.bridge.models.conversion.mapping_registry import MegatronMappingRegistry
-from megatron.bridge.models.conversion.param_mapping import AutoMapping, QKVMapping
-
-# Example: LlamaForCausalLM -> GPTModel
-@MegatronModelBridge.register_bridge(source="LlamaForCausalLM", target="GPTModel")
-class MyLlamaBridge(MegatronModelBridge):
-    def provider_bridge(self, hf_pretrained):
-        cfg = hf_pretrained.config
-        # Return a ModelProvider configured from HF config
-        return MyLlamaProvider(
-            num_layers=cfg.num_hidden_layers,
-            hidden_size=cfg.hidden_size,
-            num_attention_heads=cfg.num_attention_heads,
-            # ... additional fields ...
-        )
-
-    def mapping_registry(self) -> MegatronMappingRegistry:
-        return MegatronMappingRegistry(
-            # Direct 1:1 mapping
-            AutoMapping(
-                megatron_param="embedding.word_embeddings.weight",
-                hf_param="model.embed_tokens.weight",
-            ),
-            # QKV packed in Megatron vs. separate in HF
-            QKVMapping(
-                q="model.layers.*.self_attn.q_proj.weight",
-                k="model.layers.*.self_attn.k_proj.weight",
-                v="model.layers.*.self_attn.v_proj.weight",
-                megatron_param="decoder.layers.*.self_attention.linear_qkv.weight",
-            ),
-            # ... add Row/ColumnParallel, GatedMLP, etc. as needed ...
-        )
-```
-
-Tips:
-
-- Use wildcard `*` in names to map per-layer parameters.
-- Keep dimensions consistent with the chosen parallelism strategy.
-- Add architecture quirks (e.g., RoPE scaling, layer norms) in `provider_bridge`.
-
-## Memory and streaming characteristics
-
-- Safetensors-backed state sources allow random-access by key, enabling per-parameter streaming.
-- The bridge iterates Megatron parameter order, querying HF state as needed, never materializing the full HF model in memory.
-- On export, weights can be streamed to a generator, to safetensors, or to a full HF directory.
-
-## Cross-links and references
-
-- User guide: [Bridge with 🤗 Hugging Face](./bridge-guide.md)
-- Component reference and patterns: `src/megatron/bridge/models/README.md`
-- Core orchestrator: `src/megatron/bridge/models/conversion/model_bridge.py`
-- Auto selection: `src/megatron/bridge/models/conversion/auto_bridge.py`
-- Param mappings: `src/megatron/bridge/models/conversion/param_mapping.py`
-- Example scripts: `examples/models/generate_from_hf.py`
