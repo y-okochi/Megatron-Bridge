@@ -23,6 +23,10 @@ model:
   tensor_model_parallel_size: 2
   pipeline_model_parallel_size: 16
   expert_model_parallel_size: 32
+  apply_rope_fusion: false
+  recompute_granularity: full
+  reccompute_method: uniform
+  recompute_num_layers: 1
 
 train:
   train_iters: 20

@@ -22,7 +22,6 @@ from megatron.core.distributed import DistributedDataParallelConfig
 from megatron.bridge.models.kimi import KimiK2Provider
 from megatron.bridge.recipes.utils.dataset_utils import get_blend_fields_from_data_paths
 from megatron.bridge.recipes.utils.optimizer_utils import distributed_fused_adam_with_cosine_annealing
-from megatron.bridge.recipes.utils.tokenizer_utils import DEFAULT_NULL_TOKENIZER_VOCAB_SIZE
 from megatron.bridge.training.comm_overlap import CommOverlapConfig
 from megatron.bridge.training.config import (
     CheckpointConfig,
@@ -47,7 +46,13 @@ def model_config(
     context_parallelism: int = 1,
     expert_parallelism: int = 32,
     sequence_parallelism: bool = True,
+    # Recomputation
+    recompute_granularity: str = "selective",
+    recompute_modules: Optional[List[str]] = None,
+    recompute_method: Optional[str] = None,
+    recompute_num_layers: Optional[int] = None,
     enable_deepep: bool = False,
+    apply_rope_fusion: bool = False,
 ) -> KimiK2Provider:
     """
     Configure the Kimi-K2 (1T) model.
@@ -73,13 +78,13 @@ def model_config(
         context_parallel_size=context_parallelism,
         expert_model_parallel_size=expert_parallelism,
         sequence_parallel=sequence_parallelism,
+        expert_tensor_parallel_size=1, # Do not use ETP
+        # Recomputation
+        recompute_granularity=recompute_granularity,
+        recompute_modules=recompute_modules,
+        recompute_method=recompute_method,
+        recompute_num_layers=recompute_num_layers,
     )
-    cfg.expert_tensor_parallel_size = 1 # Do not use ETP
-
-    # Always use full layer recompute to squueze in 64 nodes
-    cfg.recompute_granularity = "full"
-    cfg.recompute_method = "uniform"
-    cfg.recompute_num_layers = 1
 
     # Pipeline split for asymmetric stages as used in NeMo recipe
     cfg.account_for_embedding_in_pipeline_split = False
@@ -89,7 +94,8 @@ def model_config(
 
     # Performance optimization knobs
     cfg.moe_permute_fusion = True
-    # cfg.apply_rope_fusion = True
+    if apply_rope_fusion:
+        cfg.apply_rope_fusion = True
 
     # Pipeline parallelism configs. We infer PP layout from the provided PP and VP size
     map_pp_vp_to_layout = {
@@ -154,6 +160,12 @@ def pretrain_config(
     precision_config: Optional[Union[MixedPrecisionConfig, str]] = None,
     comm_overlap_config: Optional[CommOverlapConfig] = None,
     enable_deepep: bool = False,
+    # Recomputation
+    recompute_granularity: str = "selective",
+    recompute_modules: Optional[List[str]] = None,
+    recompute_method: Optional[str] = None,
+    recompute_num_layers: Optional[int] = None,
+    apply_rope_fusion: bool = False,
 ) -> ConfigContainer:
     """
     Create a pre-training configuration for Kimi-K2 (1T) model.
@@ -178,7 +190,12 @@ def pretrain_config(
         context_parallelism=context_parallelism,
         expert_parallelism=expert_parallelism,
         sequence_parallelism=sequence_parallelism,
+        recompute_granularity=recompute_granularity,
+        recompute_modules=recompute_modules,
+        recompute_method=recompute_method,
+        recompute_num_layers=recompute_num_layers,
         enable_deepep=enable_deepep,
+        apply_rope_fusion=apply_rope_fusion,
     )
 
     opt_config, scheduler = distributed_fused_adam_with_cosine_annealing(
@@ -248,7 +265,7 @@ def pretrain_config(
             tensorboard_dir=tensorboard_dir,
             log_timers_to_tensorboard=True,
         ),
-        tokenizer=TokenizerConfig(tokenizer_type="NullTokenizer", vocab_size=DEFAULT_NULL_TOKENIZER_VOCAB_SIZE),
+        tokenizer=TokenizerConfig(tokenizer_type="NullTokenizer", vocab_size=model_cfg.vocab_size),
         checkpoint=CheckpointConfig(
             save_interval=2000,
             save=checkpoint_dir,
@@ -261,7 +278,8 @@ def pretrain_config(
         comm_overlap=comm_overlap_config,
         mixed_precision=precision_config,
     )
-    # cfg.dist.enable_megatron_core_experimental = True  # for mla rope fusion
+    if apply_rope_fusion:
+        cfg.dist.enable_megatron_core_experimental = True  # for mla rope fusion
 
     if cfg.comm_overlap is None:
         cfg.comm_overlap = CommOverlapConfig(

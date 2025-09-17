@@ -116,6 +116,7 @@ class KimiK2Provider(MLATransformerConfig, GPTModelProvider):
     num_layers_in_last_pipeline_stage: Optional[int] = None
     account_for_embedding_in_pipeline_split: bool = False
     account_for_loss_in_pipeline_split: bool = False
+    vocab_size: int = 163840
 
     # fusions
     apply_rope_fusion: bool = False
@@ -126,6 +127,5 @@ class KimiK2Provider(MLATransformerConfig, GPTModelProvider):
     cross_entropy_loss_fusion: bool = True
     cross_entropy_fusion_impl: str = "te"
     moe_permute_fusion: bool = is_te_min_version("2.1.0") if HAVE_TE else False
-
 
     
