@@ -26,7 +26,7 @@ model:
 
 train:
   train_iters: 20
-  global_batch_size: 8
+  global_batch_size: 16
   micro_batch_size: 1
   eval_iters: 0
 
