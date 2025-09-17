@@ -840,3 +840,7 @@ class ConfigContainer(Container):
             f"dataset config match.\nSequence length in model config: {self.model.seq_length}, "
             f"Sequence length in dataset config: {data_seq_length}"
         )
+
+        assert self.ddp.use_distributed_optimizer == self.optimizer.use_distributed_optimizer, (
+            "Please ensure 'use_distributed_optimizer' setting in DistributedDataParallelConfig and OptimizerConfig matches."
+        )
