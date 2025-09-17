@@ -257,11 +257,10 @@ Provide `-k your_model` selectors and guard long tests with `pytest.skip` if ext
 
 ## 8) Troubleshooting
 
-- Shape mismatches: double-check TP/PP splits and `QKVMapping` head ordering.
+- Shape mismatches: double-check TP/PP splits and model configs.
 - Missing weights: ensure every Megatron param has a mapping; print unresolved names.
 - Dtype issues: cast HF weights to destination dtype inside mappings when needed.
 - EP/MoE layers: see EP-specific gather/scatter helpers in `param_mapping.py`.
-- RoPE variants: normalize RoPE base/scale in the provider to match Megatron expectations.
 
 Enable verbose logs:
 ```python
@@ -272,6 +271,7 @@ logging.getLogger("megatron.bridge").setLevel(logging.DEBUG)
 
 ## 9) PR checklist
 
+- Provde details in PR descriptions
 - Provider maps all required config fields
 - All parameters are covered by mappings
 - Generation results after conversion from HF to Megatron match Megatron, including multi-GPU runs
