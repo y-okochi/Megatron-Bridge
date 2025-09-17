@@ -16,13 +16,13 @@ Demonstrates round-trip conversion between HuggingFace and Megatron-LM model for
 **Usage:**
 ```bash
 # Basic conversion (uses default Llama-3.2-1B)
-python examples/conversion/2_way_hf_binding.py
+python examples/conversion/hf_megatron_roundtrip.py
 
 # Convert specific model
-python examples/conversion/2_way_hf_binding.py --hf-model-id meta-llama/Llama-3.2-3B
+python examples/conversion/hf_megatron_roundtrip.py --hf-model-id meta-llama/Llama-3.2-3B
 
 # Save to specific directory
-python examples/conversion/2_way_hf_binding.py --hf-model-id meta-llama/Llama-3.2-1B --output-dir ./converted_models
+python examples/conversion/hf_megatron_roundtrip.py --hf-model-id meta-llama/Llama-3.2-1B --output-dir ./converted_models
 ```
 
 **Example Output:**
@@ -59,12 +59,12 @@ A tool for importing/exporting models between HuggingFace and Megatron checkpoin
 **Import HF to Megatron:**
 ```bash
 # Basic import
-python examples/conversion/checkpoint_conversion.py import \
+python examples/conversion/convert_checkpoints.py import \
   --hf-model meta-llama/Llama-3.2-1B \
   --megatron-path ./checkpoints/llama3_2_1b
 
 # Import with custom settings
-python examples/conversion/checkpoint_conversion.py import \
+python examples/conversion/convert_checkpoints.py import \
   --hf-model meta-llama/Llama-3.2-1B \
   --megatron-path ./checkpoints/llama3_2_1b \
   --torch-dtype bfloat16 \
@@ -74,13 +74,13 @@ python examples/conversion/checkpoint_conversion.py import \
 **Export Megatron to HF:**
 ```bash
 # Basic export
-python examples/conversion/checkpoint_conversion.py export \
+python examples/conversion/convert_checkpoints.py export \
   --hf-model meta-llama/Llama-3.2-1B \
   --megatron-path ./checkpoints/llama3_2_1b \
   --hf-path ./exports/llama3_2_1b_hf
 
 # Export without progress bar
-python examples/conversion/checkpoint_conversion.py export \
+python examples/conversion/convert_checkpoints.py export \
   --hf-model meta-llama/Llama-3.2-1B \
   --megatron-path ./checkpoints/llama3_2_1b \
   --hf-path ./exports/llama3_2_1b_hf \
@@ -114,13 +114,13 @@ Demonstrates text generation using HuggingFace models converted to Megatron form
 **Single GPU generation:**
 ```bash
 # From HuggingFace model
-python examples/conversion/generate_from_hf.py \
+python examples/conversion/hf_to_megatron_generate_text.py \
   --hf_model_path meta-llama/Llama-3.2-1B \
   --prompt "Hello, how are you?" \
   --max_new_tokens 50
 
 # From Megatron checkpoint
-python examples/conversion/generate_from_hf.py \
+python examples/conversion/hf_to_megatron_generate_text.py \
   --hf_model_path meta-llama/Llama-3.2-1B \
   --megatron_model_path ./checkpoints/llama3_2_1b \
   --prompt "The future of AI is" \
@@ -130,13 +130,13 @@ python examples/conversion/generate_from_hf.py \
 **Multi-GPU generation:**
 ```bash
 # Tensor parallelism
-torchrun --nproc_per_node=2 examples/conversion/generate_from_hf.py \
+torchrun --nproc_per_node=2 examples/conversion/hf_to_megatron_generate_text.py \
   --hf_model_path meta-llama/Llama-3.2-1B \
   --prompt "Hello world" \
   --tp 2
 
 # Pipeline parallelism
-torchrun --nproc_per_node=2 examples/conversion/generate_from_hf.py \
+torchrun --nproc_per_node=2 examples/conversion/hf_to_megatron_generate_text.py \
   --hf_model_path meta-llama/Llama-3.2-1B \
   --prompt "Hello world" \
   --pp 2
@@ -175,14 +175,14 @@ Demonstrates vision-language model inference with support for both image and tex
 **With image input:**
 ```bash
 # Image from URL
-python examples/conversion/generate_from_hf_vlm.py \
+python examples/conversion/hf_to_megatron_generate_vlm.py \
   --hf_model_path Qwen/Qwen2.5-VL-3B-Instruct \
   --image_path "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen-VL/assets/demo.jpeg" \
   --prompt "Describe this image." \
   --max_new_tokens 100
 
 # Local image file
-python examples/conversion/generate_from_hf_vlm.py \
+python examples/conversion/hf_to_megatron_generate_vlm.py \
   --hf_model_path Qwen/Qwen2.5-VL-3B-Instruct \
   --image_path ./images/sample.jpg \
   --prompt "What objects do you see in this image?"
@@ -190,7 +190,7 @@ python examples/conversion/generate_from_hf_vlm.py \
 
 **Text-only generation:**
 ```bash
-python examples/conversion/generate_from_hf_vlm.py \
+python examples/conversion/hf_to_megatron_generate_vlm.py \
   --hf_model_path Qwen/Qwen2.5-VL-3B-Instruct \
   --prompt "Hello, how are you?" \
   --max_new_tokens 50
@@ -198,7 +198,7 @@ python examples/conversion/generate_from_hf_vlm.py \
 
 **Multi-GPU with vision:**
 ```bash
-torchrun --nproc_per_node=2 examples/conversion/generate_from_hf_vlm.py \
+torchrun --nproc_per_node=2 examples/conversion/hf_to_megatron_generate_vlm.py \
   --hf_model_path Qwen/Qwen2.5-VL-3B-Instruct \
   --image_path ./images/sample.jpg \
   --prompt "Describe this image." \
@@ -224,7 +224,7 @@ Lists all HuggingFace model architectures supported by the AutoBridge system.
 
 **Usage:**
 ```bash
-python examples/conversion/list_supported_bridges.py
+python examples/conversion/list_supported_architectures.py
 ```
 
 **Example Output:**
@@ -270,18 +270,18 @@ Demonstrates model conversion and weight verification on multiple GPUs using dis
 
 **Basic multi-GPU conversion:**
 ```bash
-torchrun --nproc_per_node=2 examples/conversion/multi_gpu_hf.py \
+torchrun --nproc_per_node=2 examples/conversion/hf_megatron_roundtrip_multi_gpu.py \
   --hf-model-id meta-llama/Llama-3.2-1B \
   --tp 2
 
-torchrun --nproc_per_node=4 examples/conversion/multi_gpu_hf.py \
+torchrun --nproc_per_node=4 examples/conversion/hf_megatron_roundtrip_multi_gpu.py \
   --hf-model-id meta-llama/Llama-3.2-1B \
   --tp 2 --pp 2
 ```
 
 **Save in Megatron format:**
 ```bash
-torchrun --nproc_per_node=2 examples/conversion/multi_gpu_hf.py \
+torchrun --nproc_per_node=2 examples/conversion/hf_megatron_roundtrip_multi_gpu.py \
   --hf-model-id meta-llama/Llama-3.2-1B \
   --tp 2 \
   --megatron-save-path ./megatron_checkpoints/llama3_2_1b
@@ -289,7 +289,7 @@ torchrun --nproc_per_node=2 examples/conversion/multi_gpu_hf.py \
 
 **Load from existing Megatron checkpoint:**
 ```bash
-torchrun --nproc_per_node=2 examples/conversion/multi_gpu_hf.py \
+torchrun --nproc_per_node=2 examples/conversion/hf_megatron_roundtrip_multi_gpu.py \
   --hf-model-id meta-llama/Llama-3.2-1B \
   --tp 2 \
   --megatron-load-path ./megatron_checkpoints/llama3_2_1b

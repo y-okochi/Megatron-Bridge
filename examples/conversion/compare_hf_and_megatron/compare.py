@@ -589,7 +589,7 @@ def compare_models_one_step(args) -> None:
     )
 
     # Broadcast HF results to all ranks after Megatron initialization
-    # (following the pattern from generate_from_hf.py)
+    # (following the pattern from hf_to_megatron_generate_text.py)
     if torch.distributed.is_initialized():
         # Create tensors for broadcasting if they don't exist on non-rank-0
         if hf_next_token is None:
@@ -679,7 +679,7 @@ def compare_models_one_step(args) -> None:
             # Non-last pipeline stages: create dummy tensor for broadcasting
             megatron_next_token = torch.zeros(1, device=input_ids.device, dtype=torch.long)
 
-        # Broadcast Megatron results from last rank to all ranks (following generate_from_hf.py pattern)
+        # Broadcast Megatron results from last rank to all ranks (following hf_to_megatron_generate_text.py pattern)
         if torch.distributed.is_initialized():
             torch.distributed.broadcast(megatron_next_token, get_last_rank())
 

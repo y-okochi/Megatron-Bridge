@@ -156,8 +156,8 @@ Use the examples in `examples/conversion/` to verify bidirectional conversion an
 - Multi-GPU HF load to Megatron
 
 ```sh
-python examples/conversion/generate_from_hf.py --model <org>/<model-id> | cat
-python examples/conversion/checkpoint_conversion.py --model <org>/<model-id> | cat
+python examples/conversion/hf_to_megatron_generate_text.py --model <org>/<model-id> | cat
+python examples/conversion/convert_checkpoints.py --model <org>/<model-id> | cat
 ```
 ## 7) Add tests
 
