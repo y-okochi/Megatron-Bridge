@@ -4,7 +4,7 @@ This directory contains example scripts that demonstrate how to use the Megatron
 
 ## Available Scripts
 
-### 1. `2_way_hf_binding.py` - Two-Way Model Conversion
+### 1. `hf_megatron_roundtrip.py` - Two-Way Model Conversion
 
 Demonstrates round-trip conversion between HuggingFace and Megatron-LM model formats.
 
@@ -44,7 +44,7 @@ Converting to HuggingFace ━━━━━━━━━━━━━━━━━━
 Saving HF-ckpt in Llama-3.2-1B...
 ```
 
-### 2. `checkpoint_conversion.py` - Checkpoint Conversion
+### 2. `convert_checkpoints.py` - Checkpoint Conversion
 
 A tool for importing/exporting models between HuggingFace and Megatron checkpoint formats.
 
@@ -99,7 +99,7 @@ python examples/conversion/convert_checkpoints.py export \
    📄 latest_train_state.pt
 ```
 
-### 3. `generate_from_hf.py` - Text Generation
+### 3. `hf_to_megatron_generate_text.py` - Text Generation
 
 Demonstrates text generation using HuggingFace models converted to Megatron format with support for parallel inference.
 
@@ -160,7 +160,7 @@ Generated: <|begin_of_text|>Hello, how are you? I am a 20 year old girl from the
 =======================================
 ```
 
-### 4. `generate_from_hf_vlm.py` - Vision-Language Generation
+### 4. `hf_to_megatron_generate_vlm.py` - Vision-Language Generation
 
 Demonstrates vision-language model inference with support for both image and text inputs.
 
@@ -218,7 +218,7 @@ Generated: This image shows a cozy indoor scene with a wooden table, some books,
 =======================================
 ```
 
-### 5. `list_supported_bridges.py` - Supported Models Reference
+### 5. `list_supported_architectures.py` - Supported Models Reference
 
 Lists all HuggingFace model architectures supported by the AutoBridge system.
 
@@ -256,7 +256,7 @@ python examples/conversion/list_supported_architectures.py
 📚 For more examples, see the examples/bridge/ directory.
 ```
 
-### 6. `multi_gpu_hf.py` - Multi-GPU Model Conversion
+### 6. `hf_megatron_roundtrip_multi_gpu.py` - Multi-GPU Model Conversion
 
 Demonstrates model conversion and weight verification on multiple GPUs using distributed training.
 
