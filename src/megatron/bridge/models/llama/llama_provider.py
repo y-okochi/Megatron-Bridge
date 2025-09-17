@@ -55,7 +55,6 @@ class LlamaModelProvider(GPTModelProvider):
     bias_dropout_fusion: bool = field(default_factory=fusions.can_enable_bias_dropout_fusion)
     apply_rope_fusion: bool = field(default_factory=fusions.can_enable_apply_rope_fusion)
     use_transformer_engine_op_fuser: Optional[bool] = None
-    persist_layer_norm: bool = False
 
 
 @dataclass

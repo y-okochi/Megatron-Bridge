@@ -24,8 +24,6 @@ from megatron.core.utils import unwrap_model
 from rich.table import Table
 from transformers.configuration_utils import PretrainedConfig
 
-from megatron.bridge.utils.common_utils import unwrap_model
-
 
 def weights_verification_table(bridge, megatron_model) -> Table:
     """

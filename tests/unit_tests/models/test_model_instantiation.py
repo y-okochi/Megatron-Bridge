@@ -28,7 +28,6 @@ from megatron.bridge.models.model_provider import (
     _print_num_params,
     get_model,
 )
-from megatron.bridge.models.model_provider_mixin import ModelProviderMixin
 
 
 def create_test_config(**kwargs):
