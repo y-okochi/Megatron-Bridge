@@ -201,9 +201,13 @@ def build_train_valid_test_data_loaders(
         data_parallel_rank=mpu.get_data_parallel_rank(),
         data_parallel_size=mpu.get_data_parallel_world_size(),
     )
-    
+
     # Handle multiple validation datasets
-    if hasattr(cfg.dataset, 'multiple_validation_sets') and cfg.dataset.multiple_validation_sets and isinstance(valid_ds, list):
+    if (
+        hasattr(cfg.dataset, "multiple_validation_sets")
+        and cfg.dataset.multiple_validation_sets
+        and isinstance(valid_ds, list)
+    ):
         # Multiple validation datasets - create a list of dataloaders
         valid_dataloader = []
         for i, valid_dataset in enumerate(valid_ds):
@@ -307,7 +311,11 @@ def build_train_valid_test_data_loaders(
 
 def build_train_valid_test_data_iterators(
     cfg: ConfigContainer, train_state: TrainState, build_train_valid_test_datasets_provider: Callable
-) -> tuple[Optional[RerunDataIterator], Union[Optional[RerunDataIterator], list[Optional[RerunDataIterator]]], Optional[RerunDataIterator]]:
+) -> tuple[
+    Optional[RerunDataIterator],
+    Union[Optional[RerunDataIterator], list[Optional[RerunDataIterator]]],
+    Optional[RerunDataIterator],
+]:
     """Build train, validation, and test data iterators.
 
     Builds the data loaders first, then wraps them in appropriate iterators

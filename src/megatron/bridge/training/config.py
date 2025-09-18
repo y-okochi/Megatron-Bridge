@@ -234,7 +234,6 @@ class DataloaderConfig:
     """Whether to keep validation data loading workers persistent. If None, uses persistent_workers."""
 
 
-
 @dataclass
 class GPTDatasetConfig(MCoreGPTDatasetConfig, DataloaderConfig):
     """Megatron Core GPTDatasetConfig with deferred post-init.
@@ -1059,25 +1058,38 @@ class ConfigContainer(Container):
 
         # Validate DeepEP is supported for the current GPU architecture
         validate_deepep(self.model)
-        
+
         # Validate and resolve validation dataloader configuration
         self._validate_and_resolve_validation_config()
 
     def _validate_and_resolve_validation_config(self) -> None:
         """Validate and resolve validation dataloader configuration with fallback to training config."""
         # Resolve validation config with fallbacks and set them directly on the config object
-        self.dataset.val_num_workers = self.dataset.val_num_workers if self.dataset.val_num_workers is not None else self.dataset.num_workers
-        self.dataset.val_pin_memory = self.dataset.val_pin_memory if self.dataset.val_pin_memory is not None else self.dataset.pin_memory
-        self.dataset.val_persistent_workers = self.dataset.val_persistent_workers if self.dataset.val_persistent_workers is not None else self.dataset.persistent_workers
-        self.train.val_micro_batch_size = self.train.val_micro_batch_size if self.train.val_micro_batch_size is not None else self.train.micro_batch_size
-        
+        self.dataset.val_num_workers = (
+            self.dataset.val_num_workers if self.dataset.val_num_workers is not None else self.dataset.num_workers
+        )
+        self.dataset.val_pin_memory = (
+            self.dataset.val_pin_memory if self.dataset.val_pin_memory is not None else self.dataset.pin_memory
+        )
+        self.dataset.val_persistent_workers = (
+            self.dataset.val_persistent_workers
+            if self.dataset.val_persistent_workers is not None
+            else self.dataset.persistent_workers
+        )
+        self.train.val_micro_batch_size = (
+            self.train.val_micro_batch_size
+            if self.train.val_micro_batch_size is not None
+            else self.train.micro_batch_size
+        )
+
         # Calculate val_global_batch_size if not defined
         if self.train.val_global_batch_size is None:
             # Use data_parallel_size from config if available, otherwise fallback to get_world_size_safe
-            if hasattr(self, 'data_parallel_size') and self.data_parallel_size is not None:
+            if hasattr(self, "data_parallel_size") and self.data_parallel_size is not None:
                 data_parallel_degree = self.data_parallel_size
             else:
                 from megatron.bridge.utils.common_utils import get_world_size_safe
+
                 data_parallel_degree = get_world_size_safe()
             self.train.val_global_batch_size = self.train.val_micro_batch_size * data_parallel_degree
 
