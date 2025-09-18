@@ -146,6 +146,7 @@ Notes:
       hf_param="lm_head.**",
   ),
   ```
+- In some cases, the same module can have different Megatron parameter names depending on whether you use the Transformer Engine backend or the PyTorch backend. In that case, list both mappings, e.g., `[AutoMapping(megatron_param="te_backend_name", hf_param="hf_name"), AutoMapping(megatron_param="pytorch_backend_name", hf_param="hf_name")]`. Multiple Megatron parameters can map to the same Hugging Face parameter because, during conversion, the registry only queries the current model's module names.
 - Prefer `AutoMapping` when the Megatron layer type implies the TP split automatically.
 - Use `QKVMapping` for fused QKV and `GatedMLPMapping` for gate/up concatenation.
 
@@ -159,7 +160,7 @@ Tasks:
 - Add `@MegatronModelBridge.register_bridge(source=<HFClass>, target=GPTModel)`.
 - Implement `provider_bridge(self, hf_pretrained)` to read `hf_pretrained.config` and return `YourModelProvider(...)` with mapped fields (layers, hidden size, FFN, heads, groups, RoPE, dtype via `self.dtype_from_hf(cfg)`).
 - Implement `mapping_registry(self)` returning `MegatronMappingRegistry(...)` with:
-  - `AutoMapping` for embeddings, final norm, output layer.
+  - `AutoMapping` for embeddings, final norm, output layer, 1:1 mapped weights.
   - `QKVMapping` for fused QKV if applicable.
   - `GatedMLPMapping` for gate/up if applicable.
 - Use `*` wildcards consistently between Megatron and HF patterns.
@@ -168,6 +169,7 @@ References:
 - `src/megatron/bridge/models/conversion/model_bridge.py`
 - `src/megatron/bridge/models/conversion/mapping_registry.py`
 - `src/megatron/bridge/models/conversion/param_mapping.py`
+- `src/megatron/bridge/models/qwen/qwen2_bridge.py`
 
 Acceptance:
 - HF → Megatron load completes with no missing parameters (for a tiny model).
