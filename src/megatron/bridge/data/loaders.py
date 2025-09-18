@@ -213,13 +213,13 @@ def build_train_valid_test_data_loaders(
                         valid_dataset,
                         0,
                         cfg.dataset.dataloader_type,
-                        cfg.train.micro_batch_size,
-                        cfg.dataset.num_workers,
+                        cfg.train.val_micro_batch_size,
+                        cfg.dataset.val_num_workers,
                         cfg.dataset.data_sharding,
                         worker_init_fn=maybe_worker_init_fn,
                         collate_fn=valid_dataset.collate_fn if hasattr(valid_dataset, "collate_fn") else None,
-                        pin_memory=cfg.dataset.pin_memory,
-                        persistent_workers=cfg.dataset.persistent_workers,
+                        pin_memory=cfg.dataset.val_pin_memory,
+                        persistent_workers=cfg.dataset.val_persistent_workers,
                         data_parallel_rank=mpu.get_data_parallel_rank(),
                         data_parallel_size=mpu.get_data_parallel_world_size(),
                     )
@@ -228,13 +228,13 @@ def build_train_valid_test_data_loaders(
                         valid_dataset,
                         train_state.consumed_valid_samples,
                         "cyclic",
-                        cfg.train.micro_batch_size,
-                        cfg.dataset.num_workers,
+                        cfg.train.val_micro_batch_size,
+                        cfg.dataset.val_num_workers,
                         cfg.dataset.data_sharding,
                         worker_init_fn=maybe_worker_init_fn,
                         collate_fn=valid_dataset.collate_fn if hasattr(valid_dataset, "collate_fn") else None,
-                        pin_memory=cfg.dataset.pin_memory,
-                        persistent_workers=cfg.dataset.persistent_workers,
+                        pin_memory=cfg.dataset.val_pin_memory,
+                        persistent_workers=cfg.dataset.val_persistent_workers,
                         data_parallel_rank=mpu.get_data_parallel_rank(),
                         data_parallel_size=mpu.get_data_parallel_world_size(),
                     )
@@ -243,33 +243,35 @@ def build_train_valid_test_data_loaders(
                 valid_dataloader.append(None)
     else:
         # Single validation dataset - original logic
+        # offline evaluation
         if cfg.train.skip_train:
             valid_dataloader = build_pretraining_data_loader(
                 valid_ds,
                 0,
                 cfg.dataset.dataloader_type,
-                cfg.train.micro_batch_size,
-                cfg.dataset.num_workers,
+                cfg.train.val_micro_batch_size,
+                cfg.dataset.val_num_workers,
                 cfg.dataset.data_sharding,
                 worker_init_fn=maybe_worker_init_fn,
                 collate_fn=valid_ds.collate_fn if hasattr(valid_ds, "collate_fn") else None,
-                pin_memory=cfg.dataset.pin_memory,
-                persistent_workers=cfg.dataset.persistent_workers,
+                pin_memory=cfg.dataset.val_pin_memory,
+                persistent_workers=cfg.dataset.val_persistent_workers,
                 data_parallel_rank=mpu.get_data_parallel_rank(),
                 data_parallel_size=mpu.get_data_parallel_world_size(),
             )
         else:
+            # online evaluation
             valid_dataloader = build_pretraining_data_loader(
                 valid_ds,
                 train_state.consumed_valid_samples,
                 "cyclic",
-                cfg.train.micro_batch_size,
-                cfg.dataset.num_workers,
+                cfg.train.val_micro_batch_size,
+                cfg.dataset.val_num_workers,
                 cfg.dataset.data_sharding,
                 worker_init_fn=maybe_worker_init_fn,
                 collate_fn=valid_ds.collate_fn if hasattr(valid_ds, "collate_fn") else None,
-                pin_memory=cfg.dataset.pin_memory,
-                persistent_workers=cfg.dataset.persistent_workers,
+                pin_memory=cfg.dataset.val_pin_memory,
+                persistent_workers=cfg.dataset.val_persistent_workers,
                 data_parallel_rank=mpu.get_data_parallel_rank(),
                 data_parallel_size=mpu.get_data_parallel_world_size(),
             )
