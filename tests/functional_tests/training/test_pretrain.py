@@ -19,7 +19,7 @@ import torch
 from megatron.core.distributed import DistributedDataParallelConfig
 from megatron.core.optimizer import OptimizerConfig
 
-from megatron.bridge.models.llama import Llama32ModelProvider1B, Llama3ModelProvider8B
+from megatron.bridge.models.llama import Llama32ModelProvider1B
 from megatron.bridge.training.config import (
     CheckpointConfig,
     ConfigContainer,
@@ -38,6 +38,8 @@ from tests.functional_tests.utils import (
     initialize_distributed,
     verify_checkpoint_files,
 )
+
+
 class TestPretrain:
     """
     Test end to end training with checkpoint functionality.
@@ -300,4 +302,3 @@ class TestPretrain:
             # pytest's tmp_path fixture doesn't clean up immediately.
             # Clean up manually.
             clear_directories(tmp_path)
-
