@@ -34,39 +34,52 @@ from megatron.bridge.training.config import (
 from megatron.bridge.training.mixed_precision import MixedPrecisionConfig
 
 
-def model_config(
-    tensor_parallelism: int = 1,
-    pipeline_parallelism: int = 1,
-    pipeline_parallelism_dtype: Optional[torch.dtype] = None,
-    virtual_pipeline_parallelism: Optional[int] = None,
-    context_parallelism: int = 2,
-    sequence_parallelism: bool = False,
-):
+def _tuned_defaults_for_seq_length(seq_length: int):
     """
-    Configure the Llama3 8B model.
-
-    Args:
-        tensor_parallelism (int): Degree of tensor model parallelism.
-        pipeline_parallelism (int): Degree of pipeline model parallelism.
-        pipeline_parallelism_dtype (Optional[torch.dtype]): Data type for pipeline parallelism.
-        virtual_pipeline_parallelism (Optional[int]): Size of virtual pipeline parallelism.
-        context_parallelism (int): Degree of context parallelism.
-        sequence_parallelism (bool): Whether to use sequence parallelism.
-
-    Returns:
-        Configuration for the Llama3 8B model.
+    Return tuned default parallelism and dtype for given sequence length.
+    These are applied only when callers keep base defaults.
     """
-    bridge = AutoBridge.from_hf_pretrained("meta-llama/Meta-Llama-3-8B")
-    provider = bridge.to_megatron_provider(load_weights=False)
-    
-    provider.tensor_model_parallel_size = tensor_parallelism
-    provider.pipeline_model_parallel_size = pipeline_parallelism
-    provider.pipeline_dtype = pipeline_parallelism_dtype
-    provider.virtual_pipeline_model_parallel_size = virtual_pipeline_parallelism
-    provider.context_parallel_size = context_parallelism
-    provider.sequence_parallel = sequence_parallelism
-    
-    return provider
+    # Baseline (<=8k)
+    tuned = {
+        "tensor_parallelism": 1,
+        "pipeline_parallelism": 1,
+        "pipeline_parallelism_dtype": None,
+        "context_parallelism": 2,
+        "sequence_parallelism": False,
+    }
+
+    if seq_length >= 131072:  # 128k
+        tuned.update(
+            {
+                "tensor_parallelism": 4,
+                "pipeline_parallelism": 2,
+                "pipeline_parallelism_dtype": torch.bfloat16,
+                "context_parallelism": 8,
+                "sequence_parallelism": True,
+            }
+        )
+    elif seq_length >= 65536:  # 64k
+        tuned.update(
+            {
+                "tensor_parallelism": 4,
+                "pipeline_parallelism": 2,
+                "pipeline_parallelism_dtype": torch.bfloat16,
+                "context_parallelism": 4,
+                "sequence_parallelism": True,
+            }
+        )
+    elif seq_length >= 16384:  # 16k
+        tuned.update(
+            {
+                "tensor_parallelism": 4,
+                "pipeline_parallelism": 2,
+                "pipeline_parallelism_dtype": torch.bfloat16,
+                "context_parallelism": 2,
+                "sequence_parallelism": True,
+            }
+        )
+
+    return tuned
 
 
 def pretrain_config(
@@ -141,14 +154,30 @@ def pretrain_config(
         data_paths, data_args_path, train_data_path, valid_data_path, test_data_path, per_split_data_args_path, mock
     )
 
-    model_cfg = model_config(
-        tensor_parallelism=tensor_parallelism,
-        pipeline_parallelism=pipeline_parallelism,
-        pipeline_parallelism_dtype=pipeline_parallelism_dtype,
-        virtual_pipeline_parallelism=virtual_pipeline_parallelism,
-        context_parallelism=context_parallelism,
-        sequence_parallelism=sequence_parallelism,
-    )
+    # Apply tuned defaults based on sequence length only when callers kept base defaults
+    if seq_length is not None:
+        tuned = _tuned_defaults_for_seq_length(seq_length)
+        if tensor_parallelism == 1:
+            tensor_parallelism = tuned["tensor_parallelism"]
+        if pipeline_parallelism == 1:
+            pipeline_parallelism = tuned["pipeline_parallelism"]
+        if pipeline_parallelism_dtype is None:
+            pipeline_parallelism_dtype = tuned["pipeline_parallelism_dtype"]
+        if context_parallelism == 2:
+            context_parallelism = tuned["context_parallelism"]
+        if sequence_parallelism is False:
+            sequence_parallelism = tuned["sequence_parallelism"]
+
+    # Build provider via AutoBridge and set parallel/seq params here
+    bridge = AutoBridge.from_hf_pretrained("meta-llama/Meta-Llama-3-8B")
+    model_cfg = bridge.to_megatron_provider(load_weights=False)
+    model_cfg.tensor_model_parallel_size = tensor_parallelism
+    model_cfg.pipeline_model_parallel_size = pipeline_parallelism
+    model_cfg.pipeline_dtype = pipeline_parallelism_dtype
+    model_cfg.virtual_pipeline_model_parallel_size = virtual_pipeline_parallelism
+    model_cfg.context_parallel_size = context_parallelism
+    model_cfg.sequence_parallel = sequence_parallelism
+    model_cfg.seq_length = seq_length
 
     opt_config, scheduler = distributed_fused_adam_with_cosine_annealing(
         lr_warmup_iters=lr_warmup_iters,
