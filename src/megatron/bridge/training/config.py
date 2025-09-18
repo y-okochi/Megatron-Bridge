@@ -773,8 +773,6 @@ class ConfigContainer(Container):
         """
         return world_size // total_model_size
 
-<<<<<<< Updated upstream
-=======
     def _reset_dependent_attributes(self) -> None:
         """Reset attributes that are auto-calculated based on other attributes.
         
@@ -820,7 +818,6 @@ class ConfigContainer(Container):
             ), 'recompute_granularity must not be full when CUDA Graphs are enabled.'
 
 
->>>>>>> Stashed changes
     def validate(self) -> None:
         """Performs validation checks on the combined configuration.
 
@@ -961,10 +958,7 @@ class ConfigContainer(Container):
         # Validate DeepEP is supported for the current GPU architecture
         validate_deepep(self.model)
 
-<<<<<<< Updated upstream
         assert self.ddp.use_distributed_optimizer == self.optimizer.use_distributed_optimizer, (
             "Please ensure 'use_distributed_optimizer' setting in DistributedDataParallelConfig and OptimizerConfig matches."
         )
-=======
         self._sync_and_validate_external_cuda_graph()
->>>>>>> Stashed changes
