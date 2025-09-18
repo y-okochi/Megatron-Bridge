@@ -37,6 +37,7 @@ class TestEvaluate:
         mock_state.train_state.step = 100
         mock_state.train_state.consumed_valid_samples = 0
         mock_state.train_state.start_time = time.time()
+        mock_state.start_time = time.time()
         
         # Mock config
         mock_config = Mock(spec=ConfigContainer)
@@ -47,6 +48,8 @@ class TestEvaluate:
         mock_config.train.data_parallel_size = 4
         mock_config.train.exit_duration_in_mins = exit_duration_in_mins
         mock_config.train.empty_unused_memory_level = 0
+        mock_config.train.val_global_batch_size = 32
+        mock_config.train.val_micro_batch_size = 8
         mock_config.model = Mock()
         mock_config.model.seq_length = 512
         
@@ -256,7 +259,7 @@ class TestEvaluate:
         # Create test data with short exit duration
         state = self._create_mock_global_state(eval_iters=10, exit_duration_in_mins=0.001)  # Very short duration
         # Simulate that we're past the timelimit by modifying the start time
-        state.train_state.start_time = time.time() - (0.002 * 60)  # 0.002 minutes ago
+        state.start_time = time.time() - (0.002 * 60)  # 0.002 minutes ago
         model = self._create_mock_model()
         data_iterator = self._create_mock_data_iterator()
         forward_step_func = Mock()
