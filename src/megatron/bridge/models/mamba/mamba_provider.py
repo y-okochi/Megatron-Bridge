@@ -30,6 +30,9 @@ from megatron.bridge.models.model_provider import ModelProviderMixin
 
 logger = logging.getLogger(__name__)
 
+def get_mamba_stack_spec():
+    """Return the default mamba stack spec."""
+    return default_mamba_stack_spec
 
 @dataclass
 class MambaProvider(TransformerConfig, ModelProviderMixin[MCoreMambaModel]):
@@ -70,7 +73,7 @@ class MambaProvider(TransformerConfig, ModelProviderMixin[MCoreMambaModel]):
     deallocate_pipeline_outputs: bool = True
     bias_dropout_fusion: bool = True
     cross_entropy_loss_fusion: bool = True
-    mamba_stack_spec: Union[ModuleSpec, Callable[[], ModuleSpec]] = lambda: default_mamba_stack_spec
+    mamba_stack_spec: Union[ModuleSpec, Callable[[], ModuleSpec]] = get_mamba_stack_spec
     vocab_size: Optional[int] = None
 
     def provide(self, pre_process=None, post_process=None, vp_stage=None, tokenizer=None) -> MCoreMambaModel:
