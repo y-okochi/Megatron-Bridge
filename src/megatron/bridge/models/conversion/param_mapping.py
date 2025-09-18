@@ -549,8 +549,19 @@ class MegatronParamMapping(ABC, Generic[WeightType]):
         gathered_weights = [torch.empty_like(megatron_weights) for _ in range(self.ep_size)]
         torch.distributed.all_gather(gathered_weights, megatron_weights, group=self.ep_group)
 
-        # Return dictionary mapping HF parameter names to weights
-        return {param_name: gathered_weights[i] for i, param_name in enumerate(gathered_expert_param_names)}
+        ## this should be in the right order because of the all-gather
+        weights_dict = {}
+        for i, param_name in enumerate(gathered_expert_param_names):
+            if param_name in weights_dict:
+                weights_dict[param_name] = torch.cat([weights_dict[param_name], gathered_weights[i].unsqueeze(0)], dim=0)
+            else:
+               weights_dict[param_name] = gathered_weights[i].unsqueeze(0)
+
+        ## TODO: make sure this works as expected
+        for param_name in weights_dict:
+            weights_dict[param_name] = weights_dict[param_name].squeeze()
+
+        return weights_dict
 
 
 class DirectMapping(MegatronParamMapping[torch.Tensor]):
@@ -802,7 +813,6 @@ class ReplicatedMapping(MegatronParamMapping[torch.Tensor]):
         except AttributeError:
             # the parameter may not be called "weight"
             target_device = next(megatron_module.parameters()).device
-        print(f"{self.hf_param=} {target_device=}")
         hf_weights = hf_weights.to(device=target_device)
         if self.tp_size == 1:
             return hf_weights
@@ -1020,6 +1030,7 @@ class AutoMapping(MegatronParamMapping[torch.Tensor]):
 
         if self._mapping is None:
             if megatron_module is not None:
+
                 self._detected_type = self._detect_parallelism_type(megatron_module)
                 # Broadcast to other ranks
                 self._detected_type = self.broadcast_obj_from_pp_rank(self._detected_type)

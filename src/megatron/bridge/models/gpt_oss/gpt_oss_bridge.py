@@ -31,6 +31,8 @@ from megatron.bridge.models.gpt_oss.gpt_oss_provider import GPTOSSProvider
 from megatron.bridge.models.hf_pretrained.causal_lm import PreTrainedCausalLM
 from megatron.bridge.utils.common_utils import extract_expert_number_from_param
 
+from megatron.core import parallel_state
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
@@ -92,21 +94,26 @@ class GPTOSSBridge(MegatronModelBridge):
 
     def modify_converted_hf_weight(self, task: WeightConversionTask, converted_weights_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         num_experts = self.hf_config.num_local_experts
-        
+        ep_size = parallel_state.get_expert_model_parallel_world_size()
+        experts_per_rank = num_experts // ep_size
+
         try: 
-            global_expert_number = extract_expert_number_from_param(task.param_name)
+            local_expert_number = extract_expert_number_from_param(task.param_name) % experts_per_rank
         except ValueError:
             # not an expert weight
             return converted_weights_dict
         
         assert len(converted_weights_dict) == 1, f"There should be only one key in the converted_weights_dict, got keys: {converted_weights_dict.keys()}"
         for key, value in converted_weights_dict.items():
-            # there should be only one key in this dict
-            if key not in self.hf_weights_cache:
-                self.hf_weights_cache[key] = {}
-            self.hf_weights_cache[key][global_expert_number] = value
-            logging.debug(f"Loaded {key} for expert {global_expert_number}")
-            if len(self.hf_weights_cache[key]) == num_experts: 
+            ## we end up with ep_size many weights to add to the cache
+            ## unpack the weights and re-index
+            assert value.shape[0] == ep_size
+            for i, exp_val in enumerate(value):
+                global_expert_number = local_expert_number + (i * experts_per_rank)
+                if key not in self.hf_weights_cache:
+                    self.hf_weights_cache[key] = {}
+                self.hf_weights_cache[key][global_expert_number] = exp_val
+            if len(self.hf_weights_cache[key]) == num_experts:
                 logging.debug(f"All experts are loaded for {key}")
                 # all experts are loaded
                 merged_hf_weights = torch.cat([self.hf_weights_cache[key][i].unsqueeze(0) for i in range(num_experts)], dim=0)
@@ -121,6 +128,8 @@ class GPTOSSBridge(MegatronModelBridge):
         Return MegatronMappingRegistry containing parameter mappings from HF to Megatron format.
         Based on the GPT-OSS importer code provided.
         """
+
+        quantized = getattr(self, "quantized", False)
 
         # Dictionary maps HF parameter names -> Megatron parameter names
         param_mappings = {
@@ -155,8 +164,8 @@ class GPTOSSBridge(MegatronModelBridge):
                 megatron_param="decoder.layers.*.self_attention.linear_qkv.bias",
             ),
             GPTOSSMLPDownProjMapping(
-                hf_param="model.layers.*.mlp.experts.down_proj_blocks" if self.quantized else "model.layers.*.mlp.experts.down_proj",
-                hf_scales="model.layers.*.mlp.experts.down_proj_scales" if self.quantized else None,
+                hf_param="model.layers.*.mlp.experts.down_proj_blocks" if quantized else "model.layers.*.mlp.experts.down_proj",
+                hf_scales="model.layers.*.mlp.experts.down_proj_scales" if quantized else None,
                 megatron_param="decoder.layers.*.mlp.experts.linear_fc2.weight*",
             ),
             GPTOSSMLPDownProjMapping(
@@ -164,8 +173,8 @@ class GPTOSSBridge(MegatronModelBridge):
                 megatron_param="decoder.layers.*.mlp.experts.linear_fc2.bias*",
             ),
             GPTOSSMLPGateUpProjMapping(
-                hf_param="model.layers.*.mlp.experts.gate_up_proj_blocks" if self.quantized else "model.layers.*.mlp.experts.gate_up_proj",
-                hf_scales="model.layers.*.mlp.experts.gate_up_proj_scales" if self.quantized else None,
+                hf_param="model.layers.*.mlp.experts.gate_up_proj_blocks" if quantized else "model.layers.*.mlp.experts.gate_up_proj",
+                hf_scales="model.layers.*.mlp.experts.gate_up_proj_scales" if quantized else None,
                 megatron_param="decoder.layers.*.mlp.experts.linear_fc1.weight*",
             ),
             GPTOSSMLPGateUpProjMapping(
@@ -191,6 +200,7 @@ class GPTOSSMLPDownProjMapping(AutoMapping):
         return super().hf_to_megatron(hf_weights[global_expert_number], megatron_module)
     
     def megatron_to_hf(self, megatron_weights: torch.Tensor, megatron_module: nn.Module) -> Dict[str, torch.Tensor]:
+
         if megatron_weights is None:
             return super().megatron_to_hf(megatron_weights, megatron_module)
 

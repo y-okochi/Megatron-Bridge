@@ -383,7 +383,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         return hf_weights
 
 
-    def modify_converted_hf_weight(self, converted_weights_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    def modify_converted_hf_weight(self, task, converted_weights_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         """ Modify the converted weights after conversion. By default, no modification is done.
         This function can be overridden by subclasses to postprocess the converted weights, such as merging the 
         weights of multiple experts or quantizing the weights.
