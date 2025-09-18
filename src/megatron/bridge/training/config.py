@@ -31,9 +31,15 @@ from megatron.bridge.training.comm_overlap import CommOverlapConfig
 from megatron.bridge.training.deepep import validate_deepep
 from megatron.bridge.training.mixed_precision import MixedPrecisionConfig
 from megatron.bridge.training.tokenizers.config import TokenizerConfig
-from megatron.bridge.training.utils.config_utils import _ConfigContainerBase as Container
-from megatron.bridge.utils.common_utils import get_world_size_safe, print_rank_0
-
+from megatron.bridge.training.utils.config_utils import (
+    _ConfigContainerBase as Container,
+)
+from megatron.bridge.utils.common_utils import (
+    get_world_size_safe,
+    print_rank_0,
+    get_rank_safe,
+    warn_rank_0,
+)
 
 @dataclass(kw_only=True)
 class RNGConfig:
@@ -767,6 +773,54 @@ class ConfigContainer(Container):
         """
         return world_size // total_model_size
 
+<<<<<<< Updated upstream
+=======
+    def _reset_dependent_attributes(self) -> None:
+        """Reset attributes that are auto-calculated based on other attributes.
+        
+        This ensures that when recipe overrides change the base attributes,
+        the dependent attributes get recalculated properly in __post_init__.
+        
+        This fixes issues like microbatch_group_size_per_vp_stage not being
+        updated when pipeline_model_parallel_size changes via recipe overrides.
+        """
+        # These are set in Megatron-LM's ModelParallelConfig.__post_init__()
+        if hasattr(self.model, 'microbatch_group_size_per_vp_stage'):
+            self.model.microbatch_group_size_per_vp_stage = None
+
+        # if hasattr(self.model, 'expert_tensor_parallel_size'):
+        #     self.model.expert_tensor_parallel_size = None
+
+        if hasattr(self.model, 'autocast_dtype'):
+            self.model.autocast_dtype = None
+
+    def _sync_and_validate_external_cuda_graph(self) -> None:
+        """Sync necessary configs for external CUDA Graphs and and validates it."""
+
+        # Sync config. If TE RNG tracker is set in either ways, set them in both places.
+        if self.rng.te_rng_tracker or self.model.use_te_rng_tracker:
+            self.model.use_te_rng_tracker = self.rng.te_rng_tracker = True
+        
+        # Validate external_cg
+        if self.model.enable_cuda_graph or self.model.external_cuda_graph:
+            assert (
+                not self.model.enable_cuda_graph or not self.model.external_cuda_graph
+            ), "enable_cuda_graph and external_cuda_graph cannot be enabled at the same time."
+            if self.model.transformer_impl == 'transformer_engine' and not self.model.use_te_rng_tracker:
+                self.model.use_te_rng_tracker = True
+                warn_rank_0("te_rng_tracker is not enabled, enabling it for CUDA graphs.")
+
+        if self.model.external_cuda_graph:
+            assert "expandable_segments:True" not in os.getenv("PYTORCH_CUDA_ALLOC_CONF", ""), (
+                "expandable_segments:True may not be safe when using CUDA Graphs with some specific parallel settings. "
+                "The training may crash with illegal memory access."
+            )
+            assert (
+                self.model.recompute_granularity != 'full'
+            ), 'recompute_granularity must not be full when CUDA Graphs are enabled.'
+
+
+>>>>>>> Stashed changes
     def validate(self) -> None:
         """Performs validation checks on the combined configuration.
 
@@ -907,6 +961,10 @@ class ConfigContainer(Container):
         # Validate DeepEP is supported for the current GPU architecture
         validate_deepep(self.model)
 
+<<<<<<< Updated upstream
         assert self.ddp.use_distributed_optimizer == self.optimizer.use_distributed_optimizer, (
             "Please ensure 'use_distributed_optimizer' setting in DistributedDataParallelConfig and OptimizerConfig matches."
         )
+=======
+        self._sync_and_validate_external_cuda_graph()
+>>>>>>> Stashed changes
