@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# import os
+import os
 
 import pytest
 import torch
@@ -33,397 +33,271 @@ from megatron.bridge.training.config import (
 from megatron.bridge.training.gpt_step import forward_step
 from megatron.bridge.training.pretrain import pretrain
 from tests.functional_tests.utils import (
-    # broadcast_path,
-    # clear_directories,
+    broadcast_path,
+    clear_directories,
     initialize_distributed,
-    # verify_checkpoint_files,
+    verify_checkpoint_files,
 )
 class TestPretrain:
     """
     Test end to end training with checkpoint functionality.
     """
 
-    # @pytest.mark.run_only_on("GPU")
-    # def test_pretrain_with_checkpoint(self, tmp_path):
-    #     """
-    #     Test end to end training with checkpoint functionality.
-    #     """
-    #     initialize_distributed()
-    #     shared_base_dir = broadcast_path(tmp_path)
-
-    #     checkpoint_dir = os.path.join(shared_base_dir, "checkpoints")
-    #     tensorboard_dir = os.path.join(shared_base_dir, "tensorboard")
-
-    #     if torch.distributed.get_rank() == 0:
-    #         os.makedirs(checkpoint_dir, exist_ok=True)
-    #         os.makedirs(tensorboard_dir, exist_ok=True)
-
-    #     torch.distributed.barrier()
-
-    #     try:
-    #         global_batch_size = 8
-    #         micro_batch_size = 1
-    #         seq_length = 512
-    #         total_iters = 100
-
-    #         model_cfg = Llama32ModelProvider1B(
-    #             tensor_model_parallel_size=1,
-    #             pipeline_model_parallel_size=1,
-    #             context_parallel_size=1,
-    #             sequence_parallel=False,
-    #             attention_softmax_in_fp32=True,
-    #             pipeline_dtype=torch.bfloat16,
-    #             bf16=True,
-    #             seq_length=seq_length,
-    #             make_vocab_size_divisible_by=128,
-    #             vocab_size=None,
-    #         )
-
-    #         # Config Container
-    #         cfg = ConfigContainer(
-    #             model=model_cfg,
-    #             train=TrainingConfig(
-    #                 train_iters=total_iters,
-    #                 eval_interval=50,
-    #                 eval_iters=2,
-    #                 global_batch_size=global_batch_size,
-    #                 micro_batch_size=micro_batch_size,
-    #                 exit_signal_handler=True,
-    #             ),
-    #             optimizer=OptimizerConfig(
-    #                 optimizer="adam",
-    #                 bf16=True,
-    #                 fp16=False,
-    #                 adam_beta1=0.9,
-    #                 adam_beta2=0.95,
-    #                 adam_eps=1e-5,
-    #                 use_distributed_optimizer=True,
-    #                 clip_grad=1.0,
-    #                 lr=3e-3,
-    #                 weight_decay=0.01,
-    #                 min_lr=1e-6,
-    #             ),
-    #             scheduler=SchedulerConfig(
-    #                 start_weight_decay=0.033,
-    #                 end_weight_decay=0.033,
-    #                 weight_decay_incr_style="constant",
-    #                 lr_decay_style="cosine",
-    #                 lr_warmup_iters=2,
-    #                 lr_warmup_init=0.0,
-    #                 lr_decay_iters=total_iters,
-    #                 override_opt_param_scheduler=True,
-    #             ),
-    #             ddp=DistributedDataParallelConfig(
-    #                 check_for_nan_in_grad=True,
-    #                 grad_reduce_in_fp32=True,
-    #                 overlap_grad_reduce=True,
-    #                 overlap_param_gather=True,
-    #                 average_in_collective=True,
-    #                 use_distributed_optimizer=True,
-    #             ),
-    #             dataset=MockGPTDatasetConfig(
-    #                 random_seed=1234,
-    #                 reset_attention_mask=False,
-    #                 reset_position_ids=False,
-    #                 eod_mask_loss=False,
-    #                 sequence_length=seq_length,
-    #                 num_dataset_builder_threads=1,
-    #                 data_sharding=True,
-    #                 dataloader_type="single",
-    #                 num_workers=1,
-    #             ),
-    #             logger=LoggerConfig(
-    #                 log_interval=5,
-    #                 tensorboard_dir=tensorboard_dir,
-    #             ),
-    #             tokenizer=TokenizerConfig(
-    #                 tokenizer_type="NullTokenizer",
-    #                 vocab_size=10000,
-    #             ),
-    #             checkpoint=CheckpointConfig(
-    #                 save_interval=40,
-    #                 save=checkpoint_dir,
-    #                 ckpt_format="torch_dist",
-    #                 fully_parallel_save=True,
-    #                 async_save=True,
-    #             ),
-    #             rng=RNGConfig(seed=1234),
-    #         )
-
-    #         # Run training
-    #         pretrain(cfg, forward_step)
-
-    #         # Verify checkpoint files
-    #         torch.distributed.barrier()
-    #         verify_checkpoint_files(checkpoint_dir, total_iters)
-
-    #     finally:
-    #         # pytest's tmp_path fixture doesn't clean up immediately.
-    #         # Clean up manually.
-    #         clear_directories(tmp_path)
-
-    # @pytest.mark.run_only_on("GPU")
-    # def test_pretrain_vpp(self, tmp_path):
-    #     """
-    #     Test end to end training with virtual pipeline parallelism.
-    #     """
-    #     initialize_distributed()
-    #     shared_base_dir = broadcast_path(tmp_path)
-
-    #     checkpoint_dir = os.path.join(shared_base_dir, "checkpoints")
-    #     tensorboard_dir = os.path.join(shared_base_dir, "tensorboard")
-
-    #     if torch.distributed.get_rank() == 0:
-    #         os.makedirs(checkpoint_dir, exist_ok=True)
-    #         os.makedirs(tensorboard_dir, exist_ok=True)
-
-    #     torch.distributed.barrier()
-
-    #     try:
-    #         global_batch_size = 8
-    #         micro_batch_size = 1
-    #         seq_length = 512
-    #         total_iters = 100
-
-    #         # Create model config with VPP
-    #         model_cfg = Llama32ModelProvider1B(
-    #             tensor_model_parallel_size=1,
-    #             pipeline_model_parallel_size=2,
-    #             virtual_pipeline_model_parallel_size=2,
-    #             context_parallel_size=1,
-    #             sequence_parallel=False,
-    #             attention_softmax_in_fp32=True,
-    #             pipeline_dtype=torch.bfloat16,
-    #             bf16=True,
-    #             seq_length=seq_length,
-    #             make_vocab_size_divisible_by=128,
-    #             vocab_size=None,
-    #         )
-
-    #         # Create other configurations
-    #         optimizer_cfg = OptimizerConfig(
-    #             optimizer="adam",
-    #             bf16=True,
-    #             fp16=False,
-    #             adam_beta1=0.9,
-    #             adam_beta2=0.95,
-    #             adam_eps=1e-5,
-    #             use_distributed_optimizer=True,
-    #             clip_grad=1.0,
-    #             lr=3e-3,
-    #             weight_decay=0.01,
-    #             min_lr=1e-6,
-    #         )
-
-    #         ddp_cfg = DistributedDataParallelConfig(
-    #             check_for_nan_in_grad=True,
-    #             grad_reduce_in_fp32=True,
-    #             overlap_grad_reduce=True,
-    #             overlap_param_gather=True,
-    #             average_in_collective=True,
-    #             use_distributed_optimizer=True,
-    #         )
-
-    #         # Setup communication overlap for VPP
-    #         from megatron.bridge.training.comm_overlap import CommOverlapConfig
-
-    #         comm_overlap = CommOverlapConfig(
-    #             data_parallel_size=1,
-    #             tp_comm_overlap=False,
-    #         )
-
-    #         comm_overlap.setup(
-    #             model_config=model_cfg,
-    #             optimizer_config=optimizer_cfg,
-    #             ddp_config=ddp_cfg,
-    #         )
-
-    #         # Create config container
-    #         cfg = ConfigContainer(
-    #             model=model_cfg,
-    #             train=TrainingConfig(
-    #                 train_iters=total_iters,
-    #                 eval_interval=50,
-    #                 eval_iters=2,
-    #                 global_batch_size=global_batch_size,
-    #                 micro_batch_size=micro_batch_size,
-    #                 exit_signal_handler=True,
-    #             ),
-    #             optimizer=optimizer_cfg,
-    #             scheduler=SchedulerConfig(
-    #                 start_weight_decay=0.033,
-    #                 end_weight_decay=0.033,
-    #                 weight_decay_incr_style="constant",
-    #                 lr_decay_style="cosine",
-    #                 lr_warmup_iters=2,
-    #                 lr_warmup_init=0.0,
-    #                 lr_decay_iters=total_iters,
-    #                 override_opt_param_scheduler=True,
-    #             ),
-    #             ddp=ddp_cfg,
-    #             dataset=MockGPTDatasetConfig(
-    #                 random_seed=1234,
-    #                 reset_attention_mask=False,
-    #                 reset_position_ids=False,
-    #                 eod_mask_loss=False,
-    #                 sequence_length=seq_length,
-    #                 num_dataset_builder_threads=1,
-    #                 data_sharding=True,
-    #                 dataloader_type="single",
-    #                 num_workers=1,
-    #             ),
-    #             logger=LoggerConfig(
-    #                 log_interval=5,
-    #                 tensorboard_dir=tensorboard_dir,
-    #             ),
-    #             tokenizer=TokenizerConfig(
-    #                 tokenizer_type="NullTokenizer",
-    #                 vocab_size=10000,
-    #             ),
-    #             checkpoint=CheckpointConfig(
-    #                 save=checkpoint_dir,
-    #                 ckpt_format="torch_dist",
-    #                 fully_parallel_save=True,
-    #                 async_save=True,
-    #             ),
-    #             rng=RNGConfig(seed=1234),
-    #         )
-
-    #         # Run training
-    #         pretrain(cfg, forward_step)
-
-    #         # Verify checkpoint files
-    #         torch.distributed.barrier()
-    #         verify_checkpoint_files(checkpoint_dir, total_iters)
-
-    #     finally:
-    #         # pytest's tmp_path fixture doesn't clean up immediately.
-    #         # Clean up manually.
-    #         clear_directories(tmp_path)
-
     @pytest.mark.run_only_on("GPU")
-    def test_pretrain_with_external_cuda_graph(self):
+    def test_pretrain_with_checkpoint(self, tmp_path):
         """
-        Test end to end training with external cudagraph.
+        Test end to end training with checkpoint functionality.
         """
         initialize_distributed()
+        shared_base_dir = broadcast_path(tmp_path)
 
-        global_batch_size = 8
-        micro_batch_size = 1
-        seq_length = 512
-        total_iters = 10
+        checkpoint_dir = os.path.join(shared_base_dir, "checkpoints")
+        tensorboard_dir = os.path.join(shared_base_dir, "tensorboard")
 
-        from megatron.bridge.training.mixed_precision import bf16_mixed
+        if torch.distributed.get_rank() == 0:
+            os.makedirs(checkpoint_dir, exist_ok=True)
+            os.makedirs(tensorboard_dir, exist_ok=True)
 
-        from megatron.bridge.recipes.llama.llama3_8b import pretrain_config as llama3_8b_pretrain_config
-        recipe = llama3_8b_pretrain_config(
-            mock=True,
-            precision_config=bf16_mixed(),
-            seq_length=8192,
-            train_iters=10,
-            global_batch_size=8,
-            micro_batch_size=1,
-            lr_warmup_iters=2,
-            pipeline_parallelism=4,
-            pipeline_parallelism_dtype=torch.bfloat16,
-        )
-        #recipe.dataset.sequence_length = 512
-        #recipe.model.seq_length = 512
+        torch.distributed.barrier()
 
-        print("Setting external_cuda_graph and use_te_rng_tracker to True")
-        #recipe.model.pipeline_dtype = torch.bfloat16
-        recipe.model.external_cuda_graph = True
-        recipe.model.use_te_rng_tracker = True
-        recipe.rng.te_rng_tracker = True
+        try:
+            global_batch_size = 8
+            micro_batch_size = 1
+            seq_length = 512
+            total_iters = 100
 
-        recipe.model.cross_entropy_fusion_impl = "te"
-        recipe.model.use_transformer_engine_op_fuser = True
+            model_cfg = Llama32ModelProvider1B(
+                tensor_model_parallel_size=1,
+                pipeline_model_parallel_size=1,
+                context_parallel_size=1,
+                sequence_parallel=False,
+                attention_softmax_in_fp32=True,
+                pipeline_dtype=torch.bfloat16,
+                bf16=True,
+                seq_length=seq_length,
+                make_vocab_size_divisible_by=128,
+                vocab_size=None,
+            )
 
-        #recipe.model.num_layers = 2
-        # recipe.model.seq_length = 512
+            # Config Container
+            cfg = ConfigContainer(
+                model=model_cfg,
+                train=TrainingConfig(
+                    train_iters=total_iters,
+                    eval_interval=50,
+                    eval_iters=2,
+                    global_batch_size=global_batch_size,
+                    micro_batch_size=micro_batch_size,
+                    exit_signal_handler=True,
+                ),
+                optimizer=OptimizerConfig(
+                    optimizer="adam",
+                    bf16=True,
+                    fp16=False,
+                    adam_beta1=0.9,
+                    adam_beta2=0.95,
+                    adam_eps=1e-5,
+                    use_distributed_optimizer=True,
+                    clip_grad=1.0,
+                    lr=3e-3,
+                    weight_decay=0.01,
+                    min_lr=1e-6,
+                ),
+                scheduler=SchedulerConfig(
+                    start_weight_decay=0.033,
+                    end_weight_decay=0.033,
+                    weight_decay_incr_style="constant",
+                    lr_decay_style="cosine",
+                    lr_warmup_iters=2,
+                    lr_warmup_init=0.0,
+                    lr_decay_iters=total_iters,
+                    override_opt_param_scheduler=True,
+                ),
+                ddp=DistributedDataParallelConfig(
+                    check_for_nan_in_grad=True,
+                    grad_reduce_in_fp32=True,
+                    overlap_grad_reduce=True,
+                    overlap_param_gather=True,
+                    average_in_collective=True,
+                    use_distributed_optimizer=True,
+                ),
+                dataset=MockGPTDatasetConfig(
+                    random_seed=1234,
+                    reset_attention_mask=False,
+                    reset_position_ids=False,
+                    eod_mask_loss=False,
+                    sequence_length=seq_length,
+                    num_dataset_builder_threads=1,
+                    data_sharding=True,
+                    dataloader_type="single",
+                    num_workers=1,
+                ),
+                logger=LoggerConfig(
+                    log_interval=5,
+                    tensorboard_dir=tensorboard_dir,
+                ),
+                tokenizer=TokenizerConfig(
+                    tokenizer_type="NullTokenizer",
+                    vocab_size=10000,
+                ),
+                checkpoint=CheckpointConfig(
+                    save_interval=40,
+                    save=checkpoint_dir,
+                    ckpt_format="torch_dist",
+                    fully_parallel_save=True,
+                    async_save=True,
+                ),
+                rng=RNGConfig(seed=1234),
+            )
 
-        # model_cfg = Llama3ModelProvider8B(
-        #     tensor_model_parallel_size=1,
-        #     pipeline_model_parallel_size=1,
-        #     context_parallel_size=1,
-        #     sequence_parallel=False,
-        #     attention_softmax_in_fp32=True,
-        #     pipeline_dtype=torch.bfloat16,
-        #     bf16=True,
-        #     seq_length=seq_length,
-        #     make_vocab_size_divisible_by=128,
-        #     vocab_size=None,
+            # Run training
+            pretrain(cfg, forward_step)
 
-        #     num_layers=2,
+            # Verify checkpoint files
+            torch.distributed.barrier()
+            verify_checkpoint_files(checkpoint_dir, total_iters)
 
-        #     external_cuda_graph=True,
-        #     use_te_rng_tracker=True,
-        # )
+        finally:
+            # pytest's tmp_path fixture doesn't clean up immediately.
+            # Clean up manually.
+            clear_directories(tmp_path)
 
-        # # Config Container
-        # cfg = ConfigContainer(
-        #     model=model_cfg,
-        #     train=TrainingConfig(
-        #         train_iters=total_iters,
-        #         eval_interval=50,
-        #         eval_iters=0,
-        #         global_batch_size=global_batch_size,
-        #         micro_batch_size=micro_batch_size,
-        #         exit_signal_handler=True,
-        #     ),
-        #     optimizer=OptimizerConfig(
-        #         optimizer="adam",
-        #         bf16=True,
-        #         fp16=False,
-        #         adam_beta1=0.9,
-        #         adam_beta2=0.95,
-        #         adam_eps=1e-5,
-        #         use_distributed_optimizer=True,
-        #         clip_grad=1.0,
-        #         lr=3e-3,
-        #         weight_decay=0.01,
-        #         min_lr=1e-6,
-        #     ),
-        #     scheduler=SchedulerConfig(
-        #         start_weight_decay=0.033,
-        #         end_weight_decay=0.033,
-        #         weight_decay_incr_style="constant",
-        #         lr_decay_style="cosine",
-        #         lr_warmup_iters=2,
-        #         lr_warmup_init=0.0,
-        #         lr_decay_iters=total_iters,
-        #         override_opt_param_scheduler=True,
-        #     ),
-        #     ddp=DistributedDataParallelConfig(
-        #         check_for_nan_in_grad=True,
-        #         grad_reduce_in_fp32=True,
-        #         overlap_grad_reduce=True,
-        #         overlap_param_gather=True,
-        #         average_in_collective=True,
-        #         use_distributed_optimizer=True,
-        #     ),
-        #     dataset=MockGPTDatasetConfig(
-        #         random_seed=1234,
-        #         reset_attention_mask=False,
-        #         reset_position_ids=False,
-        #         eod_mask_loss=False,
-        #         sequence_length=seq_length,
-        #         num_dataset_builder_threads=1,
-        #         data_sharding=True,
-        #         dataloader_type="single",
-        #         num_workers=1,
-        #     ),
-        #     logger=LoggerConfig(
-        #         log_interval=1,
-        #         set_level_for_all_loggers=True,
-        #     ),
-        #     tokenizer=TokenizerConfig(
-        #         tokenizer_type="NullTokenizer",
-        #         vocab_size=10000,
-        #     ),
-        #     checkpoint=CheckpointConfig(),
-        #     rng=RNGConfig(seed=1234, te_rng_tracker=True),
-        # )
+    @pytest.mark.run_only_on("GPU")
+    def test_pretrain_vpp(self, tmp_path):
+        """
+        Test end to end training with virtual pipeline parallelism.
+        """
+        initialize_distributed()
+        shared_base_dir = broadcast_path(tmp_path)
 
-        # Run training
-        pretrain(config=recipe, forward_step_func=forward_step)
+        checkpoint_dir = os.path.join(shared_base_dir, "checkpoints")
+        tensorboard_dir = os.path.join(shared_base_dir, "tensorboard")
+
+        if torch.distributed.get_rank() == 0:
+            os.makedirs(checkpoint_dir, exist_ok=True)
+            os.makedirs(tensorboard_dir, exist_ok=True)
+
+        torch.distributed.barrier()
+
+        try:
+            global_batch_size = 8
+            micro_batch_size = 1
+            seq_length = 512
+            total_iters = 100
+
+            # Create model config with VPP
+            model_cfg = Llama32ModelProvider1B(
+                tensor_model_parallel_size=1,
+                pipeline_model_parallel_size=2,
+                virtual_pipeline_model_parallel_size=2,
+                context_parallel_size=1,
+                sequence_parallel=False,
+                attention_softmax_in_fp32=True,
+                pipeline_dtype=torch.bfloat16,
+                bf16=True,
+                seq_length=seq_length,
+                make_vocab_size_divisible_by=128,
+                vocab_size=None,
+            )
+
+            # Create other configurations
+            optimizer_cfg = OptimizerConfig(
+                optimizer="adam",
+                bf16=True,
+                fp16=False,
+                adam_beta1=0.9,
+                adam_beta2=0.95,
+                adam_eps=1e-5,
+                use_distributed_optimizer=True,
+                clip_grad=1.0,
+                lr=3e-3,
+                weight_decay=0.01,
+                min_lr=1e-6,
+            )
+
+            ddp_cfg = DistributedDataParallelConfig(
+                check_for_nan_in_grad=True,
+                grad_reduce_in_fp32=True,
+                overlap_grad_reduce=True,
+                overlap_param_gather=True,
+                average_in_collective=True,
+                use_distributed_optimizer=True,
+            )
+
+            # Setup communication overlap for VPP
+            from megatron.bridge.training.comm_overlap import CommOverlapConfig
+
+            comm_overlap = CommOverlapConfig(
+                data_parallel_size=1,
+                tp_comm_overlap=False,
+            )
+
+            comm_overlap.setup(
+                model_config=model_cfg,
+                optimizer_config=optimizer_cfg,
+                ddp_config=ddp_cfg,
+            )
+
+            # Create config container
+            cfg = ConfigContainer(
+                model=model_cfg,
+                train=TrainingConfig(
+                    train_iters=total_iters,
+                    eval_interval=50,
+                    eval_iters=2,
+                    global_batch_size=global_batch_size,
+                    micro_batch_size=micro_batch_size,
+                    exit_signal_handler=True,
+                ),
+                optimizer=optimizer_cfg,
+                scheduler=SchedulerConfig(
+                    start_weight_decay=0.033,
+                    end_weight_decay=0.033,
+                    weight_decay_incr_style="constant",
+                    lr_decay_style="cosine",
+                    lr_warmup_iters=2,
+                    lr_warmup_init=0.0,
+                    lr_decay_iters=total_iters,
+                    override_opt_param_scheduler=True,
+                ),
+                ddp=ddp_cfg,
+                dataset=MockGPTDatasetConfig(
+                    random_seed=1234,
+                    reset_attention_mask=False,
+                    reset_position_ids=False,
+                    eod_mask_loss=False,
+                    sequence_length=seq_length,
+                    num_dataset_builder_threads=1,
+                    data_sharding=True,
+                    dataloader_type="single",
+                    num_workers=1,
+                ),
+                logger=LoggerConfig(
+                    log_interval=5,
+                    tensorboard_dir=tensorboard_dir,
+                ),
+                tokenizer=TokenizerConfig(
+                    tokenizer_type="NullTokenizer",
+                    vocab_size=10000,
+                ),
+                checkpoint=CheckpointConfig(
+                    save=checkpoint_dir,
+                    ckpt_format="torch_dist",
+                    fully_parallel_save=True,
+                    async_save=True,
+                ),
+                rng=RNGConfig(seed=1234),
+            )
+
+            # Run training
+            pretrain(cfg, forward_step)
+
+            # Verify checkpoint files
+            torch.distributed.barrier()
+            verify_checkpoint_files(checkpoint_dir, total_iters)
+
+        finally:
+            # pytest's tmp_path fixture doesn't clean up immediately.
+            # Clean up manually.
+            clear_directories(tmp_path)
+
