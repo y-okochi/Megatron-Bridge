@@ -19,7 +19,7 @@ import torch
 from megatron.core.distributed import DistributedDataParallelConfig
 from megatron.core.optimizer import OptimizerConfig
 
-from megatron.bridge.models.llama import Llama32ModelProvider1B
+from megatron.bridge.models.llama import Llama32ModelProvider1B, Llama3ModelProvider8B
 from megatron.bridge.training.config import (
     CheckpointConfig,
     ConfigContainer,
@@ -38,8 +38,6 @@ from tests.functional_tests.utils import (
     initialize_distributed,
     # verify_checkpoint_files,
 )
-
-
 class TestPretrain:
     """
     Test end to end training with checkpoint functionality.
@@ -315,84 +313,117 @@ class TestPretrain:
         seq_length = 512
         total_iters = 10
 
-        model_cfg = Llama32ModelProvider1B(
-            tensor_model_parallel_size=1,
-            pipeline_model_parallel_size=1,
-            context_parallel_size=1,
-            sequence_parallel=False,
-            attention_softmax_in_fp32=True,
-            pipeline_dtype=torch.bfloat16,
-            bf16=True,
-            seq_length=seq_length,
-            make_vocab_size_divisible_by=128,
-            vocab_size=None,
-            external_cuda_graph=True,
-            use_te_rng_tracker=True,
-        )
+        from megatron.bridge.training.mixed_precision import bf16_mixed
 
-        # Config Container
-        cfg = ConfigContainer(
-            model=model_cfg,
-            train=TrainingConfig(
-                train_iters=total_iters,
-                eval_interval=50,
-                eval_iters=2,
-                global_batch_size=global_batch_size,
-                micro_batch_size=micro_batch_size,
-                exit_signal_handler=True,
-            ),
-            optimizer=OptimizerConfig(
-                optimizer="adam",
-                bf16=True,
-                fp16=False,
-                adam_beta1=0.9,
-                adam_beta2=0.95,
-                adam_eps=1e-5,
-                use_distributed_optimizer=True,
-                clip_grad=1.0,
-                lr=3e-3,
-                weight_decay=0.01,
-                min_lr=1e-6,
-            ),
-            scheduler=SchedulerConfig(
-                start_weight_decay=0.033,
-                end_weight_decay=0.033,
-                weight_decay_incr_style="constant",
-                lr_decay_style="cosine",
-                lr_warmup_iters=2,
-                lr_warmup_init=0.0,
-                lr_decay_iters=total_iters,
-                override_opt_param_scheduler=True,
-            ),
-            ddp=DistributedDataParallelConfig(
-                check_for_nan_in_grad=True,
-                grad_reduce_in_fp32=True,
-                overlap_grad_reduce=True,
-                overlap_param_gather=True,
-                average_in_collective=True,
-                use_distributed_optimizer=True,
-            ),
-            dataset=MockGPTDatasetConfig(
-                random_seed=1234,
-                reset_attention_mask=False,
-                reset_position_ids=False,
-                eod_mask_loss=False,
-                sequence_length=seq_length,
-                num_dataset_builder_threads=1,
-                data_sharding=True,
-                dataloader_type="single",
-                num_workers=1,
-            ),
-            logger=LoggerConfig(
-                log_interval=1,
-            ),
-            tokenizer=TokenizerConfig(
-                tokenizer_type="NullTokenizer",
-                vocab_size=10000,
-            ),
-            checkpoint=CheckpointConfig(),
-            rng=RNGConfig(seed=1234, te_rng_tracker=True),
+        from megatron.bridge.recipes.llama.llama3_8b import pretrain_config as llama3_8b_pretrain_config
+        recipe = llama3_8b_pretrain_config(
+            mock=True,
+            precision_config=bf16_mixed(),
+            seq_length=8192,
+            train_iters=10,
+            global_batch_size=8,
+            micro_batch_size=1,
+            lr_warmup_iters=2,
+            pipeline_parallelism=4,
+            pipeline_parallelism_dtype=torch.bfloat16,
         )
+        #recipe.dataset.sequence_length = 512
+        #recipe.model.seq_length = 512
+
+        print("Setting external_cuda_graph and use_te_rng_tracker to True")
+        #recipe.model.pipeline_dtype = torch.bfloat16
+        recipe.model.external_cuda_graph = True
+        recipe.model.use_te_rng_tracker = True
+        recipe.rng.te_rng_tracker = True
+
+        recipe.model.cross_entropy_fusion_impl = "te"
+        recipe.model.use_transformer_engine_op_fuser = True
+
+        #recipe.model.num_layers = 2
+        # recipe.model.seq_length = 512
+
+        # model_cfg = Llama3ModelProvider8B(
+        #     tensor_model_parallel_size=1,
+        #     pipeline_model_parallel_size=1,
+        #     context_parallel_size=1,
+        #     sequence_parallel=False,
+        #     attention_softmax_in_fp32=True,
+        #     pipeline_dtype=torch.bfloat16,
+        #     bf16=True,
+        #     seq_length=seq_length,
+        #     make_vocab_size_divisible_by=128,
+        #     vocab_size=None,
+
+        #     num_layers=2,
+
+        #     external_cuda_graph=True,
+        #     use_te_rng_tracker=True,
+        # )
+
+        # # Config Container
+        # cfg = ConfigContainer(
+        #     model=model_cfg,
+        #     train=TrainingConfig(
+        #         train_iters=total_iters,
+        #         eval_interval=50,
+        #         eval_iters=0,
+        #         global_batch_size=global_batch_size,
+        #         micro_batch_size=micro_batch_size,
+        #         exit_signal_handler=True,
+        #     ),
+        #     optimizer=OptimizerConfig(
+        #         optimizer="adam",
+        #         bf16=True,
+        #         fp16=False,
+        #         adam_beta1=0.9,
+        #         adam_beta2=0.95,
+        #         adam_eps=1e-5,
+        #         use_distributed_optimizer=True,
+        #         clip_grad=1.0,
+        #         lr=3e-3,
+        #         weight_decay=0.01,
+        #         min_lr=1e-6,
+        #     ),
+        #     scheduler=SchedulerConfig(
+        #         start_weight_decay=0.033,
+        #         end_weight_decay=0.033,
+        #         weight_decay_incr_style="constant",
+        #         lr_decay_style="cosine",
+        #         lr_warmup_iters=2,
+        #         lr_warmup_init=0.0,
+        #         lr_decay_iters=total_iters,
+        #         override_opt_param_scheduler=True,
+        #     ),
+        #     ddp=DistributedDataParallelConfig(
+        #         check_for_nan_in_grad=True,
+        #         grad_reduce_in_fp32=True,
+        #         overlap_grad_reduce=True,
+        #         overlap_param_gather=True,
+        #         average_in_collective=True,
+        #         use_distributed_optimizer=True,
+        #     ),
+        #     dataset=MockGPTDatasetConfig(
+        #         random_seed=1234,
+        #         reset_attention_mask=False,
+        #         reset_position_ids=False,
+        #         eod_mask_loss=False,
+        #         sequence_length=seq_length,
+        #         num_dataset_builder_threads=1,
+        #         data_sharding=True,
+        #         dataloader_type="single",
+        #         num_workers=1,
+        #     ),
+        #     logger=LoggerConfig(
+        #         log_interval=1,
+        #         set_level_for_all_loggers=True,
+        #     ),
+        #     tokenizer=TokenizerConfig(
+        #         tokenizer_type="NullTokenizer",
+        #         vocab_size=10000,
+        #     ),
+        #     checkpoint=CheckpointConfig(),
+        #     rng=RNGConfig(seed=1234, te_rng_tracker=True),
+        # )
 
         # Run training
-        pretrain(cfg, forward_step)
+        pretrain(config=recipe, forward_step_func=forward_step)

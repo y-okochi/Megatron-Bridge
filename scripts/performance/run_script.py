@@ -31,6 +31,7 @@ from megatron.bridge.training.utils.omegaconf_utils import (
     create_omegaconf_dict_config,
     parse_hydra_overrides,
 )
+import torch
 
 
 logger: logging.Logger = logging.getLogger(__name__)
@@ -61,6 +62,12 @@ def main():
         recipe.model = apply_moe_token_drop(recipe.model)
     else:
         raise ValueError(f"Model {args.model_name} {args.model_size} not supported")
+
+    print("Setting external_cuda_graph and use_te_rng_tracker to True")
+    recipe.model.pipeline_dtype = torch.bfloat16
+    recipe.model.external_cuda_graph = True
+    recipe.model.use_te_rng_tracker = True
+    recipe.rng.te_rng_tracker = True
 
     if (
         f"{args.model_name}_{args.model_size}" in COMM_OVERLAP_CONFIG_MAP
@@ -103,6 +110,10 @@ def main():
     # Apply GPU/precision-specific performance overrides from perf_matrix, if present
     if yaml_overrides_omega is not None:
         apply_perf_matrix_overrides(yaml_overrides_omega, recipe, args, excluded_fields)
+
+    recipe.model.external_cuda_graph = True
+    recipe.model.use_te_rng_tracker = True
+    recipe.rng.te_rng_tracker = True
 
     pretrain(config=recipe, forward_step_func=forward_step)
 
