@@ -57,7 +57,8 @@ from typing import Tuple
 
 from omegaconf import OmegaConf
 
-from megatron.bridge.recipes.kimi.kimi_k2 import pretrain_config
+from megatron.bridge.recipes.kimi.kimi_k2 import pretrain_config as kimi_k2_pretrain_config
+from megatron.bridge.recipes.kimi.kimi_k2_proxy import pretrain_config as kimi_k2_proxy_pretrain_config
 from megatron.bridge.training.config import ConfigContainer
 from megatron.bridge.training.gpt_step import forward_step
 from megatron.bridge.training.pretrain import pretrain
@@ -92,7 +93,25 @@ def parse_cli_args() -> Tuple[argparse.Namespace, list[str]]:
         help="Path to the YAML OmegaConf override file. Default: conf/kimi_k2_pretrain_override_example.yaml",
     )
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
-
+    parser.add_argument("--proxy", action="store_true", help="Use proxy model")
+    parser.add_argument("--optimizer-type", type=str, default="muon", help="Optimizer type, [muon, adam]")
+    parser.add_argument(
+        "--data-paths", 
+        type=str,
+        nargs='+',
+        default=[
+            "/lustre/fsw/coreai_dlalgo_llm/datasets/RedPajama2/kenlm_perp_head_gopher_linefilter_decompressed/bin_idx/nemo/head_01_text_document",
+            "/lustre/fsw/coreai_dlalgo_llm/datasets/RedPajama2/kenlm_perp_head_gopher_linefilter_decompressed/bin_idx/nemo/head_02_text_document",
+            "/lustre/fsw/coreai_dlalgo_llm/datasets/RedPajama2/kenlm_perp_head_gopher_linefilter_decompressed/bin_idx/nemo/head_03_text_document",
+            "/lustre/fsw/coreai_dlalgo_llm/datasets/RedPajama2/kenlm_perp_head_gopher_linefilter_decompressed/bin_idx/nemo/head_04_text_document",
+            "/lustre/fsw/coreai_dlalgo_llm/datasets/RedPajama2/kenlm_perp_head_gopher_linefilter_decompressed/bin_idx/nemo/head_05_text_document",
+            "/lustre/fsw/coreai_dlalgo_llm/datasets/RedPajama2/kenlm_perp_head_gopher_linefilter_decompressed/bin_idx/nemo/head_06_text_document",
+            "/lustre/fsw/coreai_dlalgo_llm/datasets/RedPajama2/kenlm_perp_head_gopher_linefilter_decompressed/bin_idx/nemo/head_07_text_document",
+            "/lustre/fsw/coreai_dlalgo_llm/datasets/RedPajama2/kenlm_perp_head_gopher_linefilter_decompressed/bin_idx/nemo/head_08_text_document",
+            "/lustre/fsw/coreai_dlalgo_llm/datasets/RedPajama2/kenlm_perp_head_gopher_linefilter_decompressed/bin_idx/nemo/head_09_text_document",
+        ],
+        help="Data paths (can specify multiple): path1 path2 path3 ..."
+    )
     # Parse known args for the script, remaining will be treated as overrides
     args, cli_dotlist_overrides = parser.parse_known_args()
     return args, cli_dotlist_overrides
@@ -130,7 +149,13 @@ def main() -> None:
     logger.info("------------------------------------------------------------------")
 
     # Load base configuration from the recipe as a Python dataclass
-    cfg: ConfigContainer = pretrain_config()
+    cfg: ConfigContainer = kimi_k2_pretrain_config(
+        optimizer_type=args.optimizer_type,
+        data_paths=args.data_paths,
+    ) if not args.proxy else kimi_k2_proxy_pretrain_config(
+        optimizer_type=args.optimizer_type,
+        data_paths=args.data_paths,
+    )
     logger.info("Loaded base configuration")
     cfg.to_yaml()
 

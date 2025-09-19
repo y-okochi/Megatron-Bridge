@@ -14,9 +14,11 @@
 
 from megatron.bridge.models.kimi.kimi_provider import (
     KimiK2Provider,
+    KimiK2ProxyProvider,
 )
 
 
 __all__ = [
     "KimiK2Provider",
+    "KimiK2ProxyProvider",
 ]

@@ -19,7 +19,7 @@ from typing import List, Optional, Union
 import torch
 from megatron.core.distributed import DistributedDataParallelConfig
 
-from megatron.bridge.models.kimi import KimiK2Provider
+from megatron.bridge.models.kimi import KimiK2ProxyProvider
 from megatron.bridge.recipes.utils.dataset_utils import get_blend_fields_from_data_paths
 from megatron.bridge.recipes.utils.optimizer_utils import distributed_fused_adam_with_cosine_annealing
 from megatron.bridge.training.comm_overlap import CommOverlapConfig
@@ -35,12 +35,13 @@ from megatron.bridge.training.config import (
 from megatron.bridge.training.mixed_precision import MixedPrecisionConfig
 from megatron.bridge.recipes.utils.optimizer_utils import distributed_muon_with_cosine_annealing
 
+
 logger = logging.getLogger(__name__)
 
 
 def model_config(
     tensor_parallelism: int = 2,
-    pipeline_parallelism: int = 16,
+    pipeline_parallelism: int = 8,
     pipeline_parallelism_dtype: Optional[torch.dtype] = None,
     virtual_pipeline_parallelism: Optional[int] = None,
     context_parallelism: int = 1,
@@ -53,9 +54,9 @@ def model_config(
     recompute_num_layers: Optional[int] = None,
     enable_deepep: bool = False,
     apply_rope_fusion: bool = False,
-) -> KimiK2Provider:
+) -> KimiK2ProxyProvider:
     """
-    Configure the Kimi-K2 (1T) model.
+    Configure the Kimi-K2 Proxy model (smaller version that fits in GB200 NVL72).
 
     Args:
         tensor_parallelism: Degree of tensor model parallelism.
@@ -68,9 +69,9 @@ def model_config(
         enable_deepep: Whether to use DeePEP.
 
     Returns:
-        KimiK2Provider: Configuration for the Kimi-K2 model.
+        KimiK2ProxyProvider: Configuration for the Kimi-K2 Proxy model.
     """
-    cfg = KimiK2Provider(
+    cfg = KimiK2ProxyProvider(
         tensor_model_parallel_size=tensor_parallelism,
         pipeline_model_parallel_size=pipeline_parallelism,
         pipeline_dtype=pipeline_parallelism_dtype,
@@ -98,21 +99,21 @@ def model_config(
         cfg.apply_rope_fusion = True
 
     # Pipeline parallelism configs. We infer PP layout from the provided PP and VP size
+    # Adjusted for smaller model (31 layers vs 61 layers)
     map_pp_vp_to_layout = {
         (1, 1): None,
-        (4, 1): [["embedding"] + ["decoder"] * 16, ["decoder"] * 16, ["decoder"] * 16, ["decoder"] * 13 + ["loss"]],
-        (8, 1): [["embedding"] + ["decoder"] * 8] + [["decoder"] * 8] * 6 + [["decoder"] * 5 + ["loss"]],
-        (4, 2): [["embedding"] + ["decoder"] * 8] + [["decoder"] * 8] * 6 + [["decoder"] * 5 + ["loss"]],
-        (16, 1): [["embedding"] + ["decoder"] * 4] + [["decoder"] * 4] * 14 + [["decoder", "loss"]],
-        (8, 2): [["embedding"] + ["decoder"] * 4] + [["decoder"] * 4] * 14 + [["decoder", "loss"]],
-        (4, 4): [["embedding"] + ["decoder"] * 4] + [["decoder"] * 4] * 14 + [["decoder", "loss"]],
+        (2, 1): [["embedding"] + ["decoder"] * 15, ["decoder"] * 15 + ["loss"]],
+        (4, 1): [["embedding"] + ["decoder"] * 7, ["decoder"] * 8, ["decoder"] * 8, ["decoder"] * 7 + ["loss"]],
+        (8, 1): [["embedding"] + ["decoder"] * 3] + [["decoder"] * 4] * 6 + [["decoder"] * 2 + ["loss"]],
+        (2, 2): [["embedding"] + ["decoder"] * 7] + [["decoder"] * 7 + ["loss"]],
+        (4, 2): [["embedding"] + ["decoder"] * 3] + [["decoder"] * 4] * 6 + [["decoder"] * 2 + ["loss"]],
     }
     pp_size = pipeline_parallelism or 1
     vp_size = virtual_pipeline_parallelism or 1
     if (pp_size, vp_size) not in map_pp_vp_to_layout:
         raise ValueError(
             f"Invalid PP and VP size: {pp_size} and {vp_size} to infer PP layout "
-            f"for Kimi-K2. Known PP and VP combinations: {map_pp_vp_to_layout.keys()}"
+            f"for Kimi-K2 Proxy. Known PP and VP combinations: {map_pp_vp_to_layout.keys()}"
         )
 
     layout = map_pp_vp_to_layout[(pp_size, vp_size)]
@@ -142,20 +143,20 @@ def pretrain_config(
     mock: bool = False,
     # Model configuration
     tensor_parallelism: int = 2,
-    pipeline_parallelism: int = 16,
+    pipeline_parallelism: int = 8,
     pipeline_parallelism_dtype: Optional[torch.dtype] = torch.bfloat16,
     virtual_pipeline_parallelism: Optional[int] = None,
     context_parallelism: int = 1,
     expert_parallelism: int = 32,
     sequence_parallelism: bool = True,
     # Training hyperparameters
-    train_iters: int = 1_000_000,
-    global_batch_size: int = 4096,
+    train_iters: int = 500_000,
+    global_batch_size: int = 2048,
     micro_batch_size: int = 1,
     seq_length: int = 4096,
     lr: float = 3e-4,
     min_lr: float = 3e-5,
-    lr_warmup_iters: int = 2000,
+    lr_warmup_iters: int = 1000,
     optimizer_type: str = "adam",
     # Precision recipe
     precision_config: Optional[Union[MixedPrecisionConfig, str]] = None,
@@ -169,7 +170,7 @@ def pretrain_config(
     apply_rope_fusion: bool = False,
 ) -> ConfigContainer:
     """
-    Create a pre-training configuration for Kimi-K2 (1T) model.
+    Create a pre-training configuration for Kimi-K2 Proxy model.
 
     Returns:
         ConfigContainer: Configuration for pre-training.
@@ -224,7 +225,6 @@ def pretrain_config(
         )
     else:
         raise ValueError(f"Invalid optimizer type: {optimizer_type}")
-
 
     if precision_config is None:
         precision_config = MixedPrecisionConfig(

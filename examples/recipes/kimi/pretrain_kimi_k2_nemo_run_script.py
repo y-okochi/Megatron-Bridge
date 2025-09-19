@@ -167,6 +167,23 @@ def parse_cli_args() -> Tuple[argparse.Namespace, list[str]]:
         action="store_true",
         help="Dry run the script without actually running it.",
     )
+    parser.add_argument(
+        "--nodes",
+        type=int,
+        default=64,
+        help="Number of nodes to use for the run.",
+    )
+    parser.add_argument(
+        "--optimizer-type",
+        type=str,
+        default="muon",
+        help="Optimizer type, [muon, adam].",
+    )
+    parser.add_argument(
+        "--proxy",
+        action="store_true",
+        help="Use proxy model.",
+    )
 
     # Parse known args for the launcher, remaining will be forwarded to target script
     args, forwarded_args = parser.parse_known_args()
@@ -197,7 +214,11 @@ def main() -> None:
     target_script_args = [
         "--config-file",
         str(config_file_to_use),
+        "--optimizer-type",
+        args.optimizer_type,
     ]
+    if args.proxy:
+        target_script_args.append("--proxy")
 
     # Add any forwarded arguments (Hydra-style overrides and other target script args)
     if forwarded_args:
@@ -215,7 +236,7 @@ def main() -> None:
 
     # Define the executor
     executor = slurm_executor_aot(
-        nodes=64,
+        nodes=args.nodes,
         host='login-eos01.eos.clusters.nvidia.com',
         remote_job_dir="/lustre/fsw/coreai_dlalgo_llm/aot/exp/mbridge/kimi_k2_pretrain",
         partition="batch",
@@ -227,8 +248,6 @@ def main() -> None:
             "/lustre/fsw/coreai_dlalgo_llm/aot/codebases/Megatron-Bridge:/opt/mbridge",
         ],
     )
-
-    breakpoint()
 
     # Execute the run
     run.run(train_script, executor=executor, dryrun=args.dryrun)
