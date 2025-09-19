@@ -21,7 +21,7 @@
 model:
   seq_length: 4096
   tensor_model_parallel_size: 2
-  pipeline_model_parallel_size: 16
+  pipeline_model_parallel_size: 8
   expert_model_parallel_size: 32
   apply_rope_fusion: false
   recompute_granularity: full
@@ -29,10 +29,10 @@ model:
   recompute_num_layers: 1
 
 train:
-  train_iters: 20
+  train_iters: 1000
   global_batch_size: 16
   micro_batch_size: 1
-  eval_iters: 0
+  eval_iters: 10
 
 optimizer:
   lr: 0.0003
@@ -51,6 +51,10 @@ dist:
 
 logger:
   log_interval: 1
+  wandb_project: aot-muon
+  wandb_exp_name: kimi-k2-proxy-muon-1k
+  wandb_entity: joc
+  wandb_save_dir: checkpoints/wandb
 
 dataset:
   sequence_length: 4096
