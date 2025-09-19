@@ -96,6 +96,7 @@ def model_config(
     # Performance optimization knobs
     cfg.moe_permute_fusion = True
     cfg.bias_dropout_fusion = False
+    cfg.bias_activation_fusion = False  # Disable SiLU-GLU fusion to avoid recompilation warnings
     if apply_rope_fusion:
         cfg.apply_rope_fusion = True
 
@@ -276,7 +277,7 @@ def pretrain_config(
         logger=LoggerConfig(
             log_interval=10,
             tensorboard_dir=tensorboard_dir,
-            log_timers_to_tensorboard=True,
+            log_timers_to_tensorboard=False,
         ),
         tokenizer=TokenizerConfig(tokenizer_type="NullTokenizer", vocab_size=model_cfg.vocab_size),
         checkpoint=CheckpointConfig(
