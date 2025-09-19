@@ -95,6 +95,7 @@ def model_config(
 
     # Performance optimization knobs
     cfg.moe_permute_fusion = True
+    cfg.bias_dropout_fusion = False
     if apply_rope_fusion:
         cfg.apply_rope_fusion = True
 
