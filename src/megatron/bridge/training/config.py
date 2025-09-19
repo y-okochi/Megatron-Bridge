@@ -17,7 +17,7 @@ import os
 import signal
 from dataclasses import dataclass, field, fields
 from pathlib import Path
-from typing import Any, Literal, Optional, Union
+from typing import Any, Literal, Optional, Union, Tuple
 
 from megatron.core.datasets.gpt_dataset import GPTDatasetConfig as MCoreGPTDatasetConfig
 from megatron.core.distributed import DistributedDataParallelConfig as MCoreDistributedDataParallelConfig
@@ -261,6 +261,21 @@ class MockGPTDatasetConfig(GPTDatasetConfig):
     blend: None = field(init=False, repr=False, default=None)
     blend_per_split: None = field(init=False, repr=False, default=None)
 
+
+@dataclass(kw_only=True)
+class MockQwen25VLDatasetConfig(DataloaderConfig):
+    """Config for mock Qwen2.5-VL dataset that yields text+image samples.
+
+    Note: sequence_length is used by training and validation checks and must match model.seq_length.
+    """
+
+    sequence_length: int
+    hf_model_path: str = "Qwen/Qwen2.5-VL-3B-Instruct"
+    prompt: str = "Describe this image."
+    random_seed: int = 0
+    image_size: Tuple[int, int] = (256, 256)
+    pad_to_max_length: bool = True
+    create_attention_mask: bool = True
 
 @dataclass(kw_only=True)
 class FinetuningDatasetConfig(DataloaderConfig):
