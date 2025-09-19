@@ -18,7 +18,6 @@ from typing import List, Optional, Union
 import torch
 
 from megatron.bridge import AutoBridge
-from megatron.bridge.models.mamba import MambaProvider
 from megatron.bridge.recipes.utils.dataset_utils import get_blend_fields_from_data_paths
 from megatron.bridge.recipes.utils.optimizer_utils import distributed_fused_adam_with_cosine_annealing
 from megatron.bridge.training.comm_overlap import CommOverlapConfig
@@ -82,38 +81,10 @@ def _tuned_defaults_for_seq_length(seq_length: int):
 
     return tuned
 
-# recipes.__init__.py
-import llama3_8b_pretrain, llama3_70b_pretrain, llama31_1b_pretrain, llama3_8b_finetune
-
-
-
-def _llama_common():
-    # user cannot import
-    pass
-
-def llama3_8b_pretrain():
-    container = _llama_common()
-    # pass
-
-def llama3_8b_finetune():
-    container = _llama_common()
-    # pass
-
-def llama3_70b_pretrain():
-    container = _llama_common()
-    # pass
-
-def llama31_1b_pretrain():
-    container = _llama_common()
-    # pass
-
 
 def pretrain_config(
-    model_id: str | GPTProvider | MambaProvider,
-    seq_length: int = 8192,
-
     dir: Optional[str] = None,
-    name: str = "default", # logger_name,
+    name: str = "default",
     # Dataset configuration
     data_paths: Optional[List[str]] = None,
     data_args_path: Optional[str] = None,
@@ -134,6 +105,7 @@ def pretrain_config(
     train_iters: int = 1_168_251,
     global_batch_size: int = 512,
     micro_batch_size: int = 1,
+    seq_length: int = 8192,
     lr: float = 3e-4,
     min_lr: float = 3e-5,
     lr_warmup_iters: int = 2000,
