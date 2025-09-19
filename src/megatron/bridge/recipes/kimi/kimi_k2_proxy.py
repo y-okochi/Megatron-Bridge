@@ -151,7 +151,7 @@ def pretrain_config(
     sequence_parallelism: bool = True,
     # Training hyperparameters
     train_iters: int = 500_000,
-    global_batch_size: int = 2048,
+    global_batch_size: int = 16,
     micro_batch_size: int = 1,
     seq_length: int = 4096,
     lr: float = 3e-4,
