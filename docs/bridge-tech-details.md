@@ -43,6 +43,7 @@ from megatron.bridge import AutoBridge
 # Build bridge and instantiate Megatron model(s)
 bridge = AutoBridge.from_hf_pretrained("meta-llama/Llama-3.2-1B")
 provider = bridge.to_megatron_provider()
+provider.finalize()
 megatron_model = provider.provide_distributed_model(wrap_with_ddp=False)
 ```
 
