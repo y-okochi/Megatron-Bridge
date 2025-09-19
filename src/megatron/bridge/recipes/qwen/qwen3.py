@@ -196,8 +196,6 @@ def _qwen3_common(
         model_cfg.recompute_granularity = "full"
         model_cfg.recompute_method = "uniform"
         model_cfg.recompute_num_layers = 1
-    
-    model_cfg.finalize()
 
     opt_cfg, scheulder_cfg = distributed_fused_adam_with_cosine_annealing(
         lr_warmup_iters=lr_warmup_iters,
