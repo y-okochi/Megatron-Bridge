@@ -16,12 +16,48 @@ from typing import List, Optional, Union
 
 import torch
 
-from megatron.bridge.recipes.llama import llama3_8b
+from megatron.bridge import AutoBridge
 from megatron.bridge.training.config import ConfigContainer
 from megatron.bridge.training.mixed_precision import MixedPrecisionConfig
 
 
 SEQUENCE_LENGTH_128K: int = 131072
+
+
+def model_config(
+    tensor_parallelism: int = 4,
+    pipeline_parallelism: int = 2,
+    pipeline_parallelism_dtype: Optional[torch.dtype] = torch.bfloat16,
+    virtual_pipeline_parallelism: Optional[int] = None,
+    context_parallelism: int = 8,
+    sequence_parallelism: bool = True,
+):
+    """
+    Configure the Llama3 8B model for 128k sequence length training.
+
+    Args:
+        tensor_parallelism (int): Degree of tensor model parallelism. Default optimized for 128k sequences.
+        pipeline_parallelism (int): Degree of pipeline model parallelism. Default optimized for 128k sequences.
+        pipeline_parallelism_dtype (Optional[torch.dtype]): Data type for pipeline parallelism. Default optimized for 128k sequences.
+        virtual_pipeline_parallelism (Optional[int]): Size of virtual pipeline parallelism.
+        context_parallelism (int): Degree of context parallelism. Default optimized for 128k sequences.
+        sequence_parallelism (bool): Whether to use sequence parallelism. Default optimized for 128k sequences.
+
+    Returns:
+        Configuration for the Llama3 8B model optimized for 128k sequences.
+    """
+    bridge = AutoBridge.from_hf_pretrained("meta-llama/Meta-Llama-3-8B")
+    provider = bridge.to_megatron_provider(load_weights=False)
+    
+    provider.tensor_model_parallel_size = tensor_parallelism
+    provider.pipeline_model_parallel_size = pipeline_parallelism
+    provider.pipeline_dtype = pipeline_parallelism_dtype
+    provider.virtual_pipeline_model_parallel_size = virtual_pipeline_parallelism
+    provider.context_parallel_size = context_parallelism
+    provider.sequence_parallel = sequence_parallelism
+    provider.seq_length = SEQUENCE_LENGTH_128K
+    
+    return provider
 
 
 def pretrain_config(
@@ -55,6 +91,9 @@ def pretrain_config(
     """
     Create a pre-training configuration for Llama3 8B model with 128k sequence length.
 
+    This function inherits from llama3_8b.pretrain_config() and overrides specific parameters
+    optimized for 128k sequence length training.
+
     Args:
         dir (Optional[str]): Base directory for saving logs and checkpoints.
         name (str): Name of the pre-training run.
@@ -86,7 +125,7 @@ def pretrain_config(
         Sequence length is set to SEQUENCE_LENGTH_128K (131072) for long sequence training.
         Default parallelism settings are optimized for handling 128k sequences efficiently.
     """
-    # Delegate to base pretrain_config and only override seq length and defaults
+    # Get base configuration from llama3_8b with 128k sequence length
     config = llama3_8b.pretrain_config(
         dir=dir,
         name=name,
@@ -112,4 +151,15 @@ def pretrain_config(
         lr_warmup_iters=lr_warmup_iters,
         precision_config=precision_config,
     )
+
+    # Override the model configuration to use 128k sequence length
+    config.model = model_config(
+        tensor_parallelism=tensor_parallelism,
+        pipeline_parallelism=pipeline_parallelism,
+        pipeline_parallelism_dtype=pipeline_parallelism_dtype,
+        virtual_pipeline_parallelism=virtual_pipeline_parallelism,
+        context_parallelism=context_parallelism,
+        sequence_parallelism=sequence_parallelism,
+    )
+
     return config
