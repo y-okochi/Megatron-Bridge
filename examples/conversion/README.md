@@ -1,6 +1,6 @@
 # Megatron Bridge Examples: Conversion Scripts
 
-This directory contains example scripts that demonstrate how to use the Megatron-Hub AutoBridge functionality for model conversion, loading, and inference. These scripts showcase various capabilities including HuggingFace-Megatron conversion, text generation, vision-language models, and multi-GPU parallelism.
+This directory contains example scripts that demonstrate how to use the Megatron Bridge's AutoBridge functionality for model conversion, loading, and inference. These scripts showcase various capabilities including HuggingFace-Megatron conversion, text generation, vision-language models, and multi-GPU parallelism.
 
 ## Available Scripts
 
