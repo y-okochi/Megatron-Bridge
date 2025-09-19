@@ -221,6 +221,7 @@ bridge = AutoBridge.from_hf_pretrained('meta-llama/Llama-3.2-1B')
 provider = bridge.to_megatron_provider()
 provider.tensor_model_parallel_size = 1
 provider.pipeline_model_parallel_size = 1
+provider.finalize()
 model = provider.provide_distributed_model(wrap_with_ddp=False)
 
 # Export to HF folder
