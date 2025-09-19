@@ -102,11 +102,11 @@ def model_config(
     # Adjusted for smaller model (31 layers vs 61 layers)
     map_pp_vp_to_layout = {
         (1, 1): None,
-        (2, 1): [["embedding"] + ["decoder"] * 15, ["decoder"] * 15 + ["loss"]],
-        (4, 1): [["embedding"] + ["decoder"] * 7, ["decoder"] * 8, ["decoder"] * 8, ["decoder"] * 7 + ["loss"]],
-        (8, 1): [["embedding"] + ["decoder"] * 3] + [["decoder"] * 4] * 6 + [["decoder"] * 2 + ["loss"]],
-        (2, 2): [["embedding"] + ["decoder"] * 7] + [["decoder"] * 7 + ["loss"]],
-        (4, 2): [["embedding"] + ["decoder"] * 3] + [["decoder"] * 4] * 6 + [["decoder"] * 2 + ["loss"]],
+        (2, 1): [["embedding"] + ["decoder"] * 15, ["decoder"] * 16 + ["loss"]],
+        (4, 1): [["embedding"] + ["decoder"] * 7, ["decoder"] * 8, ["decoder"] * 8, ["decoder"] * 8 + ["loss"]],
+        (8, 1): [["embedding"] + ["decoder"] * 3] + [["decoder"] * 4] * 6 + [["decoder"] * 4 + ["loss"]],
+        (2, 2): [["embedding"] + ["decoder"] * 15, ["decoder"] * 16 + ["loss"]],
+        (4, 2): [["embedding"] + ["decoder"] * 7, ["decoder"] * 8, ["decoder"] * 8, ["decoder"] * 8 + ["loss"]],
     }
     pp_size = pipeline_parallelism or 1
     vp_size = virtual_pipeline_parallelism or 1
