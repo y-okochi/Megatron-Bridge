@@ -14,59 +14,59 @@
 
 # Qwen2 models
 from .qwen2 import (
-    qwen2_500m,
-    qwen2_1p5b,
-    qwen2_7b,
-    qwen2_72b,
+    qwen2_500m_pretrain,
+    qwen2_1p5b_pretrain,
+    qwen2_7b_pretrain,
+    qwen2_72b_pretrain,
 )
 
 # Qwen2.5 models
 from .qwen2 import (
-    qwen25_500m,
-    qwen25_1p5b,
-    qwen25_7b,
-    qwen25_14b,
-    qwen25_32b,
-    qwen25_72b,
+    qwen25_500m_pretrain,
+    qwen25_1p5b_pretrain,
+    qwen25_7b_pretrain,
+    qwen25_14b_pretrain,
+    qwen25_32b_pretrain,
+    qwen25_72b_pretrain,
 )
 
 # Qwen3 models
 from .qwen3 import (
-    qwen3_600m,
-    qwen3_1p7b,
-    qwen3_4b,
-    qwen3_8b,
-    qwen3_14b,
-    qwen3_32b,
+    qwen3_600m_pretrain,
+    qwen3_1p7b_pretrain,
+    qwen3_4b_pretrain,
+    qwen3_8b_pretrain,
+    qwen3_14b_pretrain,
+    qwen3_32b_pretrain,
 )
 
 # Qwen3 MoE models
 from .qwen3_moe import (
-    qwen3_30b_a3b,
-    qwen3_235b_a22b,
+    qwen3_30b_a3b_pretrain,
+    qwen3_235b_a22b_pretrain,
 )
 
 __all__ = [
     # Qwen2 models
-    "qwen2_500m",
-    "qwen2_1p5b", 
-    "qwen2_7b",
-    "qwen2_72b",
+    "qwen2_500m_pretrain",
+    "qwen2_1p5b_pretrain", 
+    "qwen2_7b_pretrain",
+    "qwen2_72b_pretrain",
     # Qwen2.5 models
-    "qwen25_500m",
-    "qwen25_1p5b",
-    "qwen25_7b",
-    "qwen25_14b",
-    "qwen25_32b",
-    "qwen25_72b",
+    "qwen25_500m_pretrain",
+    "qwen25_1p5b_pretrain",
+    "qwen25_7b_pretrain",
+    "qwen25_14b_pretrain",
+    "qwen25_32b_pretrain",
+    "qwen25_72b_pretrain",
     # Qwen3 models
-    "qwen3_600m",
-    "qwen3_1p7b",
-    "qwen3_4b",
-    "qwen3_8b",
-    "qwen3_14b", 
-    "qwen3_32b",
+    "qwen3_600m_pretrain",
+    "qwen3_1p7b_pretrain",
+    "qwen3_4b_pretrain",
+    "qwen3_8b_pretrain",
+    "qwen3_14b_pretrain", 
+    "qwen3_32b_pretrain",
     # Qwen3 MoE models
-    "qwen3_30b_a3b",
-    "qwen3_235b_a22b",
+    "qwen3_30b_a3b_pretrain",
+    "qwen3_235b_a22b_pretrain",
 ]

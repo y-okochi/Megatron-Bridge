@@ -31,10 +31,10 @@ from megatron.bridge.training.config import (
     TokenizerConfig,
     TrainingConfig,
 )
-from megatron.bridge.training.mixed_precision import MixedPrecisionConfig
+from megatron.bridge.training.mixed_precision import MixedPrecisionConfig, bf16_mixed
 
 
-def qwen3_30b_a3b(**user_kwargs):
+def qwen3_30b_a3b_pretrain(**user_kwargs):
     recommended_kwargs = {
         "hf_path": "Qwen/Qwen3-30B-A3B",
         "tensor_parallelism": 4,
@@ -49,7 +49,7 @@ def qwen3_30b_a3b(**user_kwargs):
     return _qwen3_moe_common(**combined_kwargs)
 
 
-def qwen3_235b_a22b(**user_kwargs):
+def qwen3_235b_a22b_pretrain(**user_kwargs):
     recommended_kwargs = {
         "hf_path": "Qwen/Qwen3-235B-A22B",
         "tensor_parallelism": 4,
@@ -182,6 +182,11 @@ def _qwen3_moe_common(
         max_lr=lr,
         min_lr=min_lr,
     )
+
+    if precision_config is None:
+        precision_config = bf16_mixed()
+    if isinstance(precision_config, MixedPrecisionConfig):
+        precision_config.grad_reduce_in_fp32 = False
 
     # Config Container
     cfg = ConfigContainer(

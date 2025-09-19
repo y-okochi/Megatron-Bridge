@@ -35,7 +35,7 @@ from megatron.bridge.training.config import (
 from megatron.bridge.training.mixed_precision import MixedPrecisionConfig
 
 
-def qwen2_500m(**user_kwargs):
+def qwen2_500m_pretrain(**user_kwargs):
     recommended_kwargs = {
         "hf_path": "Qwen/Qwen2-0.5B",
         "tensor_parallelism": 1,
@@ -46,7 +46,7 @@ def qwen2_500m(**user_kwargs):
     return _qwen2_common(**combined_kwargs)
 
 
-def qwen2_1p5b(**user_kwargs):
+def qwen2_1p5b_pretrain(**user_kwargs):
     recommended_kwargs = {
         "hf_path": "Qwen/Qwen2-1.5B",
         "tensor_parallelism": 1,
@@ -57,32 +57,30 @@ def qwen2_1p5b(**user_kwargs):
     return _qwen2_common(**combined_kwargs)
 
 
-def qwen2_7b(**user_kwargs):
+def qwen2_7b_pretrain(**user_kwargs):
     recommended_kwargs = {
         "hf_path": "Qwen/Qwen2-7B",
         "tensor_parallelism": 2,
         "pipeline_parallelism": 1,
-        "use_megatron_fsdp": True,
     }
     # Combine defaults with user kwargs; user values take precedence.
     combined_kwargs = recommended_kwargs | user_kwargs
     return _qwen2_common(**combined_kwargs)
 
 
-def qwen2_72b(**user_kwargs):
+def qwen2_72b_pretrain(**user_kwargs):
     recommended_kwargs = {
         "hf_path": "Qwen/Qwen2-72B",
         "tensor_parallelism": 8,
         "pipeline_parallelism": 4,
         "pipeline_parallelism_dtype": torch.bfloat16,
-        "use_megatron_fsdp": True,
     }
     # Combine defaults with user kwargs; user values take precedence.
     combined_kwargs = recommended_kwargs | user_kwargs
     return _qwen2_common(**combined_kwargs)
 
 
-def qwen25_500m(**user_kwargs):
+def qwen25_500m_pretrain(**user_kwargs):
     recommended_kwargs = {
         "hf_path": "Qwen/Qwen2.5-0.5B",
         "tensor_parallelism": 1,
@@ -93,7 +91,7 @@ def qwen25_500m(**user_kwargs):
     return _qwen2_common(**combined_kwargs)
 
 
-def qwen25_1p5b(**user_kwargs):
+def qwen25_1p5b_pretrain(**user_kwargs):
     recommended_kwargs = {
         "hf_path": "Qwen/Qwen2.5-1.5B",
         "tensor_parallelism": 1,
@@ -104,7 +102,7 @@ def qwen25_1p5b(**user_kwargs):
     return _qwen2_common(**combined_kwargs)
 
 
-def qwen25_7b(**user_kwargs):
+def qwen25_7b_pretrain(**user_kwargs):
     recommended_kwargs = {
         "hf_path": "Qwen/Qwen2.5-7B",
         "tensor_parallelism": 2,
@@ -115,20 +113,19 @@ def qwen25_7b(**user_kwargs):
     return _qwen2_common(**combined_kwargs)
 
 
-def qwen25_14b(**user_kwargs):
+def qwen25_14b_pretrain(**user_kwargs):
     recommended_kwargs = {
         "hf_path": "Qwen/Qwen2.5-14B",
         "tensor_parallelism": 4,
         "pipeline_parallelism": 1,
         "check_for_nan_in_grad": True,
-        "use_megatron_fsdp": True,
     }
     # Combine defaults with user kwargs; user values take precedence.
     combined_kwargs = recommended_kwargs | user_kwargs
     return _qwen2_common(**combined_kwargs)
 
 
-def qwen25_32b(**user_kwargs):
+def qwen25_32b_pretrain(**user_kwargs):
     recommended_kwargs = {
         "hf_path": "Qwen/Qwen2.5-32B",
         "tensor_parallelism": 8,
@@ -140,7 +137,7 @@ def qwen25_32b(**user_kwargs):
     return _qwen2_common(**combined_kwargs)
 
 
-def qwen25_72b(**user_kwargs):
+def qwen25_72b_pretrain(**user_kwargs):
     recommended_kwargs = {
         "hf_path": "Qwen/Qwen2.5-72B",
         "tensor_parallelism": 8,
