@@ -16,6 +16,7 @@ import os
 from typing import List, Optional, Union
 
 import torch
+from megatron.core.distributed import DistributedDataParallelConfig
 
 from megatron.bridge import AutoBridge
 from megatron.bridge.recipes.utils.dataset_utils import get_blend_fields_from_data_paths
@@ -25,7 +26,6 @@ from megatron.bridge.training.comm_overlap import CommOverlapConfig
 from megatron.bridge.training.config import (
     CheckpointConfig,
     ConfigContainer,
-    DistributedDataParallelConfig,
     GPTDatasetConfig,
     LoggerConfig,
     RNGConfig,
@@ -34,43 +34,76 @@ from megatron.bridge.training.config import (
 )
 from megatron.bridge.training.mixed_precision import MixedPrecisionConfig
 
-
-def model_config(
-    tensor_parallelism: int = 4,
-    pipeline_parallelism: int = 1,
-    pipeline_parallelism_dtype: Optional[torch.dtype] = None,
-    virtual_pipeline_parallelism: Optional[int] = None,
-    context_parallelism: int = 1,
-    sequence_parallelism: bool = False,
-):
-    """
-    Configure the Qwen2.5 14B model.
-
-    Args:
-        tensor_parallelism (int): Degree of tensor model parallelism.
-        pipeline_parallelism (int): Degree of pipeline model parallelism.
-        pipeline_parallelism_dtype (Optional[torch.dtype]): Data type for pipeline parallelism.
-        virtual_pipeline_parallelism (Optional[int]): Size of virtual pipeline parallelism.
-        context_parallelism (int): Degree of context parallelism.
-        sequence_parallelism (bool): Whether to use sequence parallelism.
-
-    Returns:
-        Configuration for the Qwen2.5 14B model.
-    """
-    bridge = AutoBridge.from_hf_pretrained("Qwen/Qwen2.5-14B")
-    provider = bridge.to_megatron_provider(load_weights=False)
-    
-    provider.tensor_model_parallel_size = tensor_parallelism
-    provider.pipeline_model_parallel_size = pipeline_parallelism
-    provider.pipeline_dtype = pipeline_parallelism_dtype
-    provider.virtual_pipeline_model_parallel_size = virtual_pipeline_parallelism
-    provider.context_parallel_size = context_parallelism
-    provider.sequence_parallel = sequence_parallelism
-    
-    return provider
+def qwen3_600m(**user_kwargs):
+    recommended_kwargs = {
+        "hf_path": "Qwen/Qwen3-0.6B",
+        "tensor_parallelism": 1,
+        "pipeline_parallelism": 1,
+    }
+    # Combine defaults with user kwargs; user values take precedence.
+    combined_kwargs = recommended_kwargs | user_kwargs
+    return _qwen3_common(**combined_kwargs)
 
 
-def pretrain_config(
+def qwen3_1p7b(**user_kwargs):
+    recommended_kwargs = {
+        "hf_path": "Qwen/Qwen3-1.7B",
+        "tensor_parallelism": 1,
+        "pipeline_parallelism": 1,
+    }
+    # Combine defaults with user kwargs; user values take precedence.
+    combined_kwargs = recommended_kwargs | user_kwargs
+    return _qwen3_common(**combined_kwargs)
+
+
+def qwen3_4b(**user_kwargs):
+    recommended_kwargs = {
+        "hf_path": "Qwen/Qwen3-4B",
+        "tensor_parallelism": 2,
+        "pipeline_parallelism": 1,
+    }
+    # Combine defaults with user kwargs; user values take precedence.
+    combined_kwargs = recommended_kwargs | user_kwargs
+    return _qwen3_common(**combined_kwargs)
+
+
+def qwen3_8b(**user_kwargs):
+    recommended_kwargs = {
+        "hf_path": "Qwen/Qwen3-8B",
+        "tensor_parallelism": 4,
+        "pipeline_parallelism": 1,
+    }
+    # Combine defaults with user kwargs; user values take precedence.
+    combined_kwargs = recommended_kwargs | user_kwargs
+    return _qwen3_common(**combined_kwargs)
+
+
+def qwen3_14b(**user_kwargs):
+    recommended_kwargs = {
+        "hf_path": "Qwen/Qwen3-14B",
+        "tensor_parallelism": 8,
+        "pipeline_parallelism": 1,
+    }
+    # Combine defaults with user kwargs; user values take precedence.
+    combined_kwargs = recommended_kwargs | user_kwargs
+    return _qwen3_common(**combined_kwargs)
+
+
+def qwen3_32b(**user_kwargs):
+    recommended_kwargs = {
+        "hf_path": "Qwen/Qwen3-32B",
+        "tensor_parallelism": 8,
+        "pipeline_parallelism": 2,
+        "pipeline_parallelism_dtype": torch.bfloat16,
+        "enable_recompute": True,
+    }
+    # Combine defaults with user kwargs; user values take precedence.
+    combined_kwargs = recommended_kwargs | user_kwargs
+    return _qwen3_common(**combined_kwargs)
+
+
+def _qwen3_common(
+    hf_path: str,
     dir: Optional[str] = None,
     name: str = "default",
     # Dataset configuration
@@ -82,13 +115,15 @@ def pretrain_config(
     per_split_data_args_path: Optional[str] = None,
     mock: bool = False,
     # Model configuration
-    tensor_parallelism: int = 4,
+    tensor_parallelism: int = 1,
     pipeline_parallelism: int = 1,
     pipeline_parallelism_dtype: Optional[torch.dtype] = None,
     virtual_pipeline_parallelism: Optional[int] = None,
     context_parallelism: int = 1,
     sequence_parallelism: bool = False,
     use_megatron_fsdp: bool = False,
+    use_null_tokenizer: bool = False,
+    enable_recompute: bool = False,
     # Training hyperparameters
     train_iters: int = 300000,
     global_batch_size: int = 32,
@@ -102,9 +137,10 @@ def pretrain_config(
     comm_overlap_config: Optional[CommOverlapConfig] = None,
 ) -> ConfigContainer:
     """
-    Create a pre-training configuration for Qwen2.5 14B model.
+    Create a pre-training configuration for Qwen3 models using a given HuggingFace path.
 
     Args:
+        hf_path (str): HuggingFace model path (e.g., "Qwen/Qwen3-1.7B").
         dir (Optional[str]): Base directory for saving logs and checkpoints.
         name (str): Name of the pre-training run.
         data_paths (Optional[List[str]]): List of paths to dataset files. If None, mock data will be used.
@@ -120,6 +156,9 @@ def pretrain_config(
         virtual_pipeline_parallelism (Optional[int]): Size of virtual pipeline parallelism.
         context_parallelism (int): Degree of context parallelism to be passed to model_config.
         sequence_parallelism (bool): Whether to use sequence parallelism.
+        use_megatron_fsdp (bool): Whether to use Megatron FSDP.
+        use_null_tokenizer (bool): Whether to use NullTokenizer instead of HuggingFaceTokenizer.
+        enable_recompute (bool): Whether to enable recompute for memory optimization.
         train_iters (int): Total number of training iterations.
         global_batch_size (int): Global batch size for training.
         micro_batch_size (int): Micro batch size for training.
@@ -128,6 +167,7 @@ def pretrain_config(
         min_lr (float): Minimum learning rate for cosine decay.
         lr_warmup_iters (int): Number of warmup iterations for the learning rate.
         precision_config (Optional[Union[MixedPrecisionConfig, str]]): Precision configuration for the model.
+        comm_overlap_config (Optional[CommOverlapConfig]): Communication overlap configuration.
 
     Returns:
         ConfigContainer: Configuration for pre-training.
@@ -141,17 +181,25 @@ def pretrain_config(
         data_paths, data_args_path, train_data_path, valid_data_path, test_data_path, per_split_data_args_path, mock
     )
 
-    model_cfg = model_config(
-        tensor_parallelism=tensor_parallelism,
-        pipeline_parallelism=pipeline_parallelism,
-        pipeline_parallelism_dtype=pipeline_parallelism_dtype,
-        virtual_pipeline_parallelism=virtual_pipeline_parallelism,
-        context_parallelism=context_parallelism,
-        sequence_parallelism=sequence_parallelism,
-    )
+    bridge = AutoBridge.from_hf_pretrained(hf_path)
+    model_cfg = bridge.to_megatron_provider(load_weights=False)
+    model_cfg.tensor_model_parallel_size = tensor_parallelism
+    model_cfg.pipeline_model_parallel_size = pipeline_parallelism
+    model_cfg.pipeline_dtype = pipeline_parallelism_dtype
+    model_cfg.virtual_pipeline_model_parallel_size = virtual_pipeline_parallelism
+    model_cfg.context_parallel_size = context_parallelism
+    model_cfg.sequence_parallel = sequence_parallelism
     model_cfg.seq_length = seq_length
+    
+    # Add recompute settings for memory optimization (used by larger models like 32B)
+    if enable_recompute:
+        model_cfg.recompute_granularity = "full"
+        model_cfg.recompute_method = "uniform"
+        model_cfg.recompute_num_layers = 1
+    
+    model_cfg.finalize()
 
-    opt_config, scheduler = distributed_fused_adam_with_cosine_annealing(
+    opt_cfg, scheulder_cfg = distributed_fused_adam_with_cosine_annealing(
         lr_warmup_iters=lr_warmup_iters,
         lr_decay_iters=train_iters,
         max_lr=lr,
@@ -159,7 +207,7 @@ def pretrain_config(
     )
 
     # Config Container
-    cfg = ConfigContainer(
+    cfg_container = ConfigContainer(
         model=model_cfg,
         train=TrainingConfig(
             train_iters=train_iters,
@@ -171,10 +219,15 @@ def pretrain_config(
             manual_gc_interval=100,
             manual_gc_eval=100,
         ),
-        optimizer=opt_config,
-        scheduler=scheduler,
+        optimizer=opt_cfg,
+        scheduler=scheulder_cfg,
         ddp=DistributedDataParallelConfig(
             check_for_nan_in_grad=True,
+            grad_reduce_in_fp32=True,
+            overlap_grad_reduce=True,
+            overlap_param_gather=True,
+            average_in_collective=True,  # Not supported for custom FSDP for now, need to be set to False if using FSDP
+            data_parallel_sharding_strategy="optim_grads_params",  # For custom FSDP only
             use_distributed_optimizer=True,
             use_megatron_fsdp=use_megatron_fsdp,  # need use_distributed_optimizer=True
         ),
@@ -198,7 +251,11 @@ def pretrain_config(
             tensorboard_dir=tensorboard_dir,
             log_timers_to_tensorboard=True,
         ),
-        tokenizer=TokenizerConfig(tokenizer_type="NullTokenizer", vocab_size=DEFAULT_NULL_TOKENIZER_VOCAB_SIZE),
+        tokenizer=TokenizerConfig(
+            tokenizer_type="NullTokenizer" if use_null_tokenizer else "HuggingFaceTokenizer",
+            tokenizer_model=hf_path if not use_null_tokenizer else None,
+            vocab_size=DEFAULT_NULL_TOKENIZER_VOCAB_SIZE if use_null_tokenizer else None,
+        ),
         checkpoint=CheckpointConfig(
             save_interval=500,
             save=checkpoint_dir,
@@ -211,4 +268,4 @@ def pretrain_config(
         mixed_precision=precision_config,
     )
 
-    return cfg
+    return cfg_container
