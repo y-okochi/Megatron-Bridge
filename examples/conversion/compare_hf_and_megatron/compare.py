@@ -20,46 +20,46 @@ and their Megatron equivalents, supporting both text-only and vision-language mo
 
 Run Script Examples:
     # Regular LLM comparison between HF and Megatron models:
-    python examples/conversion/compare_hf_and_megatron/compare.py \
+    python examples/models/compare_hf_and_megatron/compare.py \
         --hf_model_path "Qwen/Qwen3-1.7B" \
         --prompt "Hello, how are you?"
 
 
     # Vision-language comparison with image from URL:
-    python examples/conversion/compare_hf_and_megatron/compare.py \
+    python examples/models/compare_hf_and_megatron/compare.py \
         --hf_model_path "Qwen/Qwen2.5-VL-3B-Instruct" \
         --model_class "Qwen2_5_VLForConditionalGeneration" \
         --image_path "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen-VL/assets/demo.jpeg" \
         --prompt "Describe this image."
 
     # Vision-language comparison with local image:
-    python examples/conversion/compare_hf_and_megatron/compare.py \
+    python examples/models/compare_hf_and_megatron/compare.py \
         --hf_model_path "Qwen/Qwen2.5-VL-3B-Instruct" \
         --model_class "Qwen2_5_VLForConditionalGeneration" \
         --image_path "/path/to/local/image.jpg" \
         --prompt "What do you see in this image?"
 
     # Multi-GPU comparison with tensor parallelism (regular LLM):
-    torchrun --nproc_per_node=2 examples/conversion/compare_hf_and_megatron/compare.py \
+    torchrun --nproc_per_node=2 examples/models/compare_hf_and_megatron/compare.py \
         --hf_model_path "Qwen/Qwen3-1.7B" \
         --prompt "Hello world" \
         --tp 2
 
     # Pipeline parallel comparison (VL model):
-    torchrun --nproc_per_node=2 examples/conversion/compare_hf_and_megatron/compare.py \
+    torchrun --nproc_per_node=2 examples/models/compare_hf_and_megatron/compare.py \
         --hf_model_path "Qwen/Qwen2.5-VL-3B-Instruct" \
         --model_class "Qwen2_5_VLForConditionalGeneration" \
         --prompt "Hello world" \
         --pp 2
 
     # Compare with pre-converted Megatron checkpoint:
-    python examples/conversion/compare_hf_and_megatron/compare.py \
+    python examples/models/compare_hf_and_megatron/compare.py \
         --hf_model_path "Qwen/Qwen3-1.7B" \
         --megatron_model_path "/path/to/megatron/checkpoint" \
         --prompt "Hello world"
 
     # Enable debug hooks to inspect forward pass intermediate results:
-    python examples/conversion/compare_hf_and_megatron/compare.py \
+    python examples/models/compare_hf_and_megatron/compare.py \
         --hf_model_path "Qwen/Qwen3-1.7B" \
         --prompt "Hello world" \
         --enable_debug_hooks
@@ -589,7 +589,7 @@ def compare_models_one_step(args) -> None:
     )
 
     # Broadcast HF results to all ranks after Megatron initialization
-    # (following the pattern from hf_to_megatron_generate_text.py)
+    # (following the pattern from generate_from_hf.py)
     if torch.distributed.is_initialized():
         # Create tensors for broadcasting if they don't exist on non-rank-0
         if hf_next_token is None:
@@ -679,7 +679,7 @@ def compare_models_one_step(args) -> None:
             # Non-last pipeline stages: create dummy tensor for broadcasting
             megatron_next_token = torch.zeros(1, device=input_ids.device, dtype=torch.long)
 
-        # Broadcast Megatron results from last rank to all ranks (following hf_to_megatron_generate_text.py pattern)
+        # Broadcast Megatron results from last rank to all ranks (following generate_from_hf.py pattern)
         if torch.distributed.is_initialized():
             torch.distributed.broadcast(megatron_next_token, get_last_rank())
 
