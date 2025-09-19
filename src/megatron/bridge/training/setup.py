@@ -21,6 +21,7 @@ from typing import Any, Callable, NamedTuple, Optional
 import torch
 from megatron.core.config import set_experimental_flag
 from megatron.core.distributed import DistributedDataParallel, DistributedDataParallelConfig, finalize_model_grads
+from megatron.core.distributed.fsdp.mcore_fsdp_adapter import FullyShardedDataParallel as megatron_FSDP
 from megatron.core.optimizer import MegatronOptimizer
 from megatron.core.optimizer_param_scheduler import OptimizerParamScheduler
 from megatron.core.rerun_state_machine import RerunDataIterator
@@ -36,14 +37,15 @@ from megatron.bridge.training.checkpointing import (
     load_checkpoint,
     init_async_checkpoint_worker,
 )
-from megatron.bridge.training.config import ConfigContainer
+from megatron.bridge.training.config import ConfigContainer, runtime_config_update
 from megatron.bridge.training.initialize import initialize_megatron, set_jit_fusion_options
-from megatron.bridge.training.mixed_precision import get_mixed_precision_config
 from megatron.bridge.training.optim import setup_optimizer
 from megatron.bridge.training.state import GlobalState
 from megatron.bridge.training.tokenizers.tokenizer import build_tokenizer
 from megatron.bridge.training.utils.log_utils import append_to_progress_log, barrier_and_log, setup_logging
 from megatron.bridge.utils.common_utils import print_rank_0, get_rank_safe
+
+
 
 class SetupOutput(NamedTuple):
     """Represents the output of the main setup function.
@@ -100,22 +102,10 @@ def setup(
         A SetupOutput named tuple containing the initialized state, model,
         optimizer, scheduler, data iterators, and checkpointing context.
     """
+    # Apply runtime configuration updates (mixed precision, comm overlap, validation)
+    runtime_config_update(cfg)
+
     # TODO: Freeze state.cfg
-
-    cfg.validate()
-
-    # Apply mixed precision configuration if provided
-    if cfg.mixed_precision is not None:
-        if isinstance(cfg.mixed_precision, str):
-            cfg.mixed_precision = get_mixed_precision_config(cfg.mixed_precision)
-        cfg.mixed_precision.setup(cfg.model, cfg.optimizer, cfg.ddp)
-
-    # Apply communication overlap configuration if provided at the very beginning
-    if cfg.comm_overlap is not None:
-        cfg.comm_overlap.setup(cfg.model, cfg.optimizer, cfg.ddp)
-
-    cfg.validate()
-
     state = GlobalState()
     state.cfg = cfg
 
@@ -259,7 +249,7 @@ def setup(
     if get_rank_safe() == 0:
         # Print final resolved/updated/overridden configs
         print("------- Task Configuration -------")
-        cfg.to_yaml()
+        cfg.print_yaml()
         print("----------------------------------")
 
     return SetupOutput(
@@ -283,18 +273,18 @@ def _update_model_config_funcs(
     align_grad_reduce: bool = True,
 ) -> None:
     """Update model config sync funcs based on initialized model."""
-    if isinstance(model[0], DistributedDataParallel) and ddp_config.overlap_grad_reduce:
+    if isinstance(model[0], (DistributedDataParallel, megatron_FSDP)) and ddp_config.overlap_grad_reduce:
         assert model_config.no_sync_func is None, (
             "When overlap_grad_reduce is True, config.no_sync_func must be None; "
             "a custom no_sync_func is not supported when overlapping grad-reduce"
         )
-    model_config.no_sync_func = [model_chunk.no_sync for model_chunk in model]
-    if len(model) == 1:
-        model_config.no_sync_func = model_config.no_sync_func[0]
-    if align_grad_reduce:
-        model_config.grad_sync_func = [model_chunk.start_grad_sync for model_chunk in model]
+        model_config.no_sync_func = [model_chunk.no_sync for model_chunk in model]
         if len(model) == 1:
-            model_config.grad_sync_func = model_config.grad_sync_func[0]
+            model_config.no_sync_func = model_config.no_sync_func[0]
+        if align_grad_reduce:
+            model_config.grad_sync_func = [model_chunk.start_grad_sync for model_chunk in model]
+            if len(model) == 1:
+                model_config.grad_sync_func = model_config.grad_sync_func[0]
     if ddp_config.overlap_param_gather and ddp_config.align_param_gather:
         model_config.param_sync_func = [model_chunk.start_param_sync for model_chunk in model]
         if len(model) == 1:
