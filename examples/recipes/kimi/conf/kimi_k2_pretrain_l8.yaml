@@ -25,6 +25,8 @@ model:
   pipeline_model_parallel_size: 1
   expert_model_parallel_size: 64
   apply_rope_fusion: false
+  moe_layer_freq: [0] + [1] * 7
+  pipeline_model_parallel_layout: null
 
 train:
   train_iters: 1000
