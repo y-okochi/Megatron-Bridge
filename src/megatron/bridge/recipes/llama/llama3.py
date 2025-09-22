@@ -86,10 +86,10 @@ def llama3_8b(**user_kwargs):
 def llama3_8b_16k(**user_kwargs):
     recommended_kwargs = {
         "hf_path": "meta-llama/Meta-Llama-3-8B",
-        "tensor_parallelism": 2,
+        "tensor_parallelism": 4,
         "pipeline_parallelism": 2,
         "pipeline_parallelism_dtype": torch.bfloat16,
-        "context_parallelism": 4,
+        "context_parallelism": 2,
         "sequence_parallelism": True,
         "seq_length": SEQUENCE_LENGTH_16K,
     }
@@ -103,7 +103,7 @@ def llama3_8b_64k(**user_kwargs):
         "tensor_parallelism": 4,
         "pipeline_parallelism": 2,
         "pipeline_parallelism_dtype": torch.bfloat16,
-        "context_parallelism": 8,
+        "context_parallelism": 4,
         "sequence_parallelism": True,
         "seq_length": SEQUENCE_LENGTH_64K,
     }
@@ -135,7 +135,10 @@ def llama3_70b(**user_kwargs):
         "virtual_pipeline_parallelism": 5,
         "context_parallelism": 2,
         "sequence_parallelism": True,
-        "comm_overlap_config": userbuffers_bf16_h100_h8192_tp4_mbs1_seqlen8192(),
+        "comm_overlap_config": CommOverlapConfig(
+            tp_comm_overlap=True,
+            tp_comm_overlap_cfg=userbuffers_bf16_h100_h8192_tp4_mbs1_seqlen8192,
+        ),
         "precision_config": bf16_mixed(),
     }
     combined_kwargs = recommended_kwargs | user_kwargs
@@ -145,14 +148,17 @@ def llama3_70b(**user_kwargs):
 def llama3_70b_16k(**user_kwargs):
     recommended_kwargs = {
         "hf_path": "meta-llama/Meta-Llama-3-70B",
-        "tensor_parallelism": 4,
-        "pipeline_parallelism": 4,
+        "tensor_parallelism": 8,
+        "pipeline_parallelism": 2,
         "pipeline_parallelism_dtype": torch.bfloat16,
-        "virtual_pipeline_parallelism": 5,
-        "context_parallelism": 4,
+        "virtual_pipeline_parallelism": None,
+        "context_parallelism": 2,
         "sequence_parallelism": True,
         "seq_length": SEQUENCE_LENGTH_16K,
-        "comm_overlap_config": userbuffers_bf16_h100_h8192_tp4_mbs1_seqlen8192(),
+        "comm_overlap_config": CommOverlapConfig(
+            tp_comm_overlap=True,
+            tp_comm_overlap_cfg=userbuffers_bf16_h100_h8192_tp4_mbs1_seqlen8192,
+        ),
         "precision_config": bf16_mixed(),
     }
     combined_kwargs = recommended_kwargs | user_kwargs
@@ -162,14 +168,17 @@ def llama3_70b_16k(**user_kwargs):
 def llama3_70b_64k(**user_kwargs):
     recommended_kwargs = {
         "hf_path": "meta-llama/Meta-Llama-3-70B",
-        "tensor_parallelism": 4,
+        "tensor_parallelism": 8,
         "pipeline_parallelism": 4,
         "pipeline_parallelism_dtype": torch.bfloat16,
-        "virtual_pipeline_parallelism": 5,
+        "virtual_pipeline_parallelism": None,
         "context_parallelism": 8,
         "sequence_parallelism": True,
         "seq_length": SEQUENCE_LENGTH_64K,
-        "comm_overlap_config": userbuffers_bf16_h100_h8192_tp4_mbs1_seqlen8192(),
+        "comm_overlap_config": CommOverlapConfig(
+            tp_comm_overlap=True,
+            tp_comm_overlap_cfg=userbuffers_bf16_h100_h8192_tp4_mbs1_seqlen8192,
+        ),
         "precision_config": bf16_mixed(),
     }
     combined_kwargs = recommended_kwargs | user_kwargs
@@ -198,8 +207,12 @@ def llama31_70b(**user_kwargs):
         "virtual_pipeline_parallelism": 5,
         "context_parallelism": 2,
         "sequence_parallelism": True,
-        "comm_overlap_config": userbuffers_bf16_h100_h8192_tp4_mbs1_seqlen8192(),
+        "comm_overlap_config": CommOverlapConfig(
+            tp_comm_overlap=True,
+            tp_comm_overlap_cfg=userbuffers_bf16_h100_h8192_tp4_mbs1_seqlen8192,
+        ),
         "precision_config": bf16_mixed(),
+        "seq_length": SEQUENCE_LENGTH_128K,
     }
     combined_kwargs = recommended_kwargs | user_kwargs
     return _llama3_common(**combined_kwargs)
@@ -216,9 +229,13 @@ def llama31_405b(**user_kwargs):
         "sequence_parallelism": True,
         "account_for_embedding_in_pipeline_split": True,
         "account_for_loss_in_pipeline_split": True,
-        "comm_overlap_config": userbuffers_bf16_h100_h16384_tp8_cp2_mbs1_seqlen8192(),
+        "comm_overlap_config": CommOverlapConfig(
+            tp_comm_overlap=True,
+            tp_comm_overlap_cfg=userbuffers_bf16_h100_h16384_tp8_cp2_mbs1_seqlen8192,
+        ),
         "precision_config": bf16_mixed(),
         "micro_batch_size": 1,
+        "seq_length": SEQUENCE_LENGTH_128K,
     }
     combined_kwargs = recommended_kwargs | user_kwargs
     return _llama3_common(**combined_kwargs)
@@ -247,13 +264,15 @@ def _llama3_common(
     account_for_embedding_in_pipeline_split: bool = False,
     account_for_loss_in_pipeline_split: bool = False,
     # Training hyperparameters
-    train_iters: int = 300000,
-    global_batch_size: int = 32,
-    micro_batch_size: int = 2,
-    seq_length: int = 4096,
+    train_iters: int = 1168251,
+    global_batch_size: int = 512,
+    micro_batch_size: int = 1,
+    seq_length: int = 8192,
     lr: float = 3e-4,
     min_lr: float = 3e-5,
-    lr_warmup_iters: int = 500,
+    lr_warmup_iters: int = 2000,
+    eval_interval: int = 2000,
+    use_null_tokenizer: bool = True,
     # Precision recipe
     precision_config: Optional[Union[MixedPrecisionConfig, str]] = "bf16_mixed",
     comm_overlap_config: Optional[CommOverlapConfig] = None,
@@ -331,7 +350,7 @@ def _llama3_common(
         model=model_cfg,
         train=TrainingConfig(
             train_iters=train_iters,
-            eval_interval=500,
+            eval_interval=eval_interval,
             eval_iters=32,
             global_batch_size=global_batch_size,
             micro_batch_size=micro_batch_size,
@@ -370,7 +389,11 @@ def _llama3_common(
             tensorboard_dir=tensorboard_dir,
             log_timers_to_tensorboard=True,
         ),
-        tokenizer=TokenizerConfig(tokenizer_type="HuggingFaceTokenizer", tokenizer_model=hf_path),
+        tokenizer=TokenizerConfig(
+            tokenizer_type="NullTokenizer" if use_null_tokenizer else "HuggingFaceTokenizer",
+            tokenizer_model=hf_path if not use_null_tokenizer else None,
+            vocab_size=DEFAULT_NULL_TOKENIZER_VOCAB_SIZE if use_null_tokenizer else None,
+        ),
         checkpoint=CheckpointConfig(
             save_interval=500,
             save=checkpoint_dir,

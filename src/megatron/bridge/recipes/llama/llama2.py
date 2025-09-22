@@ -82,6 +82,7 @@ def _llama2_common(
     lr_warmup_iters: int = 2000,
     eval_interval: int = 2000,
     save_interval: int = 2000,
+    use_null_tokenizer: bool = True,
     # Precision recipe
     precision_config: Optional[Union[MixedPrecisionConfig, str]] = "bf16_mixed",
     comm_overlap_config: Optional[CommOverlapConfig] = None,
@@ -196,7 +197,11 @@ def _llama2_common(
             log_interval=10,
             tensorboard_dir=tensorboard_dir,
         ),
-        tokenizer=TokenizerConfig(tokenizer_type="NullTokenizer", vocab_size=DEFAULT_NULL_TOKENIZER_VOCAB_SIZE),
+        tokenizer=TokenizerConfig(
+            tokenizer_type="NullTokenizer" if use_null_tokenizer else "HuggingFaceTokenizer",
+            tokenizer_model=hf_path if not use_null_tokenizer else None,
+            vocab_size=DEFAULT_NULL_TOKENIZER_VOCAB_SIZE if use_null_tokenizer else None,
+        ),
         checkpoint=CheckpointConfig(
             save_interval=save_interval,
             save=checkpoint_dir,
