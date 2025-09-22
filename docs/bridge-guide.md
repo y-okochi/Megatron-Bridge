@@ -145,7 +145,7 @@ for name, weight in bridge.export_hf_weights(
 
 ### Round-Trip Conversion Example
 
-```{literalinclude} ../examples/converstion/hf_megatron_roundtrip.py
+```{literalinclude} ../examples/conversion/hf_megatron_roundtrip.py
 :lines: 31-
 ```
 
