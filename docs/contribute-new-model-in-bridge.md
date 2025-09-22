@@ -20,7 +20,7 @@ Use this checklist-style flow: scaffold → provider mapping → parameter mappi
 
 ## 1) Decide the integration strategy
 
- Most GPT-style models (such as the Qwen and Llama families) can reuse the Megatron-Core GPT model by mapping their configuration. If the model requires custom building blocks (e.g., an attention variant, RoPE variant, or VLM modules), add a lightweight specialization similar to how 🤗 implements `modeling_xxx.py`.
+ Most GPT-style models (such as the Qwen and Llama families) can reuse the Megatron-Core GPT model by mapping their configuration. If the model requires custom building blocks (e.g., an attention variant, RoPE variant, or VLM modules), add a lightweight specialization similar to how 🤗 HuggingFace implements `modeling_xxx.py`.
 
 - **Standard GPT-style models**: Implement a `Provider` and a `Bridge`. For example, see the [Llama provider](https://github.com/NVIDIA-NeMo/Megatron-Bridge/blob/main/src/megatron/bridge/models/llama/llama_provider.py) and [Llama bridge](https://github.com/NVIDIA-NeMo/Megatron-Bridge/blob/main/src/megatron/bridge/models/llama/llama_bridge.py).
 - **Models with custom components**: If your model has custom operations or blocks (e.g., a unique attention mechanism), add a minimal modeling module in the same directory and reference it from the `Provider` (example forthcoming).
