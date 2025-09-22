@@ -71,7 +71,7 @@ For development installation and additional details, please refer to our [Contri
 
 ## ⚡ Quickstart
 
-To get started, install Megatron Bridge or download a NeMo Framework container as described [above](#installation).
+To get started, install Megatron Bridge or download a NeMo Framework container as described [above](#-installation).
 
 Log in to Hugging Face Hub:
 ```sh
