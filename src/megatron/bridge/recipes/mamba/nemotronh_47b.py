@@ -214,6 +214,7 @@ def pretrain_config(
     if cfg.comm_overlap is None:
         cfg.comm_overlap = CommOverlapConfig(
             tp_comm_overlap=True,
+            tp_comm_bootstrap_backend="nccl",
         )
 
     return cfg
