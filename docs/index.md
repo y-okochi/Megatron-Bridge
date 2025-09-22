@@ -7,6 +7,7 @@
 :hidden:
 
 bridge-guide.md
+bridge-tech-details.md
 performance-guide.md
 ```
 
@@ -29,6 +30,7 @@ training/peft-config.md
 :caption: Development
 :hidden:
 
+contribute-new-model-in-bridge.md
 documentation.md
 apidocs/index.rst
 ```

@@ -184,77 +184,12 @@ Implementation notes (from code):
 
 ## Architecture-specific bridge example: Qwen3
 
-Path: [src/megatron/bridge/models/qwen/qwen3_bridge.py](https://github.com/NVIDIA-NeMo/Megatron-Bridge/tree/main/src/megatron/bridge/models/qwen/qwen3_bridge.py)
+Embedded from `src/megatron/bridge/models/qwen/qwen3_bridge.py`:
 
-```python
-from megatron.core.models.gpt.gpt_model import GPTModel
-from transformers import Qwen3ForCausalLM
-from megatron.bridge.models.conversion.model_bridge import MegatronModelBridge
-from megatron.bridge.models.conversion.mapping_registry import MegatronMappingRegistry
-from megatron.bridge.models.conversion.param_mapping import AutoMapping, QKVMapping, GatedMLPMapping
-from megatron.bridge.models.hf_pretrained.causal_lm import PreTrainedCausalLM
-from megatron.bridge.models.qwen.qwen_provider import Qwen3ModelProvider
-
-@MegatronModelBridge.register_bridge(source=Qwen3ForCausalLM, target=GPTModel)
-class Qwen3Bridge(MegatronModelBridge):
-    def provider_bridge(self, hf_pretrained: PreTrainedCausalLM) -> Qwen3ModelProvider:
-        cfg = hf_pretrained.config
-        return Qwen3ModelProvider(
-            num_layers=cfg.num_hidden_layers,
-            hidden_size=cfg.hidden_size,
-            ffn_hidden_size=cfg.intermediate_size,
-            num_attention_heads=cfg.num_attention_heads,
-            num_query_groups=cfg.num_key_value_heads,
-            init_method_std=cfg.initializer_range,
-            layernorm_epsilon=cfg.rms_norm_eps,
-            gated_linear_unit=True,
-            make_vocab_size_divisible_by=self.make_vocab_size_divisible_by(cfg.vocab_size),
-            rotary_base=cfg.rope_theta,
-            share_embeddings_and_output_weights=getattr(cfg, "tie_word_embeddings", False),
-            vocab_size=cfg.vocab_size,
-            seq_length=cfg.max_position_embeddings,
-            fp16=(self.dtype_from_hf(cfg) == torch.float16),
-            bf16=(self.dtype_from_hf(cfg) == torch.bfloat16),
-            params_dtype=self.dtype_from_hf(cfg, default=torch.float32),
-            generation_config=hf_pretrained.generation_config,
-            qk_layernorm=True,
-        )
-
-    def mapping_registry(self) -> MegatronMappingRegistry:
-        mappings = [
-            AutoMapping(
-                megatron_param="embedding.word_embeddings.weight",
-                hf_param="model.embed_tokens.weight",
-            ),
-            AutoMapping(
-                megatron_param="output_layer.weight",
-                hf_param="lm_head.weight",
-            ),
-            AutoMapping(
-                megatron_param="decoder.final_layernorm.weight",
-                hf_param="model.norm.weight",
-            ),
-            AutoMapping(
-                megatron_param="decoder.layers.*.self_attention.linear_qkv.layer_norm_weight",
-                hf_param="model.layers.*.input_layernorm.weight",
-            ),
-            AutoMapping(
-                megatron_param="decoder.layers.*.mlp.linear_fc2.weight",
-                hf_param="model.layers.*.mlp.down_proj.weight",
-            ),
-            QKVMapping(
-                megatron_param="decoder.layers.*.self_attention.linear_qkv.weight",
-                q="model.layers.*.self_attn.q_proj.weight",
-                k="model.layers.*.self_attn.k_proj.weight",
-                v="model.layers.*.self_attn.v_proj.weight",
-            ),
-            GatedMLPMapping(
-                megatron_param="decoder.layers.*.mlp.linear_fc1.weight",
-                gate="model.layers.*.mlp.gate_proj.weight",
-                up="model.layers.*.mlp.up_proj.weight",
-            ),
-        ]
-        return MegatronMappingRegistry(*mappings)
+```{literalinclude} ../src/megatron/bridge/models/qwen/qwen3_bridge.py
+:language: python
+:pyobject: Qwen3Bridge
+:linenos:
 ```
 
 Notes:
