@@ -105,6 +105,8 @@ def main():
         apply_perf_matrix_overrides(yaml_overrides_omega, recipe, args, excluded_fields)
     recipe.model.gradient_accumulation_fusion = True
 
+    recipe.model.cuda_graph_scope = "full_iteration"
+    
     pretrain(config=recipe, forward_step_func=forward_step)
 
 

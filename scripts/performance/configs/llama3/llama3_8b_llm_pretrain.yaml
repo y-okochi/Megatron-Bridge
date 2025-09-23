@@ -18,7 +18,7 @@ ConfigContainer:
     use_transformer_engine_op_fuser: true
 
   train:
-    train_iters: 25
+    train_iters: 5
     eval_iters: 0
 
   rerun_state_machine:
@@ -30,6 +30,8 @@ ConfigContainer:
 
   logger:
     log_interval: 1
+    # set_level_for_all_loggers: true
+    # modules_to_filter: ["torch"]
 
   ddp:
     check_for_nan_in_grad: false
@@ -56,7 +58,7 @@ perf_matrix:
         seq_length: 8192
         mbs: 1
         gbs: 128
-        cuda_graphs: false
+        cuda_graphs: true
         tp: 1
         pp: 1
         vp: null
