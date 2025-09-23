@@ -187,6 +187,7 @@ bridge = AutoBridge.from_hf_pretrained("<org>/<model-id>", trust_remote_code=Tru
 provider = bridge.to_megatron_provider()
 provider.tensor_model_parallel_size = 1
 provider.pipeline_model_parallel_size = 1
+provider.finalize()
 model = provider.provide_distributed_model(wrap_with_ddp=False)
 bridge.load_hf_weights(model)
 
