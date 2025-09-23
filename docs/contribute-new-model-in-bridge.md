@@ -1,6 +1,6 @@
 # Contribute a New Model to Megatron Bridge
 
-This guide explains how to add support for a new 🤗 Hugging Face model (or family) to Megatron Bridge so it can convert HF ↔ Megatron-Core formats and participate in training recipes.
+This guide explains how to add support for a new 🤗 Hugging Face model (or family) to Megatron Bridge so to convert between HF ↔ Megatron-Core formats and participate in training recipes.
 
 Use this checklist-style flow: scaffold → provider mapping → parameter mappings → tests → validation.
 
