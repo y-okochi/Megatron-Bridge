@@ -1,6 +1,6 @@
 # Contribute a New Model to Megatron Bridge
 
-This guide explains how to add support for a new 🤗 Hugging Face model (or family) to Megatron Bridge so it can convert HF ↔ Megatron-Core formats and participate in training recipes.
+This guide explains how to add support for a new 🤗 Hugging Face model (or family) to Megatron Bridge so to convert between HF ↔ Megatron-Core formats and participate in training recipes.
 
 Use this checklist-style flow: scaffold → provider mapping → parameter mappings → tests → validation.
 
@@ -187,6 +187,7 @@ bridge = AutoBridge.from_hf_pretrained("<org>/<model-id>", trust_remote_code=Tru
 provider = bridge.to_megatron_provider()
 provider.tensor_model_parallel_size = 1
 provider.pipeline_model_parallel_size = 1
+provider.finalize()
 model = provider.provide_distributed_model(wrap_with_ddp=False)
 bridge.load_hf_weights(model)
 
