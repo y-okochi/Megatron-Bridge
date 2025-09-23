@@ -237,7 +237,7 @@ torchrun --nproc-per-node=2 -m examples.conversion.generate_from_hf
 
 ## AutoBridge API Reference
 
-Latest public APIs and signatures (see {py:class}`bridge.models.conversion.auto_bridge.AutoBridge`):
+Latest public APIs and signatures (see {doc}`apidocs/bridge/bridge.models.conversion.auto_bridge`):
 
 ```python
 from megatron.bridge import AutoBridge

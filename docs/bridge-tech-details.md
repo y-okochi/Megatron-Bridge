@@ -24,12 +24,12 @@ flowchart LR
 
 Key components:
 
-- AutoBridge: Detects HF architecture, constructs the appropriate bridge, exposes high-level convert/save APIs. See {py:class}`megatron.bridge.models.conversion.auto_bridge.AutoBridge`.
-- MegatronModelBridge: Orchestrates conversion, builds conversion tasks, handles per-parameter streaming. See {py:class}`megatron.bridge.models.conversion.model_bridge.MegatronModelBridge`.
-- MegatronMappingRegistry: Registry of parameter-name mappings; resolves concrete `MegatronParamMapping` for each weight. See {py:class}`megatron.bridge.models.conversion.mapping_registry.MegatronMappingRegistry`.
-- Param Mappings: Implement parameter transformations and parallel distribution (Auto, ColumnParallel, RowParallel, QKV, GatedMLP, Replicated, custom). See {py:class}`megatron.bridge.models.conversion.param_mapping.AutoMapping`, {py:class}`megatron.bridge.models.conversion.param_mapping.ColumnParallelMapping`, {py:class}`megatron.bridge.models.conversion.param_mapping.RowParallelMapping`, {py:class}`megatron.bridge.models.conversion.param_mapping.QKVMapping`, {py:class}`megatron.bridge.models.conversion.param_mapping.GatedMLPMapping`, {py:class}`megatron.bridge.models.conversion.param_mapping.ReplicatedMapping`.
-- Model Providers: Build `TransformerConfig`-compatible providers for Megatron-Core and instantiate distributed models. See {py:mod}`megatron.bridge.models` and {py:class}`megatron.bridge.models.gpt_provider.GPTModelProvider`.
-- Specific model bridge definitions: Architecture-specific bridges live under their model folders, for example {py:class}`megatron.bridge.models.llama.llama_bridge.LlamaBridge` and {py:class}`megatron.bridge.models.qwen.qwen3_bridge.Qwen3Bridge`.
+- AutoBridge: Detects HF architecture, constructs the appropriate bridge, exposes high-level convert/save APIs. See {doc}`apidocs/bridge/bridge.models.conversion.auto_bridge`.
+- MegatronModelBridge: Orchestrates conversion, builds conversion tasks, handles per-parameter streaming. See [model_bridge.py](https://github.com/NVIDIA-NeMo/Megatron-Bridge/tree/main/src/megatron/bridge/models/conversion/model_bridge.py).
+- MegatronMappingRegistry: Registry of parameter-name mappings; resolves concrete `MegatronParamMapping` for each weight. See [mapping_registry.py](https://github.com/NVIDIA-NeMo/Megatron-Bridge/tree/main/src/megatron/bridge/models/conversion/mapping_registry.py).
+- Param Mappings: Implement parameter transformations and parallel distribution (Auto, ColumnParallel, RowParallel, QKV, GatedMLP, Replicated, custom). See [param_mapping.py](https://github.com/NVIDIA-NeMo/Megatron-Bridge/tree/main/src/megatron/bridge/models/conversion/param_mapping.py).
+- Model Providers: Build `TransformerConfig`-compatible providers for Megatron-Core and instantiate distributed models. See [models/](https://github.com/NVIDIA-NeMo/Megatron-Bridge/tree/main/src/megatron/bridge/models).
+- Specific model bridge definitions: Architecture-specific bridges live under their model folders, for example [LlamaBridge](https://github.com/NVIDIA-NeMo/Megatron-Bridge/tree/main/src/megatron/bridge/models/llama/llama_bridge.py) and [Qwen3Bridge](https://github.com/NVIDIA-NeMo/Megatron-Bridge/tree/main/src/megatron/bridge/models/qwen/qwen3_bridge.py).
 
 ## Conversion workflow
 
@@ -175,12 +175,12 @@ Note: If you need a one-to-many or many-to-one mapping that is not covered by QK
   - EP: For expert parameters, shards are gathered across EP ranks and one HF tensor per expert is emitted with the correct names.
     - Let total experts be E and EP size be S (assume E % S == 0). Each EP rank owns E/S experts. For a given local expert index L on each EP rank, the global expert ids are L, L+E/S, ..., L+(S-1)*E/S. We gather tensors from all EP ranks and emit one HF tensor per global expert id by substituting that id into the HF parameter name.
 
-This mirrors {py:meth}`megatron.bridge.models.conversion.param_mapping.ColumnParallelMapping.hf_to_megatron` and {py:meth}`megatron.bridge.models.conversion.param_mapping.ColumnParallelMapping.megatron_to_hf`.
+This mirrors [ColumnParallelMapping.hf_to_megatron](https://github.com/NVIDIA-NeMo/Megatron-Bridge/tree/main/src/megatron/bridge/models/conversion/param_mapping.py) and [ColumnParallelMapping.megatron_to_hf](https://github.com/NVIDIA-NeMo/Megatron-Bridge/tree/main/src/megatron/bridge/models/conversion/param_mapping.py) in [param_mapping.py](https://github.com/NVIDIA-NeMo/Megatron-Bridge/tree/main/src/megatron/bridge/models/conversion/param_mapping.py).
 
 Implementation notes (from code):
-- Dtype handling: When HF and Megatron dtypes differ, weights are cast to the Megatron parameter dtype with a warning before TP scatter (see {py:meth}`megatron.bridge.models.conversion.param_mapping.ColumnParallelMapping.hf_to_megatron`).
-- FP8 export: Tensors are dequantized on export when using FP8 tensor classes (see {py:meth}`megatron.bridge.models.conversion.param_mapping.MegatronParamMapping.maybe_dequantize`).
-- MoE experts: Expert parameter names are normalized for lookup and expert shards are gathered across EP ranks and re-emitted per global expert id (see {py:meth}`megatron.bridge.models.conversion.param_mapping.MegatronParamMapping.gather_from_ep_ranks`).
+- Dtype handling: When HF and Megatron dtypes differ, weights are cast to the Megatron parameter dtype with a warning before TP scatter (see ColumnParallelMapping.hf_to_megatron in [param_mapping.py](https://github.com/NVIDIA-NeMo/Megatron-Bridge/tree/main/src/megatron/bridge/models/conversion/param_mapping.py)).
+- FP8 export: Tensors are dequantized on export when using FP8 tensor classes (see `maybe_dequantize` in [param_mapping.py](https://github.com/NVIDIA-NeMo/Megatron-Bridge/tree/main/src/megatron/bridge/models/conversion/param_mapping.py)).
+- MoE experts: Expert parameter names are normalized for lookup and expert shards are gathered across EP ranks and re-emitted per global expert id (see `gather_from_ep_ranks` in [param_mapping.py](https://github.com/NVIDIA-NeMo/Megatron-Bridge/tree/main/src/megatron/bridge/models/conversion/param_mapping.py)).
 
 ## Architecture-specific bridge example: Qwen3
 
