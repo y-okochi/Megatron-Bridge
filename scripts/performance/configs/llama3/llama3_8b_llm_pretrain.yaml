@@ -58,7 +58,7 @@ perf_matrix:
         seq_length: 8192
         mbs: 1
         gbs: 8
-        cuda_graphs: false
+        cuda_graphs: true
         tp: 1
         pp: 1
         vp: null
