@@ -46,6 +46,7 @@ Your provider maps the Hugging Face config to Megatron-Core transformer config f
 Expose:
 ```python
 provider = YourModelProvider(...)
+provider.finalize()
 model = provider.provide_distributed_model(wrap_with_ddp=False)
 ```
 
