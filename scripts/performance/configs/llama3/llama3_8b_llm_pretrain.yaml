@@ -57,9 +57,9 @@ perf_matrix:
         num_gpus_per_node: 8
         seq_length: 8192
         mbs: 1
-        gbs: 128
-        cuda_graphs: true
-        tp: 2
+        gbs: 8
+        cuda_graphs: false
+        tp: 1
         pp: 1
         vp: null
         ep: 1
