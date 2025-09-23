@@ -299,6 +299,10 @@ def pretrain_config(
         comm_overlap=comm_overlap_config,
         mixed_precision=precision_config,
     )
+    if precision_config.fp8 is not None:
+        cfg.model.moe_router_padding_for_fp8 = True
+        cfg.optimizer.main_grads_dtype = torch.float32
+
     if apply_rope_fusion:
         cfg.dist.enable_megatron_core_experimental = True  # mla rope fusion is experimental
 
