@@ -6,9 +6,15 @@
 :caption: Guides
 :hidden:
 
+performance-guide.md
+```
+
+```{toctree}
+:caption: Bridge with 🤗 Hugging Face
+:hidden:
+
 bridge-guide.md
 bridge-tech-details.md
-performance-guide.md
 ```
 
 ```{toctree}
