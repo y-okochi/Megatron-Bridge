@@ -30,6 +30,7 @@ from megatron.core.utils import get_data_parallel_group_if_dtensor, to_local_if_
 
 from megatron.bridge.training.config import ConfigContainer
 from megatron.bridge.training.state import GlobalState
+from megatron.bridge.training.utils.metrics import optimizer_metrics, memory_metrics, speed_metrics
 from megatron.bridge.training.utils.theoretical_memory_utils import report_theoretical_memory
 from megatron.bridge.utils.common_utils import get_world_size_safe, is_last_rank, print_rank_last
 
@@ -308,6 +309,11 @@ def training_log(
     num_zeros_in_grad: Optional[int],
     config: ConfigContainer,
     global_state: GlobalState,
+    speed_monitor,
+    optimizer_monitor,
+    memory_monitor,
+    runtime_monitor,
+    model,
 ) -> bool:
     """Log training stats (losses, learning rate, timings, etc.).
 
@@ -340,7 +346,6 @@ def training_log(
     energy_monitor = global_state.energy_monitor
     logger_config = config.logger
     train_config = config.train
-
     # Advanced, skipped, and Nan iterations.
     advanced_iters_key = "advanced iterations"
     skipped_iters_key = "skipped iterations"
@@ -416,7 +421,11 @@ def training_log(
 
                 with open(config.profiling.memory_snapshot_path, "wb") as f:
                     dump(snapshot, f)
-
+        if wandb_writer:
+            wandb_writer.log(speed_monitor.track(global_state.start_time, train_config, config.dataset.sequence_length), iteration)
+            wandb_writer.log(optimizer_monitor.track(model), iteration)
+            wandb_writer.log(memory_monitor.track(), iteration)
+            wandb_writer.log(runtime_monitor.track(global_state.start_time, iteration, train_config, config.dataset.sequence_length), iteration)
         if wandb_writer:
             wandb_writer.log({"samples vs steps": global_state.train_state.consumed_train_samples}, iteration)
         writer.add_scalar("learning-rate", learning_rate, iteration)
