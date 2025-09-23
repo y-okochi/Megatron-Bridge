@@ -347,7 +347,7 @@ def bf16_with_fp8_subchannel_scaling_mixed() -> MixedPrecisionConfig:
     cfg = bf16_mixed()
     cfg.fp8 = "hybrid"
     cfg.fp8_recipe = "blockwise"
-    cfg.fp8_param_gather = False
+    cfg.fp8_param_gather = True
     return cfg
 
 
@@ -363,7 +363,7 @@ def fp16_with_fp8_subchannel_scaling_mixed() -> MixedPrecisionConfig:
     cfg = fp16_mixed()
     cfg.fp8 = "hybrid"
     cfg.fp8_recipe = "blockwise"
-    cfg.fp8_param_gather = False
+    cfg.fp8_param_gather = True
     return cfg
 
 
