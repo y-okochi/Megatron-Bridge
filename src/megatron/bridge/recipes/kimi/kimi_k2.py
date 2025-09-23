@@ -232,7 +232,7 @@ def pretrain_config(
             params_dtype=torch.bfloat16,
             pipeline_dtype=torch.bfloat16,
             autocast_enabled=False,
-            grad_reduce_in_fp32=False,
+            grad_reduce_in_fp32=True,
         )
 
     cfg = ConfigContainer(
