@@ -9,6 +9,7 @@
 parallelisms.md
 performance-guide.md
 recipe-usage.md
+nemo2-migration-guide.md
 ```
 
 ```{toctree}
