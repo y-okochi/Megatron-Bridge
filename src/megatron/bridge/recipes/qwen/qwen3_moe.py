@@ -21,6 +21,7 @@ from megatron.core.distributed import DistributedDataParallelConfig
 from megatron.bridge import AutoBridge
 from megatron.bridge.recipes.utils.dataset_utils import get_blend_fields_from_data_paths
 from megatron.bridge.recipes.utils.optimizer_utils import distributed_fused_adam_with_cosine_annealing
+from megatron.bridge.recipes.utils.tokenizer_utils import DEFAULT_NULL_TOKENIZER_VOCAB_SIZE
 from megatron.bridge.training.comm_overlap import CommOverlapConfig
 from megatron.bridge.training.config import (
     CheckpointConfig,
@@ -100,6 +101,7 @@ def _qwen3_moe_common(
     lr: float = 3e-4,
     min_lr: float = 3e-5,
     lr_warmup_iters: int = 500,
+    use_null_tokenizer: bool = False,
     # Precision recipe
     precision_config: Optional[Union[MixedPrecisionConfig, str]] = "bf16_mixed",
     comm_overlap_config: Optional[CommOverlapConfig] = None,
@@ -228,7 +230,11 @@ def _qwen3_moe_common(
             tensorboard_dir=tensorboard_dir,
             log_timers_to_tensorboard=True,
         ),
-        tokenizer=TokenizerConfig(tokenizer_type="HuggingFaceTokenizer", tokenizer_model=hf_path),
+        tokenizer=TokenizerConfig(
+            tokenizer_type="NullTokenizer" if use_null_tokenizer else "HuggingFaceTokenizer",
+            tokenizer_model=hf_path if not use_null_tokenizer else None,
+            vocab_size=DEFAULT_NULL_TOKENIZER_VOCAB_SIZE if use_null_tokenizer else None,
+        ),
         checkpoint=CheckpointConfig(
             save_interval=500,
             save=checkpoint_dir,
