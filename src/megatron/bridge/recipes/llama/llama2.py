@@ -35,7 +35,7 @@ from megatron.bridge.training.config import (
 from megatron.bridge.training.mixed_precision import MixedPrecisionConfig
 
 
-def llama2_7b_pretrain_config(**user_kwargs):
+def llama2_7b_pretrain_config(**user_kwargs) -> ConfigContainer:
     recommended_kwargs = {
         "hf_path": "meta-llama/Llama-2-7b-hf",
         "tensor_parallelism": 2,
@@ -205,6 +205,7 @@ def _llama2_common(
         checkpoint=CheckpointConfig(
             save_interval=save_interval,
             save=checkpoint_dir,
+            load=checkpoint_dir,
             ckpt_format="torch_dist",
             fully_parallel_save=True,
         ),
