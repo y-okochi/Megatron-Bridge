@@ -14,10 +14,10 @@
 
 import os
 from typing import List, Optional, Union
-from typing_extensions import TypedDict, Unpack
 
 import torch
 from megatron.core.distributed import DistributedDataParallelConfig
+from typing_extensions import TypedDict, Unpack
 
 from megatron.bridge import AutoBridge
 from megatron.bridge.recipes.utils.dataset_utils import get_blend_fields_from_data_paths
