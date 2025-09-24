@@ -34,6 +34,7 @@ from megatron.bridge.training.config import (
 )
 from megatron.bridge.training.mixed_precision import MixedPrecisionConfig
 
+
 def qwen3_600m_pretrain_config(**user_kwargs):
     recommended_kwargs = {
         "hf_path": "Qwen/Qwen3-0.6B",
@@ -190,13 +191,12 @@ def _qwen3_common(
     model_cfg.context_parallel_size = context_parallelism
     model_cfg.sequence_parallel = sequence_parallelism
     model_cfg.seq_length = seq_length
-    
+
     # Add recompute settings for memory optimization (used by larger models like 32B)
     if enable_recompute:
         model_cfg.recompute_granularity = "full"
         model_cfg.recompute_method = "uniform"
         model_cfg.recompute_num_layers = 1
-    
 
     opt_cfg, scheduler_cfg = distributed_fused_adam_with_cosine_annealing(
         lr_warmup_iters=lr_warmup_iters,

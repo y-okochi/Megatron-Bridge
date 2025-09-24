@@ -331,7 +331,7 @@ def _llama3_common(
     model_cfg.context_parallel_size = context_parallelism
     model_cfg.sequence_parallel = sequence_parallelism
     model_cfg.seq_length = seq_length
-    
+
     # Large model specific pipeline split configurations
     if account_for_embedding_in_pipeline_split:
         model_cfg.account_for_embedding_in_pipeline_split = True

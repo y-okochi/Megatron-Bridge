@@ -28,11 +28,13 @@ def _safe_overrides_for(name: str) -> dict:
     # For MoE recipes, ensure expert settings are small/valid
     lname = name.lower()
     if "a3b" in lname or "a22b" in lname or "moe" in lname:
-        overrides.update({
-            "expert_parallelism": 2,
-            "expert_tensor_parallelism": 1,
-            "sequence_parallelism": True,
-        })
+        overrides.update(
+            {
+                "expert_parallelism": 2,
+                "expert_tensor_parallelism": 1,
+                "sequence_parallelism": True,
+            }
+        )
 
     return overrides
 
@@ -104,6 +106,7 @@ def test_each_qwen_recipe_builds_config(recipe_func: Callable, monkeypatch: pyte
 
 
 # Dynamically parametrize tests after module import so we can enumerate __all__
+
 
 def pytest_generate_tests(metafunc):
     if "recipe_func" in metafunc.fixturenames:

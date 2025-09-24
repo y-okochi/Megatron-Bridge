@@ -175,7 +175,7 @@ def _qwen3_moe_common(
         model_cfg.account_for_embedding_in_pipeline_split = True
     if account_for_loss_in_pipeline_split:
         model_cfg.account_for_loss_in_pipeline_split = True
-    
+
     # Add recompute settings for memory optimization (used by some MoE models)
     if enable_recompute:
         model_cfg.recompute_granularity = "full"

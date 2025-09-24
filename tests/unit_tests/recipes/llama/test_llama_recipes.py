@@ -25,10 +25,12 @@ def _safe_overrides_for(name: str) -> dict:
     # Large models/variants may set additional flags in recipes; keep harmless defaults
     lname = name.lower()
     if "70b" in lname or "405b" in lname:
-        overrides.update({
-            "virtual_pipeline_parallelism": None,
-            "sequence_parallelism": True,
-        })
+        overrides.update(
+            {
+                "virtual_pipeline_parallelism": None,
+                "sequence_parallelism": True,
+            }
+        )
 
     return overrides
 
@@ -88,6 +90,7 @@ def test_each_llama_recipe_builds_config(recipe_func: Callable, monkeypatch: pyt
 
 
 # Dynamic parametrization from megatron.bridge.recipes.llama
+
 
 def pytest_generate_tests(metafunc):
     if "recipe_func" in metafunc.fixturenames:
