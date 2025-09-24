@@ -12,7 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from megatron.bridge.training.metrics.speed_monitor import SpeedMonitor
-from megatron.bridge.training.metrics.optimizer_monitor import OptimizerMonitor
-from megatron.bridge.training.metrics.memory_monitor import MemoryMonitor
-from megatron.bridge.training.metrics.runtime_monitor import RuntimeMonitor
+from abc import ABC, abstractmethod
+
+
+class AbstractCallback(ABC):
+    """Abstract class for megatron bridge metrics."""
+    @abstractmethod
+    def track(self, *args, **kwargs) -> None:
+        """Function to track the metric."""
+        pass

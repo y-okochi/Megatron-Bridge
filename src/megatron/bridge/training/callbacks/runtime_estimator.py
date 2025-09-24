@@ -15,10 +15,10 @@
 import time
 from typing import Any, Optional
 
-from megatron.bridge.training.metrics.abstract_monitor import AbstractMonitor
+from megatron.bridge.training.callbacks.abstract_monitor import AbstractCallback
 
 
-class RuntimeMonitor(AbstractMonitor):
+class RuntimeEstimator(AbstractCallback):
     """
     Estimates total training time.
     The training time is computed by taking the time elapsed for the current duration and multiplying
@@ -78,36 +78,39 @@ class RuntimeMonitor(AbstractMonitor):
         self.num_samples: int = 0
         self.num_batches: int = 0
 
-    def _get_elapsed_duration(self, global_step, train_iters) -> Optional[float]:
+    def _get_elapsed_duration(self, iteraion: int, train_iters: int) -> Optional[float]:
         """Get the elapsed duration.
         This method computes fractional progress in an epoch
         provided at least 1 epoch has passed by recording how many batches were in each epoch.
         """
-        if global_step is not None:
-            return global_step / train_iters
+        if iteraion is not None:
+            return iteraion / train_iters
 
         return None
 
-    def track_start(self, global_step, train_iters) -> None:
+    def track_start(self, iteraion: int, train_iters: int) -> None:
         """ """
         if self._enabled and self.start_time is None:
             self.start_time = time.time()
-            self.start_dur = self._get_elapsed_duration(global_step, train_iters)
+            self.start_dur = self._get_elapsed_duration(iteraion, train_iters)
             if self.start_dur is None:
                 self._enabled = False
 
     def track(
         self,
-        start_train_time: float,
-        global_step: int,
+        iteration: int,
+        writer,
+        wandb_writer,
+        start_time: float,
         train_config,
         seq_length: int,
-    ) -> dict:
+        **kwargs,
+    ) -> None:
         """ """
         if not self._enabled:
             return
 
-        elapsed_dur = self._get_elapsed_duration(global_step, train_config.train_iters)
+        elapsed_dur = self._get_elapsed_duration(iteration, train_config.train_iters)
         assert elapsed_dur is not None, 'elapsed_dur should be not None. Please, make sure that training has started.'
 
         assert self.start_dur is not None
@@ -144,6 +147,10 @@ class RuntimeMonitor(AbstractMonitor):
         time_metrics['time/samples'] = self.num_samples
         self.num_batches += 1
         time_metrics['time/batches'] = self.num_batches
-        time_metrics['time/total'] = (time.time() - start_train_time) / self.divider
+        time_metrics['time/total'] = (time.time() - start_time) / self.divider
 
-        return time_metrics
+        for metric, value in time_metrics.items():
+            writer.add_scalar(metric, value, iteration)
+
+        if wandb_writer:
+            wandb_writer.log(time_metrics, iteration)

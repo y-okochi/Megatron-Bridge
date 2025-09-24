@@ -161,6 +161,13 @@ def main() -> None:
     logger.debug("Applying final merged configuration back to Python ConfigContainer...")
     final_overrides_as_dict = OmegaConf.to_container(merged_omega_conf, resolve=True)
     # Apply overrides while preserving excluded fields
+    from megatron.bridge.training.callbacks import MemoryMonitor, SpeedMonitor, RuntimeEstimator, OptimizerMonitor
+    #callbacks = []
+    #callbacks.append(MemoryMonitor())
+    #callbacks.append(SpeedMonitor())
+    #callbacks.append(RuntimeEstimator())
+    #callbacks.append(OptimizerMonitor())
+    #cfg.logger.callbacks = callbacks
     apply_overrides(cfg, final_overrides_as_dict, excluded_fields)
 
     # Display final configuration
@@ -170,6 +177,13 @@ def main() -> None:
         logger.info("----------------------------------")
 
     # Start training
+    callbacks = []
+    callbacks.append(MemoryMonitor())
+    callbacks.append(SpeedMonitor())
+    callbacks.append(RuntimeEstimator())
+    callbacks.append(OptimizerMonitor())
+    cfg.logger.callbacks = callbacks
+    print(cfg)
     logger.debug("Starting pretraining...")
     pretrain(config=cfg, forward_step_func=forward_step)
 

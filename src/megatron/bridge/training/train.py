@@ -48,8 +48,8 @@ from megatron.bridge.training.nvrx_straggler import (
     safe_shutdown_nvrx_straggler_manager,
 )
 from megatron.bridge.training.state import GlobalState
-from megatron.bridge.training.metrics import SpeedMonitor, OptimizerMonitor, MemoryMonitor, RuntimeMonitor
 from megatron.bridge.training.utils import flop_utils
+from megatron.bridge.training.callbacks import RuntimeEstimator
 from megatron.bridge.training.utils.log_utils import append_to_progress_log, barrier_and_log
 from megatron.bridge.training.utils.train_utils import (
     calc_params_l2_norm,
@@ -223,10 +223,6 @@ def train(
         cuda_graph_helper.create_cudagraphs()
 
     # Run training iterations till done.
-    speed_monitor = SpeedMonitor()
-    optimizer_monitor = OptimizerMonitor()
-    memory_monitor = MemoryMonitor()
-    runtime_monitor = RuntimeMonitor()
     while global_state.train_state.step < train_config.train_iters:
         if prof_config and torch.distributed.get_rank() in prof_config.profile_ranks:
             if prof_config.use_pytorch_profiler:
@@ -279,7 +275,9 @@ def train(
 
         # Run training step.
         fault_tolerance.on_training_step_start(global_state)
-        runtime_monitor.track_start(global_state.train_state.step, config.train.train_iters)
+        for callback in config.logger.callbacks:
+            if isinstance(callback, RuntimeEstimator):
+                callback.track_start(global_state.train_state.step, config.train.train_iters)
         loss_dict, skipped_iter, should_checkpoint, should_exit, exit_code, grad_norm, num_zeros_in_grad = train_step(
             forward_step_func, num_fw_args, train_data_iterator, model, optimizer, scheduler, global_state
         )
@@ -366,10 +364,7 @@ def train(
             num_zeros_in_grad,
             config,
             global_state,
-            speed_monitor,
-            optimizer_monitor,
-            memory_monitor,
-            runtime_monitor,
+            config.logger.callbacks,
             model,
         )
 

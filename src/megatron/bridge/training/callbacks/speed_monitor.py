@@ -18,10 +18,10 @@ from typing import Any
 
 import torch.distributed as dist
 
-from megatron.bridge.training.metrics.abstract_monitor import AbstractMonitor
+from megatron.bridge.training.callbacks.abstract_monitor import AbstractCallback
 
 
-class SpeedMonitor(AbstractMonitor):
+class SpeedMonitor(AbstractCallback):
     """
     Logs the training throughput and utilization.
     The training throughput is logged on the event once we have reached the `window_size` threshold.
@@ -94,10 +94,14 @@ class SpeedMonitor(AbstractMonitor):
 
     def track(
         self,
+        iteration: int,
+        writer,
+        wandb_writer,
         start_time: float,
         train_config,
         seq_length: int,
-    ) -> dict:
+        **kwargs,
+    ) -> None:
         """ """
         # Add the new element
         batch_size = train_config.global_batch_size
@@ -135,5 +139,9 @@ class SpeedMonitor(AbstractMonitor):
                 dev_tokens_per_sec = tokens_per_sec / world_size
                 metrics.update({'throughput/tokens_per_sec': tokens_per_sec})
                 metrics.update({'throughput/device/tokens_per_sec': dev_tokens_per_sec})
+
+        for metric, value in metrics.items():
+            writer.add_scalar(metric, value, iteration)
         
-        return metrics
+        if wandb_writer:
+            wandb_writer.log(metrics, iteration)

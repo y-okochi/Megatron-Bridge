@@ -17,10 +17,10 @@ from typing import Any
 import lightning.pytorch as pl
 import torch
 
-from megatron.bridge.training.metrics.abstract_monitor import AbstractMonitor
+from megatron.bridge.training.callbacks.abstract_monitor import AbstractCallback
 
 
-class OptimizerMonitor(AbstractMonitor):
+class OptimizerMonitor(AbstractCallback):
     """
     Computes and logs the L2 norm of gradients.
     L2 norms are calculated after the reduction of gradients across GPUs. This function iterates over the parameters
@@ -45,7 +45,14 @@ class OptimizerMonitor(AbstractMonitor):
     +-----------------------------------------------+-----------------------------------------------------+
     """
 
-    def track(self, model) -> dict:
+    def track(
+        self,
+        iteration: int,
+        writer,
+        wandb_writer,
+        model,
+        **kwargs,
+    ) -> None:
         """ """
         norm = 0.0
         optimizer_metrics = {}
@@ -68,5 +75,7 @@ class OptimizerMonitor(AbstractMonitor):
             for metric in optimizer_metrics:
                 if isinstance(optimizer_metrics[metric], torch.Tensor):
                     optimizer_metrics[metric] = optimizer_metrics[metric].item()
-        
-        return optimizer_metrics
+                    writer.add_scalar(metric, optimizer_metrics[metric], iteration)
+
+        if wandb_writer:
+            wandb_writer.log(optimizer_metrics, iteration)

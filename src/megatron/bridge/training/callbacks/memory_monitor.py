@@ -20,7 +20,7 @@ import torch
 import torch.cuda
 from torch import distributed
 
-from megatron.bridge.training.metrics.abstract_monitor import AbstractMonitor
+from megatron.bridge.training.callbacks.abstract_monitor import AbstractCallback
 
 _MEMORY_KEYS = {
     'allocated_bytes.all.current': 'current_allocated_mem',
@@ -35,7 +35,7 @@ _MEMORY_KEYS = {
 }
 
 
-class MemoryMonitor(AbstractMonitor):
+class MemoryMonitor(AbstractCallback):
     """
     Logs the memory usage of the model.
     This callback calls the torch memory stats API for CUDA and reports different memory statistics.
@@ -95,7 +95,13 @@ class MemoryMonitor(AbstractMonitor):
         self.memory_keys = memory_keys
         self.dist_aggregate_batch_interval = dist_aggregate_batch_interval
 
-    def track(self) -> dict:
+    def track(
+        self,
+        iteration: int,
+        writer,
+        wandb_writer,
+        **kwargs,
+    ) -> None:
         """ """
         memory_report = {}
         memory_report = _get_memory_report(self.memory_keys)
@@ -108,8 +114,12 @@ class MemoryMonitor(AbstractMonitor):
             memory_report.update(dist_memory_report)
 
         memory_metrics = {f'memory/{mem_stat}': val for (mem_stat, val) in memory_report.items()}
-        
-        return memory_metrics
+
+        for metric, value in memory_metrics.items():
+            writer.add_scalar(metric, value, iteration)
+
+        if wandb_writer:
+            wandb_writer.log(memory_metrics, iteration)
 
 
 def _get_memory_report(memory_keys: Optional[dict[str, str]] = None) -> dict[str, Union[int, float]]:
