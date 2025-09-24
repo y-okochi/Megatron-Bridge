@@ -198,7 +198,7 @@ def _qwen3_common(
         model_cfg.recompute_num_layers = 1
     
 
-    opt_cfg, scheulder_cfg = distributed_fused_adam_with_cosine_annealing(
+    opt_cfg, scheduler_cfg = distributed_fused_adam_with_cosine_annealing(
         lr_warmup_iters=lr_warmup_iters,
         lr_decay_iters=train_iters,
         max_lr=lr,
