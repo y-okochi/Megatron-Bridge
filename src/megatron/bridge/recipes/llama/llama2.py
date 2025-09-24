@@ -205,6 +205,7 @@ def _llama2_common(
         checkpoint=CheckpointConfig(
             save_interval=save_interval,
             save=checkpoint_dir,
+            load=checkpoint_dir,
             ckpt_format="torch_dist",
             fully_parallel_save=True,
         ),
