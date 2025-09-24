@@ -35,7 +35,7 @@ from megatron.bridge.training.config import (
 from megatron.bridge.training.mixed_precision import MixedPrecisionConfig
 
 
-def qwen3_30b_a3b(**user_kwargs):
+def qwen3_30b_a3b_pretrain(**user_kwargs):
     recommended_kwargs = {
         "hf_path": "Qwen/Qwen3-30B-A3B",
         "tensor_parallelism": 4,
@@ -50,7 +50,7 @@ def qwen3_30b_a3b(**user_kwargs):
     return _qwen3_moe_common(**combined_kwargs)
 
 
-def qwen3_235b_a22b(**user_kwargs):
+def qwen3_235b_a22b_pretrain(**user_kwargs):
     recommended_kwargs = {
         "hf_path": "Qwen/Qwen3-235B-A22B",
         "tensor_parallelism": 4,
