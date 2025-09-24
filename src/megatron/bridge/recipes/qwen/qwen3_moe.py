@@ -14,6 +14,7 @@
 
 import os
 from typing import List, Optional, Union
+from typing_extensions import TypedDict, Unpack
 
 import torch
 from megatron.core.distributed import DistributedDataParallelConfig
@@ -35,8 +36,48 @@ from megatron.bridge.training.config import (
 from megatron.bridge.training.mixed_precision import MixedPrecisionConfig, bf16_mixed
 
 
-def qwen3_30b_a3b_pretrain_config(**user_kwargs):
-    recommended_kwargs = {
+class Qwen3MoeCommonKwargs(TypedDict, total=False):
+    # Core identifiers
+    hf_path: str
+    dir: Optional[str]
+    name: str
+    # Dataset configuration
+    data_paths: Optional[List[str]]
+    data_args_path: Optional[str]
+    train_data_path: Optional[List[str]]
+    valid_data_path: Optional[List[str]]
+    test_data_path: Optional[List[str]]
+    per_split_data_args_path: Optional[str]
+    mock: bool
+    # Model configuration
+    tensor_parallelism: int
+    pipeline_parallelism: int
+    pipeline_parallelism_dtype: Optional[torch.dtype]
+    virtual_pipeline_parallelism: Optional[int]
+    context_parallelism: int
+    expert_parallelism: Optional[int]
+    expert_tensor_parallelism: int
+    sequence_parallelism: bool
+    use_megatron_fsdp: bool
+    enable_recompute: bool
+    account_for_embedding_in_pipeline_split: bool
+    account_for_loss_in_pipeline_split: bool
+    # Training hyperparameters
+    train_iters: int
+    global_batch_size: int
+    micro_batch_size: int
+    seq_length: int
+    lr: float
+    min_lr: float
+    lr_warmup_iters: int
+    use_null_tokenizer: bool
+    # Precision / overlap configs
+    precision_config: Optional[Union[MixedPrecisionConfig, str]]
+    comm_overlap_config: Optional[CommOverlapConfig]
+
+
+def qwen3_30b_a3b_pretrain_config(**user_kwargs: Unpack[Qwen3MoeCommonKwargs]) -> ConfigContainer:
+    recommended_kwargs: Qwen3MoeCommonKwargs = {
         "hf_path": "Qwen/Qwen3-30B-A3B",
         "tensor_parallelism": 4,
         "pipeline_parallelism": 2,
@@ -46,12 +87,12 @@ def qwen3_30b_a3b_pretrain_config(**user_kwargs):
         "enable_recompute": True,
     }
     # Combine defaults with user kwargs; user values take precedence.
-    combined_kwargs = recommended_kwargs | user_kwargs
+    combined_kwargs: Qwen3MoeCommonKwargs = {**recommended_kwargs, **user_kwargs}
     return _qwen3_moe_common(**combined_kwargs)
 
 
-def qwen3_235b_a22b_pretrain_config(**user_kwargs):
-    recommended_kwargs = {
+def qwen3_235b_a22b_pretrain_config(**user_kwargs: Unpack[Qwen3MoeCommonKwargs]) -> ConfigContainer:
+    recommended_kwargs: Qwen3MoeCommonKwargs = {
         "hf_path": "Qwen/Qwen3-235B-A22B",
         "tensor_parallelism": 4,
         "pipeline_parallelism": 16,
@@ -64,7 +105,7 @@ def qwen3_235b_a22b_pretrain_config(**user_kwargs):
         "account_for_loss_in_pipeline_split": True,
     }
     # Combine defaults with user kwargs; user values take precedence.
-    combined_kwargs = recommended_kwargs | user_kwargs
+    combined_kwargs: Qwen3MoeCommonKwargs = {**recommended_kwargs, **user_kwargs}
     return _qwen3_moe_common(**combined_kwargs)
 
 

@@ -14,6 +14,7 @@
 
 import os
 from typing import List, Optional, Union
+from typing_extensions import NotRequired, TypedDict, Unpack
 
 import torch
 
@@ -35,8 +36,45 @@ from megatron.bridge.training.config import (
 from megatron.bridge.training.mixed_precision import MixedPrecisionConfig
 
 
-def llama2_7b_pretrain_config(**user_kwargs) -> ConfigContainer:
-    recommended_kwargs = {
+class Llama2CommonKwargs(TypedDict, total=False):
+    # Core identifiers
+    hf_path: str
+    dir: Optional[str]
+    name: str
+    # Dataset configuration
+    data_paths: Optional[List[str]]
+    data_args_path: Optional[str]
+    train_data_path: Optional[List[str]]
+    valid_data_path: Optional[List[str]]
+    test_data_path: Optional[List[str]]
+    per_split_data_args_path: Optional[str]
+    mock: bool
+    # Model configuration
+    tensor_parallelism: int
+    pipeline_parallelism: int
+    pipeline_parallelism_dtype: Optional[torch.dtype]
+    virtual_pipeline_parallelism: Optional[int]
+    context_parallelism: int
+    sequence_parallelism: bool
+    use_megatron_fsdp: bool
+    # Training hyperparameters
+    train_iters: int
+    global_batch_size: int
+    micro_batch_size: int
+    seq_length: int
+    lr: float
+    min_lr: float
+    lr_warmup_iters: int
+    eval_interval: int
+    save_interval: int
+    use_null_tokenizer: bool
+    # Precision / overlap configs
+    precision_config: Optional[Union[MixedPrecisionConfig, str]]
+    comm_overlap_config: Optional[CommOverlapConfig]
+
+
+def llama2_7b_pretrain_config(**user_kwargs: Unpack[Llama2CommonKwargs]) -> ConfigContainer:
+    recommended_kwargs: Llama2CommonKwargs = {
         "hf_path": "meta-llama/Llama-2-7b-hf",
         "tensor_parallelism": 2,
         "pipeline_parallelism": 1,
@@ -48,7 +86,7 @@ def llama2_7b_pretrain_config(**user_kwargs) -> ConfigContainer:
         "save_interval": 2000,
     }
     # Combine defaults with user kwargs; user values take precedence.
-    combined_kwargs = recommended_kwargs | user_kwargs
+    combined_kwargs: Llama2CommonKwargs = {**recommended_kwargs, **user_kwargs}
     return _llama2_common(**combined_kwargs)
 
 

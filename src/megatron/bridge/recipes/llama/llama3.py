@@ -14,6 +14,7 @@
 
 import os
 from typing import List, Optional, Union
+from typing_extensions import TypedDict, Unpack
 
 import torch
 
@@ -39,6 +40,44 @@ from megatron.bridge.training.config import (
 from megatron.bridge.training.mixed_precision import MixedPrecisionConfig, bf16_mixed
 
 
+class Llama3CommonKwargs(TypedDict, total=False):
+    # Core identifiers
+    hf_path: str
+    dir: Optional[str]
+    name: str
+    # Dataset configuration
+    data_paths: Optional[List[str]]
+    data_args_path: Optional[str]
+    train_data_path: Optional[List[str]]
+    valid_data_path: Optional[List[str]]
+    test_data_path: Optional[List[str]]
+    per_split_data_args_path: Optional[str]
+    mock: bool
+    # Model configuration
+    tensor_parallelism: int
+    pipeline_parallelism: int
+    pipeline_parallelism_dtype: Optional[torch.dtype]
+    virtual_pipeline_parallelism: Optional[int]
+    context_parallelism: int
+    sequence_parallelism: bool
+    use_megatron_fsdp: bool
+    account_for_embedding_in_pipeline_split: bool
+    account_for_loss_in_pipeline_split: bool
+    # Training hyperparameters
+    train_iters: int
+    global_batch_size: int
+    micro_batch_size: int
+    seq_length: int
+    lr: float
+    min_lr: float
+    lr_warmup_iters: int
+    eval_interval: int
+    use_null_tokenizer: bool
+    # Precision / overlap configs
+    precision_config: Optional[Union[MixedPrecisionConfig, str]]
+    comm_overlap_config: Optional[CommOverlapConfig]
+
+
 # Sequence length constants
 SEQUENCE_LENGTH_16K: int = 16384
 SEQUENCE_LENGTH_64K: int = 65536
@@ -46,45 +85,45 @@ SEQUENCE_LENGTH_128K: int = 131072
 
 
 # Llama3.2 models
-def llama32_1b_pretrain_config(**user_kwargs):
-    recommended_kwargs = {
+def llama32_1b_pretrain_config(**user_kwargs: Unpack[Llama3CommonKwargs]) -> ConfigContainer:
+    recommended_kwargs: Llama3CommonKwargs = {
         "hf_path": "meta-llama/Llama-3.2-1B",
         "tensor_parallelism": 1,
         "pipeline_parallelism": 1,
         "context_parallelism": 1,
         "sequence_parallelism": False,
     }
-    combined_kwargs = recommended_kwargs | user_kwargs
+    combined_kwargs: Llama3CommonKwargs = {**recommended_kwargs, **user_kwargs}
     return _llama3_common(**combined_kwargs)
 
 
-def llama32_3b_pretrain_config(**user_kwargs):
-    recommended_kwargs = {
+def llama32_3b_pretrain_config(**user_kwargs: Unpack[Llama3CommonKwargs]) -> ConfigContainer:
+    recommended_kwargs: Llama3CommonKwargs = {
         "hf_path": "meta-llama/Llama-3.2-3B",
         "tensor_parallelism": 1,
         "pipeline_parallelism": 1,
         "context_parallelism": 1,
         "sequence_parallelism": False,
     }
-    combined_kwargs = recommended_kwargs | user_kwargs
+    combined_kwargs: Llama3CommonKwargs = {**recommended_kwargs, **user_kwargs}
     return _llama3_common(**combined_kwargs)
 
 
 # Llama3 8B models
-def llama3_8b_pretrain_config(**user_kwargs):
-    recommended_kwargs = {
+def llama3_8b_pretrain_config(**user_kwargs: Unpack[Llama3CommonKwargs]) -> ConfigContainer:
+    recommended_kwargs: Llama3CommonKwargs = {
         "hf_path": "meta-llama/Meta-Llama-3-8B",
         "tensor_parallelism": 1,
         "pipeline_parallelism": 1,
         "context_parallelism": 2,
         "sequence_parallelism": False,
     }
-    combined_kwargs = recommended_kwargs | user_kwargs
+    combined_kwargs: Llama3CommonKwargs = {**recommended_kwargs, **user_kwargs}
     return _llama3_common(**combined_kwargs)
 
 
-def llama3_8b_16k_pretrain_config(**user_kwargs):
-    recommended_kwargs = {
+def llama3_8b_16k_pretrain_config(**user_kwargs: Unpack[Llama3CommonKwargs]) -> ConfigContainer:
+    recommended_kwargs: Llama3CommonKwargs = {
         "hf_path": "meta-llama/Meta-Llama-3-8B",
         "tensor_parallelism": 4,
         "pipeline_parallelism": 2,
@@ -93,12 +132,12 @@ def llama3_8b_16k_pretrain_config(**user_kwargs):
         "sequence_parallelism": True,
         "seq_length": SEQUENCE_LENGTH_16K,
     }
-    combined_kwargs = recommended_kwargs | user_kwargs
+    combined_kwargs: Llama3CommonKwargs = {**recommended_kwargs, **user_kwargs}
     return _llama3_common(**combined_kwargs)
 
 
-def llama3_8b_64k_pretrain_config(**user_kwargs):
-    recommended_kwargs = {
+def llama3_8b_64k_pretrain_config(**user_kwargs: Unpack[Llama3CommonKwargs]) -> ConfigContainer:
+    recommended_kwargs: Llama3CommonKwargs = {
         "hf_path": "meta-llama/Meta-Llama-3-8B",
         "tensor_parallelism": 4,
         "pipeline_parallelism": 2,
@@ -107,12 +146,12 @@ def llama3_8b_64k_pretrain_config(**user_kwargs):
         "sequence_parallelism": True,
         "seq_length": SEQUENCE_LENGTH_64K,
     }
-    combined_kwargs = recommended_kwargs | user_kwargs
+    combined_kwargs: Llama3CommonKwargs = {**recommended_kwargs, **user_kwargs}
     return _llama3_common(**combined_kwargs)
 
 
-def llama3_8b_128k_pretrain_config(**user_kwargs):
-    recommended_kwargs = {
+def llama3_8b_128k_pretrain_config(**user_kwargs: Unpack[Llama3CommonKwargs]) -> ConfigContainer:
+    recommended_kwargs: Llama3CommonKwargs = {
         "hf_path": "meta-llama/Meta-Llama-3-8B",
         "tensor_parallelism": 4,
         "pipeline_parallelism": 2,
@@ -121,13 +160,13 @@ def llama3_8b_128k_pretrain_config(**user_kwargs):
         "sequence_parallelism": True,
         "seq_length": SEQUENCE_LENGTH_128K,
     }
-    combined_kwargs = recommended_kwargs | user_kwargs
+    combined_kwargs: Llama3CommonKwargs = {**recommended_kwargs, **user_kwargs}
     return _llama3_common(**combined_kwargs)
 
 
 # Llama3 70B models
-def llama3_70b_pretrain_config(**user_kwargs):
-    recommended_kwargs = {
+def llama3_70b_pretrain_config(**user_kwargs: Unpack[Llama3CommonKwargs]) -> ConfigContainer:
+    recommended_kwargs: Llama3CommonKwargs = {
         "hf_path": "meta-llama/Meta-Llama-3-70B",
         "tensor_parallelism": 4,
         "pipeline_parallelism": 4,
@@ -141,12 +180,12 @@ def llama3_70b_pretrain_config(**user_kwargs):
         ),
         "precision_config": bf16_mixed(),
     }
-    combined_kwargs = recommended_kwargs | user_kwargs
+    combined_kwargs: Llama3CommonKwargs = {**recommended_kwargs, **user_kwargs}
     return _llama3_common(**combined_kwargs)
 
 
-def llama3_70b_16k_pretrain_config(**user_kwargs):
-    recommended_kwargs = {
+def llama3_70b_16k_pretrain_config(**user_kwargs: Unpack[Llama3CommonKwargs]) -> ConfigContainer:
+    recommended_kwargs: Llama3CommonKwargs = {
         "hf_path": "meta-llama/Meta-Llama-3-70B",
         "tensor_parallelism": 8,
         "pipeline_parallelism": 2,
@@ -161,12 +200,12 @@ def llama3_70b_16k_pretrain_config(**user_kwargs):
         ),
         "precision_config": bf16_mixed(),
     }
-    combined_kwargs = recommended_kwargs | user_kwargs
+    combined_kwargs: Llama3CommonKwargs = {**recommended_kwargs, **user_kwargs}
     return _llama3_common(**combined_kwargs)
 
 
-def llama3_70b_64k_pretrain_config(**user_kwargs):
-    recommended_kwargs = {
+def llama3_70b_64k_pretrain_config(**user_kwargs: Unpack[Llama3CommonKwargs]) -> ConfigContainer:
+    recommended_kwargs: Llama3CommonKwargs = {
         "hf_path": "meta-llama/Meta-Llama-3-70B",
         "tensor_parallelism": 8,
         "pipeline_parallelism": 4,
@@ -181,25 +220,25 @@ def llama3_70b_64k_pretrain_config(**user_kwargs):
         ),
         "precision_config": bf16_mixed(),
     }
-    combined_kwargs = recommended_kwargs | user_kwargs
+    combined_kwargs: Llama3CommonKwargs = {**recommended_kwargs, **user_kwargs}
     return _llama3_common(**combined_kwargs)
 
 
 # Llama3.1 models
-def llama31_8b_pretrain_config(**user_kwargs):
-    recommended_kwargs = {
+def llama31_8b_pretrain_config(**user_kwargs: Unpack[Llama3CommonKwargs]) -> ConfigContainer:
+    recommended_kwargs: Llama3CommonKwargs = {
         "hf_path": "meta-llama/Meta-Llama-3.1-8B",
         "tensor_parallelism": 1,
         "pipeline_parallelism": 1,
         "context_parallelism": 2,
         "sequence_parallelism": False,
     }
-    combined_kwargs = recommended_kwargs | user_kwargs
+    combined_kwargs: Llama3CommonKwargs = {**recommended_kwargs, **user_kwargs}
     return _llama3_common(**combined_kwargs)
 
 
-def llama31_70b_pretrain_config(**user_kwargs):
-    recommended_kwargs = {
+def llama31_70b_pretrain_config(**user_kwargs: Unpack[Llama3CommonKwargs]) -> ConfigContainer:
+    recommended_kwargs: Llama3CommonKwargs = {
         "hf_path": "meta-llama/Meta-Llama-3.1-70B",
         "tensor_parallelism": 4,
         "pipeline_parallelism": 4,
@@ -214,12 +253,12 @@ def llama31_70b_pretrain_config(**user_kwargs):
         "precision_config": bf16_mixed(),
         "seq_length": SEQUENCE_LENGTH_128K,
     }
-    combined_kwargs = recommended_kwargs | user_kwargs
+    combined_kwargs: Llama3CommonKwargs = {**recommended_kwargs, **user_kwargs}
     return _llama3_common(**combined_kwargs)
 
 
-def llama31_405b_pretrain_config(**user_kwargs):
-    recommended_kwargs = {
+def llama31_405b_pretrain_config(**user_kwargs: Unpack[Llama3CommonKwargs]) -> ConfigContainer:
+    recommended_kwargs: Llama3CommonKwargs = {
         "hf_path": "meta-llama/Meta-Llama-3.1-405B",
         "tensor_parallelism": 8,
         "pipeline_parallelism": 8,
@@ -237,7 +276,7 @@ def llama31_405b_pretrain_config(**user_kwargs):
         "micro_batch_size": 1,
         "seq_length": SEQUENCE_LENGTH_128K,
     }
-    combined_kwargs = recommended_kwargs | user_kwargs
+    combined_kwargs: Llama3CommonKwargs = {**recommended_kwargs, **user_kwargs}
     return _llama3_common(**combined_kwargs)
 
 
