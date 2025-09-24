@@ -40,11 +40,8 @@ class MemoryMonitor(AbstractCallback):
     Logs the memory usage of the model.
     This callback calls the torch memory stats API for CUDA and reports different memory statistics.
     Example:
-        import nemo_run as run
-        from nemo.lightning.pytorch.callbacks import MemoryMonitor
-        recipe.trainer.callbacks.append(
-            run.Config(MemoryMonitor)
-        )
+        from megatron.bridge.training.callbacks import MemoryMonitor
+        config.logger.callbacks.append(MemoryMonitor())
     The memory statistics are logged by the :class:`.Logger` to the following keys as
     described below.
     +--------------------------+-------------------------------------------------------------+
@@ -160,7 +157,6 @@ def _reduce_value(
     Reduce a value across distributed processes.
     Args:
         value (Union[int, float]): The value to reduce.
-        model_device (torch.device): The device on which the model is located.
         reduce_op (str, optional): The reduction operation to perform. One of 'mean', 'avg', 'sum', 'min', 'max'.
             Defaults to 'mean'.
     """

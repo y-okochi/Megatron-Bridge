@@ -26,11 +26,8 @@ class SpeedMonitor(AbstractCallback):
     Logs the training throughput and utilization.
     The training throughput is logged on the event once we have reached the `window_size` threshold.
     Example:
-        import nemo_run as run
-        from nemo.lightning.pytorch.callbacks import SpeedMonitor
-        recipe.trainer.callbacks.append(
-            run.Config(SpeedMonitor, window_size=100)
-        )
+        from megatron.bridge.training.callbacks import SpeedMonitor
+        config.logger.callbacks.append(SpeedMonitor(window_size=100,))
     The training throughput is logged by the PTL's logger to the following keys as described below.
     +-------------------------------------+-----------------------------------------------------------+
     | Key                                 | Logged data                                               |
@@ -58,34 +55,17 @@ class SpeedMonitor(AbstractCallback):
     Args:
         window_size (int, optional): Number of batches to use for a rolling average of throughput.
             Defaults to 100.
-        time_unit (str, optional): Time unit to use for `time` logging. Can be one of
-            'seconds', 'minutes', 'hours', or 'days'. Defaults to 'hours'.
     """
 
     def __init__(
         self,
-        window_size: int = 5,
-        time_unit: str = 'hours',
+        window_size: int = 100,
     ):
         # Track the batch num samples and wct to compute throughput over a window of batches
         self.history_samples: deque[int] = deque(maxlen=window_size + 1)
         self.history_tokens: deque[int] = deque(maxlen=window_size + 1)
         self.history_wct: deque[float] = deque(maxlen=window_size + 1)
         self.history_flops: deque[float] = deque(maxlen=window_size + 1)
-
-        self.divider = 1
-        if time_unit == 'seconds':
-            self.divider = 1
-        elif time_unit == 'minutes':
-            self.divider = 60
-        elif time_unit == 'hours':
-            self.divider = 60 * 60
-        elif time_unit == 'days':
-            self.divider = 60 * 60 * 24
-        else:
-            raise ValueError(
-                f'Invalid time_unit: {time_unit}. Must be one of "seconds", "minutes", "hours", or "days".',
-            )
 
         # Keep track of time spent evaluating
         self.total_eval_wct = 0.0

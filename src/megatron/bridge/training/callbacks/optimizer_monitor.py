@@ -14,7 +14,6 @@
 
 from typing import Any
 
-import lightning.pytorch as pl
 import torch
 
 from megatron.bridge.training.callbacks.abstract_callback import AbstractCallback
@@ -28,11 +27,8 @@ class OptimizerMonitor(AbstractCallback):
     correctness of the norm, this function should be called after gradient unscaling in cases where gradients
     are scaled.
     Example:
-        import nemo_run as run
-        from nemo.lightning.pytorch.callbacks import OptimizerMonitor
-        recipe.trainer.callbacks.append(
-            run.Config(OptimizerMonitor)
-        )
+        from megatron.bridge.training.callbacks import OptimizerMonitor
+        config.logger.callbacks.append(OptimizerMonitor())
     +-----------------------------------------------+-----------------------------------------------------+
     | Key                                           | Logged data                                         |
     +===============================================+=====================================================+

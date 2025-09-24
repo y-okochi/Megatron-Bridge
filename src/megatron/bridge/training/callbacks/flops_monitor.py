@@ -33,11 +33,13 @@ _model_flops_map = {
 
 class FLOPsMonitor(AbstractCallback):
     """
-    Calculate and log FLOPs per second after every ``trainer.log_every_n_steps`` steps.
+    Calculate and log FLOPs per second after every train step.
 
     Args:
-        model_config (GPTConfig): Model parameters.
-        data_config (pl.LightningDataModule): Data module being used in the experiment.
+        model_config (GPTModelProvider): Model parameters.
+        data_config (GPTDatasetConfig): Data module being used in the experiment.
+        global_batch_size (int): global batch size.
+        vocab_size (int): tokenizer vocab size.
         model_name (str): Name of the model being run. The following models are supported:
             gpt3, llama2, llama3, llama4, nemotronh, deepseek, qwen3.
     """
@@ -137,25 +139,22 @@ class FLOPsMonitor(AbstractCallback):
         if wandb_writer:
             wandb_writer.log({"tflops/TFLOPS": tflops}, iteration)
 
-    def eval_tflops_per_sec_per_gpu(self, train_step_time: List | float | int) -> float:
+    def eval_tflops_per_sec_per_gpu(self, time_per_iteration: List | float | int) -> float:
         """
         Args:
-            train_step_time (Any[List, float, int]): Train step time (in seconds).
-            Step time will be less stable for initial steps (~10 steps)- less
-            accurate measurement
-            Use average step time over several steps for higher accuracy
+            time_per_iteration (Any[List, float, int]): Train step time (in seconds).
         Returns:
             (float): Model TFLOPs per sec per gpu
         """
         total_flops, flops_per_gpu = self.eval_model_flops()
 
-        if not isinstance(train_step_time, list):
-            train_step_time = [train_step_time]
+        if not isinstance(time_per_iteration, list):
+            time_per_iteration = [time_per_iteration]
         # efficient mean computation if num train steps is very large
-        step_time_arr = np.array(train_step_time)
-        train_step_time = np.mean(step_time_arr[len(step_time_arr) // 2 :])
+        step_time_arr = np.array(time_per_iteration)
+        time_per_iteration = np.mean(step_time_arr[len(step_time_arr) // 2 :])
 
-        flops_per_sec_per_gpu = flops_per_gpu / (1e12 * train_step_time)
+        flops_per_sec_per_gpu = flops_per_gpu / (1e12 * time_per_iteration)
 
         return flops_per_sec_per_gpu, total_flops
 

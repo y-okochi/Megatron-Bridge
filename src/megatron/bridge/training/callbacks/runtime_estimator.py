@@ -26,11 +26,8 @@ class RuntimeEstimator(AbstractCallback):
     This callback provides a best attempt estimate. This estimate may be inaccurate if throughput
     changes through training or other significant changes are made to the model or dataloader.
     Example:
-        import nemo_run as run
-        from nemo.lightning.pytorch.callbacks import RuntimeEstimator
-        recipe.trainer.callbacks.append(
-            run.Config(RuntimeEstimator)
-        )
+        from megatron.bridge.training.callbacks import RuntimeEstimator
+        config.logger.callbacks.append(RuntimeEstimator(time_unit="hours"))
     +-----------------------------+-------------------------------+
     | Key                         | Logged data                   |
     +=============================+===============================+
