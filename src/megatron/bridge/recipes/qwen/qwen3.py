@@ -219,7 +219,7 @@ def _qwen3_common(
             manual_gc_eval=100,
         ),
         optimizer=opt_cfg,
-        scheduler=scheulder_cfg,
+        scheduler=scheduler_cfg,
         ddp=DistributedDataParallelConfig(
             check_for_nan_in_grad=True,
             grad_reduce_in_fp32=True,
