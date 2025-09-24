@@ -18,7 +18,7 @@ from typing import Any
 
 import torch.distributed as dist
 
-from megatron.bridge.training.callbacks.abstract_monitor import AbstractCallback
+from megatron.bridge.training.callbacks.abstract_callback import AbstractCallback
 
 
 class SpeedMonitor(AbstractCallback):

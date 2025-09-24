@@ -20,7 +20,7 @@ import torch
 import torch.cuda
 from torch import distributed
 
-from megatron.bridge.training.callbacks.abstract_monitor import AbstractCallback
+from megatron.bridge.training.callbacks.abstract_callback import AbstractCallback
 
 _MEMORY_KEYS = {
     'allocated_bytes.all.current': 'current_allocated_mem',

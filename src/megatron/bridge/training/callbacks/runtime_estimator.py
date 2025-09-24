@@ -15,7 +15,7 @@
 import time
 from typing import Any, Optional
 
-from megatron.bridge.training.callbacks.abstract_monitor import AbstractCallback
+from megatron.bridge.training.callbacks.abstract_callback import AbstractCallback
 
 
 class RuntimeEstimator(AbstractCallback):

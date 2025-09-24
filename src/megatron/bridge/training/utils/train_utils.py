@@ -418,6 +418,8 @@ def training_log(
                 with open(config.profiling.memory_snapshot_path, "wb") as f:
                     dump(snapshot, f)
         if callbacks:
+            elapsed_time = timers("interval-time").elapsed()
+            time_per_iteration = elapsed_time / total_iterations
             for callback in callbacks:
                 callback.track(
                     iteration=iteration,
@@ -427,6 +429,7 @@ def training_log(
                     train_config=train_config,
                     seq_length=config.dataset.sequence_length,
                     model=model,
+                    time_per_iteration=time_per_iteration,
                 )
         if wandb_writer:
             wandb_writer.log({"samples vs steps": global_state.train_state.consumed_train_samples}, iteration)

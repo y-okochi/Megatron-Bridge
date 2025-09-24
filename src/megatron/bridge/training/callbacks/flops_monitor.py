@@ -12,27 +12,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from megatron.bridge.training.metrics.abstract_monitor import AbstractMonitor
+import torch
+import numpy as np
+
+from typing import Tuple, List
+
+from megatron.bridge.training.callbacks.utils import flops_formulas
+from megatron.bridge.training.callbacks.abstract_callback import AbstractCallback
 
 _model_flops_map = {
     "gpt3": flops_formulas.gpt3,
     "llama2": flops_formulas.llama2,
     "llama3": flops_formulas.llama3,
-    "llama4": flops_formulas.llama3,  # TODO: add llama4 flops formulas
-    "nemotron3": flops_formulas.nemotron,
-    "nemotron4": flops_formulas.nemotron,
-    "mixtral": flops_formulas.mixtral,
-    "bert": flops_formulas.bert,
-    "hyena": hyena,
+    "llama4": flops_formulas.llama3,
     "deepseekv3": flops_formulas.deepseekv3,
-    "transformer": flops_formulas.transformer,
     "qwen3": flops_formulas.qwen3,
     "nemotronh": flops_formulas.nemotronh,
-    "gpt_oss": flops_formulas.gpt_oss,
 }
 
 
-class FLOPsMonitor(AbstractMonitor):
+class FLOPsMonitor(AbstractCallback):
     """
     Calculate and log FLOPs per second after every ``trainer.log_every_n_steps`` steps.
 
@@ -40,34 +39,32 @@ class FLOPsMonitor(AbstractMonitor):
         model_config (GPTConfig): Model parameters.
         data_config (pl.LightningDataModule): Data module being used in the experiment.
         model_name (str): Name of the model being run. The following models are supported:
-            gpt3, llama2, llama3, nemotron, mixtral, bert, hyena.
-
-
+            gpt3, llama2, llama3, llama4, nemotronh, deepseek, qwen3.
     """
 
     higher_is_better = True
 
     def __init__(
         self,
-        model_config: GPTConfig,
-        data_config: pl.LightningDataModule,
+        model_config,
+        data_config,
+        global_batch_size: int,
+        vocab_size: int,
         model_name: str,
     ):
         self.model_cfg = model_config
         self.data_cfg = data_config
-
         # use config params only when NOT provided explicitly
         self.model = model_name
 
-        gbs = self.data_cfg.global_batch_size
-        enc_seq_len = self.model_cfg.seq_length
+        gbs = global_batch_size
+        enc_seq_len = self.data_cfg.sequence_length
         hs = self.model_cfg.hidden_size
         layers = self.model_cfg.num_layers
         ffn_hs = self.model_cfg.ffn_hidden_size
         attention_heads = self.model_cfg.num_attention_heads
         moe_router_topk = self.model_cfg.moe_router_topk
         model_pattern = getattr(self.model_cfg, "hybrid_override_pattern", None)
-        vocab_size = self.data_cfg.tokenizer.vocab_size if hasattr(self.data_cfg, "tokenizer") else None
 
         # this handles both- 1. key is present, value is None; 2. key is absent
         query_groups = self.model_cfg.num_query_groups
@@ -119,47 +116,26 @@ class FLOPsMonitor(AbstractMonitor):
 
         self.model = self.model.lower() if self.model is not None else self.model
 
-        self.avg_train_step_time = 0
+    def track(
+        self,
+        iteration: int,
+        writer,
+        wandb_writer,
+        time_per_iteration: int,
+        **kwargs,
+    ) -> None:
+        """
+        Callback hook to calculate TFLOPs per sec per GPU after training
+        """
+        tflops_per_gpu, flops = self.eval_tflops_per_sec_per_gpu(time_per_iteration)
+        writer.add_scalar("tflops/TFLOPS_per_GPU", tflops_per_gpu, iteration)
+        if wandb_writer:
+            wandb_writer.log({"tflops/TFLOPS_per_GPU":  tflops_per_gpu}, iteration)
 
-    def on_train_start(self, trainer, pl_module):
-        """
-        PyTorch Lightning callback hook. Ensures that user is not using PEFT
-        as FLOPS callback does not support it.
-        """
-        for callback in trainer.callbacks:
-            if isinstance(callback, PEFT):
-                raise NotImplementedError("FLOPs measurement not supported for finetuning jobs")
-
-    def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx: int):
-        """
-        PyTorch Lightning callback hook to calculate TFLOPs per sec per GPU after training
-        """
-        try:
-            self.avg_train_step_time += trainer.progress_bar_metrics['train_step_timing in s']
-        except KeyError:
-            print("'train_step_timing in s' not found. Make sure to use TimingCallback with FLOPsMeasurementCallback.")
-        n = trainer.strategy.current_epoch_step
-        if n % trainer.log_every_n_steps == 0:
-            # skip calculation if we haven't accumulated any timing data
-            if self.avg_train_step_time == 0:
-                return
-            train_step_time = self.avg_train_step_time / trainer.log_every_n_steps
-            tflops_per_gpu, flops = self.eval_tflops_per_sec_per_gpu(train_step_time)
-            self.avg_train_step_time = 0
-            pl_module.log(
-                "TFLOPS_per_GPU",
-                tflops_per_gpu,
-                on_step=True,
-                on_epoch=False,
-                batch_size=1,
-                prog_bar=True,
-            )
-
-            tflops = flops / (1e12 * train_step_time)
-            pl_module.log(
-                "TFLOPS",
-                tflops,
-            )
+        tflops = flops / (1e12 * time_per_iteration)
+        writer.add_scalar("tflops/TFLOPS", tflops, iteration)
+        if wandb_writer:
+            wandb_writer.log({"tflops/TFLOPS": tflops}, iteration)
 
     def eval_tflops_per_sec_per_gpu(self, train_step_time: List | float | int) -> float:
         """

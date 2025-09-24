@@ -17,7 +17,7 @@ from typing import Any
 import lightning.pytorch as pl
 import torch
 
-from megatron.bridge.training.callbacks.abstract_monitor import AbstractCallback
+from megatron.bridge.training.callbacks.abstract_callback import AbstractCallback
 
 
 class OptimizerMonitor(AbstractCallback):

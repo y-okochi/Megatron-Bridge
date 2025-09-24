@@ -16,3 +16,4 @@ from megatron.bridge.training.callbacks.speed_monitor import SpeedMonitor
 from megatron.bridge.training.callbacks.optimizer_monitor import OptimizerMonitor
 from megatron.bridge.training.callbacks.memory_monitor import MemoryMonitor
 from megatron.bridge.training.callbacks.runtime_estimator import RuntimeEstimator
+from megatron.bridge.training.callbacks.flops_monitor import FLOPsMonitor
