@@ -34,7 +34,7 @@ from megatron.bridge.training.config import (
 )
 from megatron.bridge.training.mixed_precision import MixedPrecisionConfig
 
-def qwen3_600m_pretrain(**user_kwargs):
+def qwen3_600m_pretrain_config(**user_kwargs):
     recommended_kwargs = {
         "hf_path": "Qwen/Qwen3-0.6B",
         "tensor_parallelism": 1,
@@ -45,7 +45,7 @@ def qwen3_600m_pretrain(**user_kwargs):
     return _qwen3_common(**combined_kwargs)
 
 
-def qwen3_1p7b_pretrain(**user_kwargs):
+def qwen3_1p7b_pretrain_config(**user_kwargs):
     recommended_kwargs = {
         "hf_path": "Qwen/Qwen3-1.7B",
         "tensor_parallelism": 1,
@@ -56,7 +56,7 @@ def qwen3_1p7b_pretrain(**user_kwargs):
     return _qwen3_common(**combined_kwargs)
 
 
-def qwen3_4b_pretrain(**user_kwargs):
+def qwen3_4b_pretrain_config(**user_kwargs):
     recommended_kwargs = {
         "hf_path": "Qwen/Qwen3-4B",
         "tensor_parallelism": 2,
@@ -67,7 +67,7 @@ def qwen3_4b_pretrain(**user_kwargs):
     return _qwen3_common(**combined_kwargs)
 
 
-def qwen3_8b_pretrain(**user_kwargs):
+def qwen3_8b_pretrain_config(**user_kwargs):
     recommended_kwargs = {
         "hf_path": "Qwen/Qwen3-8B",
         "tensor_parallelism": 4,
@@ -78,7 +78,7 @@ def qwen3_8b_pretrain(**user_kwargs):
     return _qwen3_common(**combined_kwargs)
 
 
-def qwen3_14b_pretrain(**user_kwargs):
+def qwen3_14b_pretrain_config(**user_kwargs):
     recommended_kwargs = {
         "hf_path": "Qwen/Qwen3-14B",
         "tensor_parallelism": 8,
@@ -89,7 +89,7 @@ def qwen3_14b_pretrain(**user_kwargs):
     return _qwen3_common(**combined_kwargs)
 
 
-def qwen3_32b_pretrain(**user_kwargs):
+def qwen3_32b_pretrain_config(**user_kwargs):
     recommended_kwargs = {
         "hf_path": "Qwen/Qwen3-32B",
         "tensor_parallelism": 8,

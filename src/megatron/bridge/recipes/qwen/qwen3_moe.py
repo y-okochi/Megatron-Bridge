@@ -32,10 +32,10 @@ from megatron.bridge.training.config import (
     TokenizerConfig,
     TrainingConfig,
 )
-from megatron.bridge.training.mixed_precision import MixedPrecisionConfig
+from megatron.bridge.training.mixed_precision import MixedPrecisionConfig, bf16_mixed
 
 
-def qwen3_30b_a3b_pretrain(**user_kwargs):
+def qwen3_30b_a3b_pretrain_config(**user_kwargs):
     recommended_kwargs = {
         "hf_path": "Qwen/Qwen3-30B-A3B",
         "tensor_parallelism": 4,
@@ -50,7 +50,7 @@ def qwen3_30b_a3b_pretrain(**user_kwargs):
     return _qwen3_moe_common(**combined_kwargs)
 
 
-def qwen3_235b_a22b_pretrain(**user_kwargs):
+def qwen3_235b_a22b_pretrain_config(**user_kwargs):
     recommended_kwargs = {
         "hf_path": "Qwen/Qwen3-235B-A22B",
         "tensor_parallelism": 4,
@@ -103,7 +103,7 @@ def _qwen3_moe_common(
     lr_warmup_iters: int = 500,
     use_null_tokenizer: bool = False,
     # Precision recipe
-    precision_config: Optional[Union[MixedPrecisionConfig, str]] = "bf16_mixed",
+    precision_config: Optional[Union[MixedPrecisionConfig, str]] = None,
     comm_overlap_config: Optional[CommOverlapConfig] = None,
 ) -> ConfigContainer:
     """
@@ -164,7 +164,12 @@ def _qwen3_moe_common(
     model_cfg.expert_model_parallel_size = expert_parallelism
     model_cfg.expert_tensor_parallel_size = expert_tensor_parallelism
     model_cfg.sequence_parallel = sequence_parallelism
-    
+
+    if precision_config is None:
+        precision_config = bf16_mixed()
+    if isinstance(precision_config, MixedPrecisionConfig):
+        precision_config.grad_reduce_in_fp32 = False
+
     # MoE-specific pipeline split configurations
     if account_for_embedding_in_pipeline_split:
         model_cfg.account_for_embedding_in_pipeline_split = True

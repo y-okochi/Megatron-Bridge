@@ -35,7 +35,7 @@ from megatron.bridge.training.config import (
 from megatron.bridge.training.mixed_precision import MixedPrecisionConfig
 
 
-def llama2_7b_pretrain(**user_kwargs):
+def llama2_7b_pretrain_config(**user_kwargs):
     recommended_kwargs = {
         "hf_path": "meta-llama/Llama-2-7b-hf",
         "tensor_parallelism": 2,

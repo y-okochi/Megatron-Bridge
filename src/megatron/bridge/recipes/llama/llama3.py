@@ -46,7 +46,7 @@ SEQUENCE_LENGTH_128K: int = 131072
 
 
 # Llama3.2 models
-def llama32_1b_pretrain(**user_kwargs):
+def llama32_1b_pretrain_config(**user_kwargs):
     recommended_kwargs = {
         "hf_path": "meta-llama/Llama-3.2-1B",
         "tensor_parallelism": 1,
@@ -58,7 +58,7 @@ def llama32_1b_pretrain(**user_kwargs):
     return _llama3_common(**combined_kwargs)
 
 
-def llama32_3b_pretrain(**user_kwargs):
+def llama32_3b_pretrain_config(**user_kwargs):
     recommended_kwargs = {
         "hf_path": "meta-llama/Llama-3.2-3B",
         "tensor_parallelism": 1,
@@ -71,7 +71,7 @@ def llama32_3b_pretrain(**user_kwargs):
 
 
 # Llama3 8B models
-def llama3_8b_pretrain(**user_kwargs):
+def llama3_8b_pretrain_config(**user_kwargs):
     recommended_kwargs = {
         "hf_path": "meta-llama/Meta-Llama-3-8B",
         "tensor_parallelism": 1,
@@ -83,7 +83,7 @@ def llama3_8b_pretrain(**user_kwargs):
     return _llama3_common(**combined_kwargs)
 
 
-def llama3_8b_16k_pretrain(**user_kwargs):
+def llama3_8b_16k_pretrain_config(**user_kwargs):
     recommended_kwargs = {
         "hf_path": "meta-llama/Meta-Llama-3-8B",
         "tensor_parallelism": 4,
@@ -97,7 +97,7 @@ def llama3_8b_16k_pretrain(**user_kwargs):
     return _llama3_common(**combined_kwargs)
 
 
-def llama3_8b_64k_pretrain(**user_kwargs):
+def llama3_8b_64k_pretrain_config(**user_kwargs):
     recommended_kwargs = {
         "hf_path": "meta-llama/Meta-Llama-3-8B",
         "tensor_parallelism": 4,
@@ -111,7 +111,7 @@ def llama3_8b_64k_pretrain(**user_kwargs):
     return _llama3_common(**combined_kwargs)
 
 
-def llama3_8b_128k_pretrain(**user_kwargs):
+def llama3_8b_128k_pretrain_config(**user_kwargs):
     recommended_kwargs = {
         "hf_path": "meta-llama/Meta-Llama-3-8B",
         "tensor_parallelism": 4,
@@ -126,7 +126,7 @@ def llama3_8b_128k_pretrain(**user_kwargs):
 
 
 # Llama3 70B models
-def llama3_70b_pretrain(**user_kwargs):
+def llama3_70b_pretrain_config(**user_kwargs):
     recommended_kwargs = {
         "hf_path": "meta-llama/Meta-Llama-3-70B",
         "tensor_parallelism": 4,
@@ -145,7 +145,7 @@ def llama3_70b_pretrain(**user_kwargs):
     return _llama3_common(**combined_kwargs)
 
 
-def llama3_70b_16k_pretrain(**user_kwargs):
+def llama3_70b_16k_pretrain_config(**user_kwargs):
     recommended_kwargs = {
         "hf_path": "meta-llama/Meta-Llama-3-70B",
         "tensor_parallelism": 8,
@@ -165,7 +165,7 @@ def llama3_70b_16k_pretrain(**user_kwargs):
     return _llama3_common(**combined_kwargs)
 
 
-def llama3_70b_64k_pretrain(**user_kwargs):
+def llama3_70b_64k_pretrain_config(**user_kwargs):
     recommended_kwargs = {
         "hf_path": "meta-llama/Meta-Llama-3-70B",
         "tensor_parallelism": 8,
@@ -186,7 +186,7 @@ def llama3_70b_64k_pretrain(**user_kwargs):
 
 
 # Llama3.1 models
-def llama31_8b_pretrain(**user_kwargs):
+def llama31_8b_pretrain_config(**user_kwargs):
     recommended_kwargs = {
         "hf_path": "meta-llama/Meta-Llama-3.1-8B",
         "tensor_parallelism": 1,
@@ -198,7 +198,7 @@ def llama31_8b_pretrain(**user_kwargs):
     return _llama3_common(**combined_kwargs)
 
 
-def llama31_70b_pretrain(**user_kwargs):
+def llama31_70b_pretrain_config(**user_kwargs):
     recommended_kwargs = {
         "hf_path": "meta-llama/Meta-Llama-3.1-70B",
         "tensor_parallelism": 4,
@@ -218,7 +218,7 @@ def llama31_70b_pretrain(**user_kwargs):
     return _llama3_common(**combined_kwargs)
 
 
-def llama31_405b_pretrain(**user_kwargs):
+def llama31_405b_pretrain_config(**user_kwargs):
     recommended_kwargs = {
         "hf_path": "meta-llama/Meta-Llama-3.1-405B",
         "tensor_parallelism": 8,
