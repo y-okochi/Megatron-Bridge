@@ -17,6 +17,21 @@ The **DCLM-baseline** dataset contains **4T tokens** across **3B documents**, ac
 
 ### Example Folder Structure
 
+.
+├── src/
+│   ├── components/
+│   │   ├── Button.js
+│   │   └── Card.js
+│   ├── pages/
+│   │   ├── HomePage.js
+│   │   └── AboutPage.js
+│   └── App.js
+├── public/
+│   ├── index.html
+│   └── style.css
+├── package.json
+└── README.md
+
 dclm/
 └── global-shard_01_of_10/
 ├── local-shard_0_of_10/
@@ -29,8 +44,7 @@ dclm/
 └── ...
 
 > [! NOTE]
-
-This tutorial demonstrates preprocessing for a **single local shard**: global-shard_01_of_10/local-shard_0_of_10
+This tutorial demonstrates preprocessing for a **single local shard**: global-shard_01_of_10/local-shard_0_of_10.
 
 ## Downloading Dataset
 
