@@ -63,10 +63,10 @@ apt install zstd
 ```bash
 python3 merge.py \
   --path_to_save /data/dclm/decompressed/example.jsonl \
-  --source_dir /home/data/dclm/decompressed
+  --source_dir /data/dclm/decompressed
 ```
 
-This merges all decompressed `.jsonl` files from `/home/data/dclm/decompressed` into single `.jsonl` file to avoid hundreds of small `.jsonl` files before the preprocessing stage.
+This merges all decompressed `.jsonl` files from `/data/dclm/decompressed` into single `.jsonl` file to avoid hundreds of small `.jsonl` files before the preprocessing stage.
 
 > **NOTE:**
 Script automatically removes all small `.jsonl` files after merging, keeping only the combined file to save space.
