@@ -12,17 +12,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import argparse
 import os
 import shlex
-import argparse
 import subprocess
 
 
 def arguments():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--path_to_save", type=str, required=True, help="Path where to save merged file.")
-    parser.add_argument("--source_dir", type=str, required=True, help="Path to decompressed dataset.")
+    parser.add_argument(
+        "--path_to_save",
+        type=str,
+        required=True,
+        help="Path where to save merged file.",
+    )
+    parser.add_argument(
+        "--source_dir", type=str, required=True, help="Path to decompressed dataset."
+    )
 
     return parser
 
@@ -31,17 +38,13 @@ def merge_data(
     path_to_save: str,
     source_dir: str,
 ) -> None:
-    cmd = (
-        f'cd {source_dir} && '
-        f'cat *.jsonl > {path_to_save} && '
-        'rm shard_*'
-    )
+    cmd = f"cd {source_dir} && " f"cat *.jsonl > {path_to_save} && " "rm shard_*"
 
     print("Merging files...")
     subprocess.run(cmd, shell=True, check=True)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     args = arguments().parse_args()
 
     merge_data(

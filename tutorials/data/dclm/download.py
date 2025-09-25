@@ -13,24 +13,52 @@
 # limitations under the License.
 
 import argparse
-import requests
-
 from typing import Union
 
-from huggingface_hub import snapshot_download
-from huggingface_hub import login
+import requests
+from huggingface_hub import login, snapshot_download
 
 
 def arguments():
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--token", type=str, required=True, help="HF access token.")
-    parser.add_argument("--path_to_save", type=str, required=True, help="Path where to save downloaded dataset.")
-    parser.add_argument("--num_workers", type=int, default=1, help="Number of workers to be used to download data.")
-    parser.add_argument("--max_retries", type=int, default=5, help="Number of download retries if timeout reached.")
-    parser.add_argument("--retry_delay", type=int, default=10, help="Delay (in seconds) between retries.")
-    parser.add_argument("--from_scratch", action="store_false", help="Ignore previously downloaded files and start from scratch.")
-    parser.add_argument("--patterns", type=str, nargs="+", default="*.jsonl.zst", help="Patterns to download specific subdataset.")
+    parser.add_argument(
+        "--path_to_save",
+        type=str,
+        required=True,
+        help="Path where to save downloaded dataset.",
+    )
+    parser.add_argument(
+        "--num_workers",
+        type=int,
+        default=1,
+        help="Number of workers to be used to download data.",
+    )
+    parser.add_argument(
+        "--max_retries",
+        type=int,
+        default=5,
+        help="Number of download retries if timeout reached.",
+    )
+    parser.add_argument(
+        "--retry_delay",
+        type=int,
+        default=10,
+        help="Delay (in seconds) between retries.",
+    )
+    parser.add_argument(
+        "--from_scratch",
+        action="store_false",
+        help="Ignore previously downloaded files and start from scratch.",
+    )
+    parser.add_argument(
+        "--patterns",
+        type=str,
+        nargs="+",
+        default="*.jsonl.zst",
+        help="Patterns to download specific subdataset.",
+    )
 
     return parser
 
@@ -58,7 +86,7 @@ def download_dataset(
                 local_dir=path_to_save,
                 allow_patterns=allow_patterns,
                 resume_download=resume_download,
-                max_workers=num_workers, # Don't hesitate to increase this number to lower the download time
+                max_workers=num_workers,  # Don't hesitate to increase this number to lower the download time
             )
             break
         except requests.exceptions.ReadTimeout:
@@ -70,12 +98,12 @@ def download_dataset(
     print(f"Dataset downloaded to {path_to_save}")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     args = arguments().parse_args()
 
     # login to HF
     login(token=args.token)
-    
+
     # donwload dataset
     download_dataset(
         path_to_save=args.path_to_save,

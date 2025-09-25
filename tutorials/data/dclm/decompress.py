@@ -12,34 +12,42 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import argparse
 import os
 import shlex
-import argparse
 import subprocess
 
 
 def arguments():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--path_to_save", type=str, required=True, help="Path where to save decompressed files.")
-    parser.add_argument("--source_dir", type=str, required=True, help="Path to downloaded dataset.")
-    parser.add_argument("--num_workers", type=int, default=1, help="Number of workers to be used to decompress data.")
+    parser.add_argument(
+        "--path_to_save",
+        type=str,
+        required=True,
+        help="Path where to save decompressed files.",
+    )
+    parser.add_argument(
+        "--source_dir", type=str, required=True, help="Path to downloaded dataset."
+    )
+    parser.add_argument(
+        "--num_workers",
+        type=int,
+        default=1,
+        help="Number of workers to be used to decompress data.",
+    )
 
     return parser
 
 
-def decompress_data(
-    path_to_save: str,
-    source_dir: str,
-    num_workers: int = 1
-) -> None:
+def decompress_data(path_to_save: str, source_dir: str, num_workers: int = 1) -> None:
     os.makedirs(path_to_save, exist_ok=True)
 
     cmd = (
-        f'mkdir -p {shlex.quote(path_to_save)} && '
-        f'cd {shlex.quote(source_dir)} && '
+        f"mkdir -p {shlex.quote(path_to_save)} && "
+        f"cd {shlex.quote(source_dir)} && "
         f'find . -name "*.zst" | '
-        f'parallel -j{num_workers} '
+        f"parallel -j{num_workers} "
         '"zstd -d {} -o ' + shlex.quote(path_to_save) + '/{.}"'
     )
 
@@ -47,7 +55,7 @@ def decompress_data(
     subprocess.run(cmd, shell=True, check=True)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     args = arguments().parse_args()
 
     decompress_data(
