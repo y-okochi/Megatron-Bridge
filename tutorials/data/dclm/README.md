@@ -15,38 +15,11 @@ The **DCLM-baseline** dataset contains **4T tokens** across **3B documents**, ac
 - Each local shard contains ~280 compressed JSONL files: `*.jsonl.zst`.  
 - Total dataset size: **~722 GB compressed**, **~2.1T decompressed**.
 
-### Example Folder Structure
-
-.
-├── src/
-│   ├── components/
-│   │   ├── Button.js
-│   │   └── Card.js
-│   ├── pages/
-│   │   ├── HomePage.js
-│   │   └── AboutPage.js
-│   └── App.js
-├── public/
-│   ├── index.html
-│   └── style.css
-├── package.json
-└── README.md
-
-dclm/
-└── global-shard_01_of_10/
-├── local-shard_0_of_10/
-│ ├── shard_00000000_processed.jsonl.zst
-│ ├── shard_00000001_processed.jsonl.zst
-│ ├── ...
-│ └── shard_00000278_processed.jsonl.zst
-├── local-shard_1_of_10/
-│ └── ...
-└── ...
-
-> [! NOTE]
-This tutorial demonstrates preprocessing for a **single local shard**: global-shard_01_of_10/local-shard_0_of_10.
 
 ## Downloading Dataset
+
+> **NOTE:**
+This tutorial demonstrates preprocessing for a **single local shard**: global-shard_01_of_10/local-shard_0_of_10.
 
 ```bash
 
