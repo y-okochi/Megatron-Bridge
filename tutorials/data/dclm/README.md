@@ -1,5 +1,3 @@
-<div align="center">
-
 # DCLM Data Preprocessing Tutorial
 
 This guide explains how to download, decompress, merge, and preprocess the **DCLM-baseline** dataset for language model pretraining.  
