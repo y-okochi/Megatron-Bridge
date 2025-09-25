@@ -30,3 +30,33 @@ python3 download.py \
   --patterns global-shard_01_of_10/local-shard_0_of_10/**
 
 ```
+
+**Parameters:**
+- `--token` — Hugging Face token for authentication.
+- `--num_workers` — Number of parallel downloads; higher is faster.
+- `--path_to_save` — Target directory for saving the dataset.
+- `--patterns` — Subset of dataset to download. Optional; omit to download the full dataset.
+
+
+## Decompressing Dataset
+
+After downloading, decompress `.zst` files to `.jsonl`:
+
+```bash
+
+python3 decompress.py \
+  --path_to_save /home/data/dclm/decompressed \
+  --num_workers 32 \
+  --source_dir /home/data/dclm/global-shard_01_of_10/local-shard_0_of_10
+
+```
+
+> **NOTE:**
+Dependencies: parallel and zstd may need to be installed:
+
+```bash
+apt update
+apt install parallel
+apt install zstd
+```
+
