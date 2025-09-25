@@ -58,14 +58,27 @@ class TestAutoBridgeFinetune:
        huggingface-cli download meta-llama/Llama-3.2-1B \
            --include "tokenizer*" \
            --local-dir /path/to/TestData/megatron_bridge/tokenizers/llama-32-1b
-    2. Training uses standard checkpoint configuration
-    3. No double loading or repeated conversion
+    3. Training uses standard checkpoint configuration
     """
 
     # Path to the imported Llama 3.2 1B checkpoint
     IMPORTED_CHECKPOINT = "/home/TestData/megatron_bridge/checkpoints/llama-32-1b-hf-to-megatron-import"
     # Path to the saved tokenizer assets
     TOKENIZER_PATH = "/home/TestData/megatron_bridge/tokenizers/llama-32-1b"
+
+    def setup_method(self):
+        """Setup before each test method."""
+        # Clear GPU memory before each test
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
+
+    def teardown_method(self):
+        """Cleanup after each test method."""
+        # Clear GPU memory after each test
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
 
     @pytest.mark.run_only_on("GPU")
     def test_imported_hf_sft(self, tmp_path):
