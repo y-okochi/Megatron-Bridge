@@ -67,5 +67,6 @@ python3 merge.py \
 ```
 
 This merges all decompressed `.jsonl` files from `/home/data/dclm/decompressed` into single `.jsonl` file to avoid hundreds of small `.jsonl` files before the preprocessing stage.
-Script automatically removes all small `.jsonl` files after merging, keeping only the combined `/data/dclm/decompressed/example.jsonl` file to save space.
 
+> **NOTE:**
+Script automatically removes all small `.jsonl` files after merging, keeping only the combined file to save space.
