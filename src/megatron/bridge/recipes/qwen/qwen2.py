@@ -68,6 +68,8 @@ class Qwen2CommonKwargs(TypedDict, total=False):
     lr: float
     min_lr: float
     lr_warmup_iters: int
+    eval_interval: int
+    save_interval: int
     use_null_tokenizer: bool
     # Precision / overlap configs
     precision_config: Optional[Union[MixedPrecisionConfig, str]]
@@ -265,6 +267,8 @@ def _qwen2_common(
     lr: float = 3e-4,
     min_lr: float = 3e-5,
     lr_warmup_iters: int = 500,
+    eval_interval: int = 500,
+    save_interval: int = 500,
     use_null_tokenizer: bool = True,
     # Precision recipe
     precision_config: Optional[Union[MixedPrecisionConfig, str]] = "bf16_mixed",
@@ -336,7 +340,7 @@ def _qwen2_common(
         model=model_cfg,
         train=TrainingConfig(
             train_iters=train_iters,
-            eval_interval=500,
+            eval_interval=eval_interval,
             eval_iters=32,
             global_batch_size=global_batch_size,
             micro_batch_size=micro_batch_size,
@@ -377,7 +381,7 @@ def _qwen2_common(
             vocab_size=DEFAULT_NULL_TOKENIZER_VOCAB_SIZE if use_null_tokenizer else None,
         ),
         checkpoint=CheckpointConfig(
-            save_interval=500,
+            save_interval=save_interval,
             save=checkpoint_dir,
             load=checkpoint_dir,
             ckpt_format="torch_dist",

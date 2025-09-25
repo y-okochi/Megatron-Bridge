@@ -74,6 +74,7 @@ class Llama3CommonKwargs(TypedDict, total=False):
     min_lr: float
     lr_warmup_iters: int
     eval_interval: int
+    save_interval: int
     use_null_tokenizer: bool
     # Precision / overlap configs
     precision_config: Optional[Union[MixedPrecisionConfig, str]]
@@ -361,6 +362,7 @@ def _llama3_common(
     min_lr: float = 3e-5,
     lr_warmup_iters: int = 2000,
     eval_interval: int = 2000,
+    save_interval: int = 500,
     use_null_tokenizer: bool = True,
     # Precision recipe
     precision_config: Optional[Union[MixedPrecisionConfig, str]] = "bf16_mixed",
@@ -484,7 +486,7 @@ def _llama3_common(
             vocab_size=DEFAULT_NULL_TOKENIZER_VOCAB_SIZE if use_null_tokenizer else None,
         ),
         checkpoint=CheckpointConfig(
-            save_interval=500,
+            save_interval=save_interval,
             save=checkpoint_dir,
             load=checkpoint_dir,
             ckpt_format="torch_dist",

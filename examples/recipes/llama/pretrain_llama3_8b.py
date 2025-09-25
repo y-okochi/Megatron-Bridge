@@ -76,7 +76,7 @@ logger: logging.Logger = logging.getLogger(__name__)
 # Assumes this script (pretrain_llama3_8b.py) is in Megatron-Bridge/examples/recipes/llama/
 # and the config is in a 'conf' subdirectory.
 SCRIPT_DIR: Path = Path(__file__).parent.resolve()
-DEFAULT_CONFIG_FILENAME: str = "llama3_8b_pretrain_config_override_example.yaml"
+DEFAULT_CONFIG_FILENAME: str = "llama3_8b_pretrain_override_example.yaml"
 DEFAULT_CONFIG_FILE_PATH: Path = SCRIPT_DIR / "conf" / DEFAULT_CONFIG_FILENAME
 
 
@@ -90,7 +90,7 @@ def parse_cli_args() -> Tuple[argparse.Namespace, list[str]]:
         "--config-file",
         type=str,
         default=str(DEFAULT_CONFIG_FILE_PATH),
-        help="Path to the YAML OmegaConf override file. Default: conf/llama3_8b_pretrain_config_override_example.yaml",
+        help="Path to the YAML OmegaConf override file. Default: conf/llama3_8b_pretrain_override_example.yaml",
     )
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
 
