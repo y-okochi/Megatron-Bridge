@@ -37,6 +37,8 @@ from megatron.bridge.training.mixed_precision import MixedPrecisionConfig
 
 
 class Qwen3CommonKwargs(TypedDict, total=False):
+    """Typed options accepted by Qwen3 recipe helper functions."""
+
     # Core identifiers
     hf_path: str
     dir: Optional[str]
@@ -73,6 +75,10 @@ class Qwen3CommonKwargs(TypedDict, total=False):
 
 
 def qwen3_600m_pretrain_config(**user_kwargs: Unpack[Qwen3CommonKwargs]) -> ConfigContainer:
+    """Return a pre-training config for Qwen3 0.6B.
+
+    See `_qwen3_common` for the full list of parameters.
+    """
     recommended_kwargs: Qwen3CommonKwargs = {
         "hf_path": "Qwen/Qwen3-0.6B",
         "tensor_parallelism": 1,
@@ -84,6 +90,10 @@ def qwen3_600m_pretrain_config(**user_kwargs: Unpack[Qwen3CommonKwargs]) -> Conf
 
 
 def qwen3_1p7b_pretrain_config(**user_kwargs: Unpack[Qwen3CommonKwargs]) -> ConfigContainer:
+    """Return a pre-training config for Qwen3 1.7B.
+
+    See `_qwen3_common` for the full list of parameters.
+    """
     recommended_kwargs: Qwen3CommonKwargs = {
         "hf_path": "Qwen/Qwen3-1.7B",
         "tensor_parallelism": 1,
@@ -95,6 +105,10 @@ def qwen3_1p7b_pretrain_config(**user_kwargs: Unpack[Qwen3CommonKwargs]) -> Conf
 
 
 def qwen3_4b_pretrain_config(**user_kwargs: Unpack[Qwen3CommonKwargs]) -> ConfigContainer:
+    """Return a pre-training config for Qwen3 4B.
+
+    See `_qwen3_common` for the full list of parameters.
+    """
     recommended_kwargs: Qwen3CommonKwargs = {
         "hf_path": "Qwen/Qwen3-4B",
         "tensor_parallelism": 2,
@@ -106,6 +120,10 @@ def qwen3_4b_pretrain_config(**user_kwargs: Unpack[Qwen3CommonKwargs]) -> Config
 
 
 def qwen3_8b_pretrain_config(**user_kwargs: Unpack[Qwen3CommonKwargs]) -> ConfigContainer:
+    """Return a pre-training config for Qwen3 8B.
+
+    See `_qwen3_common` for the full list of parameters.
+    """
     recommended_kwargs: Qwen3CommonKwargs = {
         "hf_path": "Qwen/Qwen3-8B",
         "tensor_parallelism": 4,
@@ -117,6 +135,10 @@ def qwen3_8b_pretrain_config(**user_kwargs: Unpack[Qwen3CommonKwargs]) -> Config
 
 
 def qwen3_14b_pretrain_config(**user_kwargs: Unpack[Qwen3CommonKwargs]) -> ConfigContainer:
+    """Return a pre-training config for Qwen3 14B.
+
+    See `_qwen3_common` for the full list of parameters.
+    """
     recommended_kwargs: Qwen3CommonKwargs = {
         "hf_path": "Qwen/Qwen3-14B",
         "tensor_parallelism": 8,
@@ -128,6 +150,10 @@ def qwen3_14b_pretrain_config(**user_kwargs: Unpack[Qwen3CommonKwargs]) -> Confi
 
 
 def qwen3_32b_pretrain_config(**user_kwargs: Unpack[Qwen3CommonKwargs]) -> ConfigContainer:
+    """Return a pre-training config for Qwen3 32B.
+
+    See `_qwen3_common` for the full list of parameters.
+    """
     recommended_kwargs: Qwen3CommonKwargs = {
         "hf_path": "Qwen/Qwen3-32B",
         "tensor_parallelism": 8,

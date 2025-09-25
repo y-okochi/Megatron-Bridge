@@ -37,6 +37,8 @@ from megatron.bridge.training.mixed_precision import MixedPrecisionConfig
 
 
 class Qwen2CommonKwargs(TypedDict, total=False):
+    """Typed options accepted by Qwen2/2.5 recipe helper functions."""
+
     # Core identifiers
     hf_path: str
     dir: Optional[str]
@@ -73,6 +75,10 @@ class Qwen2CommonKwargs(TypedDict, total=False):
 
 
 def qwen2_500m_pretrain_config(**user_kwargs: Unpack[Qwen2CommonKwargs]) -> ConfigContainer:
+    """Return a pre-training config for Qwen2 0.5B.
+
+    See `_qwen2_common` for the full list of parameters.
+    """
     recommended_kwargs: Qwen2CommonKwargs = {
         "hf_path": "Qwen/Qwen2-0.5B",
         "tensor_parallelism": 1,
@@ -84,6 +90,10 @@ def qwen2_500m_pretrain_config(**user_kwargs: Unpack[Qwen2CommonKwargs]) -> Conf
 
 
 def qwen2_1p5b_pretrain_config(**user_kwargs: Unpack[Qwen2CommonKwargs]) -> ConfigContainer:
+    """Return a pre-training config for Qwen2 1.5B.
+
+    See `_qwen2_common` for the full list of parameters.
+    """
     recommended_kwargs: Qwen2CommonKwargs = {
         "hf_path": "Qwen/Qwen2-1.5B",
         "tensor_parallelism": 1,
@@ -95,6 +105,10 @@ def qwen2_1p5b_pretrain_config(**user_kwargs: Unpack[Qwen2CommonKwargs]) -> Conf
 
 
 def qwen2_7b_pretrain_config(**user_kwargs: Unpack[Qwen2CommonKwargs]) -> ConfigContainer:
+    """Return a pre-training config for Qwen2 7B.
+
+    See `_qwen2_common` for the full list of parameters.
+    """
     recommended_kwargs: Qwen2CommonKwargs = {
         "hf_path": "Qwen/Qwen2-7B",
         "tensor_parallelism": 2,
@@ -107,6 +121,10 @@ def qwen2_7b_pretrain_config(**user_kwargs: Unpack[Qwen2CommonKwargs]) -> Config
 
 
 def qwen2_72b_pretrain_config(**user_kwargs: Unpack[Qwen2CommonKwargs]) -> ConfigContainer:
+    """Return a pre-training config for Qwen2 72B.
+
+    See `_qwen2_common` for the full list of parameters.
+    """
     recommended_kwargs: Qwen2CommonKwargs = {
         "hf_path": "Qwen/Qwen2-72B",
         "tensor_parallelism": 8,
@@ -120,6 +138,10 @@ def qwen2_72b_pretrain_config(**user_kwargs: Unpack[Qwen2CommonKwargs]) -> Confi
 
 
 def qwen25_500m_pretrain_config(**user_kwargs: Unpack[Qwen2CommonKwargs]) -> ConfigContainer:
+    """Return a pre-training config for Qwen2.5 0.5B.
+
+    See `_qwen2_common` for the full list of parameters.
+    """
     recommended_kwargs: Qwen2CommonKwargs = {
         "hf_path": "Qwen/Qwen2.5-0.5B",
         "tensor_parallelism": 1,
@@ -132,6 +154,10 @@ def qwen25_500m_pretrain_config(**user_kwargs: Unpack[Qwen2CommonKwargs]) -> Con
 
 
 def qwen25_1p5b_pretrain_config(**user_kwargs: Unpack[Qwen2CommonKwargs]) -> ConfigContainer:
+    """Return a pre-training config for Qwen2.5 1.5B.
+
+    See `_qwen2_common` for the full list of parameters.
+    """
     recommended_kwargs: Qwen2CommonKwargs = {
         "hf_path": "Qwen/Qwen2.5-1.5B",
         "tensor_parallelism": 1,
@@ -144,6 +170,10 @@ def qwen25_1p5b_pretrain_config(**user_kwargs: Unpack[Qwen2CommonKwargs]) -> Con
 
 
 def qwen25_7b_pretrain_config(**user_kwargs: Unpack[Qwen2CommonKwargs]) -> ConfigContainer:
+    """Return a pre-training config for Qwen2.5 7B.
+
+    See `_qwen2_common` for the full list of parameters.
+    """
     recommended_kwargs: Qwen2CommonKwargs = {
         "hf_path": "Qwen/Qwen2.5-7B",
         "tensor_parallelism": 2,
@@ -156,6 +186,10 @@ def qwen25_7b_pretrain_config(**user_kwargs: Unpack[Qwen2CommonKwargs]) -> Confi
 
 
 def qwen25_14b_pretrain_config(**user_kwargs: Unpack[Qwen2CommonKwargs]) -> ConfigContainer:
+    """Return a pre-training config for Qwen2.5 14B.
+
+    See `_qwen2_common` for the full list of parameters.
+    """
     recommended_kwargs: Qwen2CommonKwargs = {
         "hf_path": "Qwen/Qwen2.5-14B",
         "tensor_parallelism": 4,
@@ -169,6 +203,10 @@ def qwen25_14b_pretrain_config(**user_kwargs: Unpack[Qwen2CommonKwargs]) -> Conf
 
 
 def qwen25_32b_pretrain_config(**user_kwargs: Unpack[Qwen2CommonKwargs]) -> ConfigContainer:
+    """Return a pre-training config for Qwen2.5 32B.
+
+    See `_qwen2_common` for the full list of parameters.
+    """
     recommended_kwargs: Qwen2CommonKwargs = {
         "hf_path": "Qwen/Qwen2.5-32B",
         "tensor_parallelism": 8,
@@ -182,6 +220,10 @@ def qwen25_32b_pretrain_config(**user_kwargs: Unpack[Qwen2CommonKwargs]) -> Conf
 
 
 def qwen25_72b_pretrain_config(**user_kwargs: Unpack[Qwen2CommonKwargs]) -> ConfigContainer:
+    """Return a pre-training config for Qwen2.5 72B.
+
+    See `_qwen2_common` for the full list of parameters.
+    """
     recommended_kwargs: Qwen2CommonKwargs = {
         "hf_path": "Qwen/Qwen2.5-72B",
         "tensor_parallelism": 8,

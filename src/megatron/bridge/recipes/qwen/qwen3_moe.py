@@ -37,6 +37,8 @@ from megatron.bridge.training.mixed_precision import MixedPrecisionConfig, bf16_
 
 
 class Qwen3MoeCommonKwargs(TypedDict, total=False):
+    """Typed options accepted by Qwen3 MoE recipe helpers."""
+
     # Core identifiers
     hf_path: str
     dir: Optional[str]
@@ -77,6 +79,10 @@ class Qwen3MoeCommonKwargs(TypedDict, total=False):
 
 
 def qwen3_30b_a3b_pretrain_config(**user_kwargs: Unpack[Qwen3MoeCommonKwargs]) -> ConfigContainer:
+    """Return a pre-training config for Qwen3-30B-A3B MoE.
+
+    See `_qwen3_moe_common` for the full list of parameters.
+    """
     recommended_kwargs: Qwen3MoeCommonKwargs = {
         "hf_path": "Qwen/Qwen3-30B-A3B",
         "tensor_parallelism": 4,
@@ -92,6 +98,10 @@ def qwen3_30b_a3b_pretrain_config(**user_kwargs: Unpack[Qwen3MoeCommonKwargs]) -
 
 
 def qwen3_235b_a22b_pretrain_config(**user_kwargs: Unpack[Qwen3MoeCommonKwargs]) -> ConfigContainer:
+    """Return a pre-training config for Qwen3-235B-A22B MoE.
+
+    See `_qwen3_moe_common` for the full list of parameters.
+    """
     recommended_kwargs: Qwen3MoeCommonKwargs = {
         "hf_path": "Qwen/Qwen3-235B-A22B",
         "tensor_parallelism": 4,

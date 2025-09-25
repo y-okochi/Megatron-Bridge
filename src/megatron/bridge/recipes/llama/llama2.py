@@ -37,6 +37,8 @@ from megatron.bridge.training.mixed_precision import MixedPrecisionConfig
 
 
 class Llama2CommonKwargs(TypedDict, total=False):
+    """Typed options accepted by Llama2 recipe helper functions."""
+
     # Core identifiers
     hf_path: str
     dir: Optional[str]
@@ -74,6 +76,10 @@ class Llama2CommonKwargs(TypedDict, total=False):
 
 
 def llama2_7b_pretrain_config(**user_kwargs: Unpack[Llama2CommonKwargs]) -> ConfigContainer:
+    """Return a pre-training config for Llama-2 7B.
+
+    See `_llama2_common` for the full list of parameters.
+    """
     recommended_kwargs: Llama2CommonKwargs = {
         "hf_path": "meta-llama/Llama-2-7b-hf",
         "tensor_parallelism": 2,

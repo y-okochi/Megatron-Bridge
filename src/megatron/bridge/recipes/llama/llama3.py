@@ -41,6 +41,8 @@ from megatron.bridge.training.mixed_precision import MixedPrecisionConfig, bf16_
 
 
 class Llama3CommonKwargs(TypedDict, total=False):
+    """Typed options accepted by Llama3 family recipe helpers."""
+
     # Core identifiers
     hf_path: str
     dir: Optional[str]
@@ -86,6 +88,10 @@ SEQUENCE_LENGTH_128K: int = 131072
 
 # Llama3.2 models
 def llama32_1b_pretrain_config(**user_kwargs: Unpack[Llama3CommonKwargs]) -> ConfigContainer:
+    """Return a pre-training config for Llama 3.2 1B.
+
+    See `_llama3_common` for the full list of parameters.
+    """
     recommended_kwargs: Llama3CommonKwargs = {
         "hf_path": "meta-llama/Llama-3.2-1B",
         "tensor_parallelism": 1,
@@ -98,6 +104,10 @@ def llama32_1b_pretrain_config(**user_kwargs: Unpack[Llama3CommonKwargs]) -> Con
 
 
 def llama32_3b_pretrain_config(**user_kwargs: Unpack[Llama3CommonKwargs]) -> ConfigContainer:
+    """Return a pre-training config for Llama 3.2 3B.
+
+    See `_llama3_common` for the full list of parameters.
+    """
     recommended_kwargs: Llama3CommonKwargs = {
         "hf_path": "meta-llama/Llama-3.2-3B",
         "tensor_parallelism": 1,
@@ -111,6 +121,10 @@ def llama32_3b_pretrain_config(**user_kwargs: Unpack[Llama3CommonKwargs]) -> Con
 
 # Llama3 8B models
 def llama3_8b_pretrain_config(**user_kwargs: Unpack[Llama3CommonKwargs]) -> ConfigContainer:
+    """Return a pre-training config for Llama 3 8B.
+
+    See `_llama3_common` for the full list of parameters.
+    """
     recommended_kwargs: Llama3CommonKwargs = {
         "hf_path": "meta-llama/Meta-Llama-3-8B",
         "tensor_parallelism": 1,
@@ -123,6 +137,10 @@ def llama3_8b_pretrain_config(**user_kwargs: Unpack[Llama3CommonKwargs]) -> Conf
 
 
 def llama3_8b_16k_pretrain_config(**user_kwargs: Unpack[Llama3CommonKwargs]) -> ConfigContainer:
+    """Return a pre-training config for Llama 3 8B 16K.
+
+    See `_llama3_common` for the full list of parameters.
+    """
     recommended_kwargs: Llama3CommonKwargs = {
         "hf_path": "meta-llama/Meta-Llama-3-8B",
         "tensor_parallelism": 4,
@@ -137,6 +155,10 @@ def llama3_8b_16k_pretrain_config(**user_kwargs: Unpack[Llama3CommonKwargs]) -> 
 
 
 def llama3_8b_64k_pretrain_config(**user_kwargs: Unpack[Llama3CommonKwargs]) -> ConfigContainer:
+    """Return a pre-training config for Llama 3 8B 64K.
+
+    See `_llama3_common` for the full list of parameters.
+    """
     recommended_kwargs: Llama3CommonKwargs = {
         "hf_path": "meta-llama/Meta-Llama-3-8B",
         "tensor_parallelism": 4,
@@ -151,6 +173,10 @@ def llama3_8b_64k_pretrain_config(**user_kwargs: Unpack[Llama3CommonKwargs]) -> 
 
 
 def llama3_8b_128k_pretrain_config(**user_kwargs: Unpack[Llama3CommonKwargs]) -> ConfigContainer:
+    """Return a pre-training config for Llama 3 8B 128K.
+
+    See `_llama3_common` for the full list of parameters.
+    """
     recommended_kwargs: Llama3CommonKwargs = {
         "hf_path": "meta-llama/Meta-Llama-3-8B",
         "tensor_parallelism": 4,
@@ -166,6 +192,10 @@ def llama3_8b_128k_pretrain_config(**user_kwargs: Unpack[Llama3CommonKwargs]) ->
 
 # Llama3 70B models
 def llama3_70b_pretrain_config(**user_kwargs: Unpack[Llama3CommonKwargs]) -> ConfigContainer:
+    """Return a pre-training config for Llama 3 70B.
+
+    See `_llama3_common` for the full list of parameters.
+    """
     recommended_kwargs: Llama3CommonKwargs = {
         "hf_path": "meta-llama/Meta-Llama-3-70B",
         "tensor_parallelism": 4,
@@ -185,6 +215,10 @@ def llama3_70b_pretrain_config(**user_kwargs: Unpack[Llama3CommonKwargs]) -> Con
 
 
 def llama3_70b_16k_pretrain_config(**user_kwargs: Unpack[Llama3CommonKwargs]) -> ConfigContainer:
+    """Return a pre-training config for Llama 3 70B 16K.
+
+    See `_llama3_common` for the full list of parameters.
+    """
     recommended_kwargs: Llama3CommonKwargs = {
         "hf_path": "meta-llama/Meta-Llama-3-70B",
         "tensor_parallelism": 8,
@@ -205,6 +239,10 @@ def llama3_70b_16k_pretrain_config(**user_kwargs: Unpack[Llama3CommonKwargs]) ->
 
 
 def llama3_70b_64k_pretrain_config(**user_kwargs: Unpack[Llama3CommonKwargs]) -> ConfigContainer:
+    """Return a pre-training config for Llama 3 70B 64K.
+
+    See `_llama3_common` for the full list of parameters.
+    """
     recommended_kwargs: Llama3CommonKwargs = {
         "hf_path": "meta-llama/Meta-Llama-3-70B",
         "tensor_parallelism": 8,
@@ -226,6 +264,10 @@ def llama3_70b_64k_pretrain_config(**user_kwargs: Unpack[Llama3CommonKwargs]) ->
 
 # Llama3.1 models
 def llama31_8b_pretrain_config(**user_kwargs: Unpack[Llama3CommonKwargs]) -> ConfigContainer:
+    """Return a pre-training config for Llama 3.1 8B.
+
+    See `_llama3_common` for the full list of parameters.
+    """
     recommended_kwargs: Llama3CommonKwargs = {
         "hf_path": "meta-llama/Meta-Llama-3.1-8B",
         "tensor_parallelism": 1,
@@ -238,6 +280,10 @@ def llama31_8b_pretrain_config(**user_kwargs: Unpack[Llama3CommonKwargs]) -> Con
 
 
 def llama31_70b_pretrain_config(**user_kwargs: Unpack[Llama3CommonKwargs]) -> ConfigContainer:
+    """Return a pre-training config for Llama 3.1 70B.
+
+    See `_llama3_common` for the full list of parameters.
+    """
     recommended_kwargs: Llama3CommonKwargs = {
         "hf_path": "meta-llama/Meta-Llama-3.1-70B",
         "tensor_parallelism": 4,
@@ -258,6 +304,10 @@ def llama31_70b_pretrain_config(**user_kwargs: Unpack[Llama3CommonKwargs]) -> Co
 
 
 def llama31_405b_pretrain_config(**user_kwargs: Unpack[Llama3CommonKwargs]) -> ConfigContainer:
+    """Return a pre-training config for Llama 3.1 405B.
+
+    See `_llama3_common` for the full list of parameters.
+    """
     recommended_kwargs: Llama3CommonKwargs = {
         "hf_path": "meta-llama/Meta-Llama-3.1-405B",
         "tensor_parallelism": 8,
