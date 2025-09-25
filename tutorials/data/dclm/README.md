@@ -8,6 +8,7 @@ The **DCLM-baseline** dataset contains **4T tokens** across **3B documents**, ac
 
 ---
 
+
 ## Dataset Overview
 
 - The dataset is organized into **10 global shards**: `global-shard_01_of_10` … `global-shard_10_of_10`.  
@@ -22,20 +23,18 @@ The **DCLM-baseline** dataset contains **4T tokens** across **3B documents**, ac
 This tutorial demonstrates preprocessing for a **single local shard**: global-shard_01_of_10/local-shard_0_of_10.
 
 ```bash
-
 python3 download.py \
   --token HF_TOKEN \
   --num_workers 16 \
-  --path_to_save /home/data/dclm \
+  --path_to_save /data/dclm \
   --patterns global-shard_01_of_10/local-shard_0_of_10/**
-
 ```
 
 **Parameters:**
 - `--token` — Hugging Face token for authentication.
 - `--num_workers` — Number of parallel downloads; higher is faster.
 - `--path_to_save` — Target directory for saving the dataset.
-- `--patterns` — Subset of dataset to download. Optional; omit to download the full dataset.
+- `--patterns` — Subset of dataset to download. Ignore this param to download the full dataset.
 
 
 ## Decompressing Dataset
@@ -43,12 +42,10 @@ python3 download.py \
 After downloading, decompress `.zst` files to `.jsonl`:
 
 ```bash
-
 python3 decompress.py \
-  --path_to_save /home/data/dclm/decompressed \
-  --num_workers 32 \
-  --source_dir /home/data/dclm/global-shard_01_of_10/local-shard_0_of_10
-
+  --path_to_save /data/dclm/decompressed \
+  --source_dir /data/dclm/global-shard_01_of_10/local-shard_0_of_10 \
+  --num_workers 32
 ```
 
 > **NOTE:**
@@ -59,4 +56,16 @@ apt update
 apt install parallel
 apt install zstd
 ```
+
+
+## Merging Files
+
+```bash
+python3 merge.py \
+  --path_to_save /data/dclm/decompressed/example.jsonl \
+  --source_dir /home/data/dclm/decompressed
+```
+
+This merges all decompressed `.jsonl` files from `/home/data/dclm/decompressed` into single `.jsonl` file to avoid hundreds of small `.jsonl` files before the preprocessing stage.
+Script automatically removes all small `.jsonl` files after merging, keeping only the combined `/data/dclm/decompressed/example.jsonl` file to save space.
 
