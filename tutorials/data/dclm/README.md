@@ -97,8 +97,15 @@ pip install --no-build-isolation transformer-engine[pytorch]
 git clone https://github.com/NVIDIA/Megatron-LM.git
 ```
 
+Run data preprocessing script:
+
 ```bash
-python3 merge.py \
-  --path_to_save /data/dclm/decompressed/example.jsonl \
-  --source_dir /data/dclm/decompressed
+python3 Megatron-LM/tools/preprocess_data.py \
+  --input /home/data/dclm/decompressed/shuffled.jsonl \
+  --output-prefix /home/data/dclm/preprocessed \
+  --tokenizer-type HuggingFaceTokenizer \
+  --tokenizer-model meta-llama/Meta-Llama-3-8B \
+  --tokenizer-metadata /path/to/metadata \
+  --workers 32 \
+  --append-eod
 ```
