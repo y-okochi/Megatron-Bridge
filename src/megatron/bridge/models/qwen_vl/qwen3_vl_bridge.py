@@ -12,16 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import re
+from typing import Dict, Union
+
 import torch
 import torch.nn as nn
-from typing import Dict, Union
 from transformers import Qwen3VLMoeForConditionalGeneration
 
 from megatron.bridge.models.conversion.mapping_registry import MegatronMappingRegistry
 from megatron.bridge.models.conversion.model_bridge import MegatronModelBridge
 from megatron.bridge.models.conversion.param_mapping import (
     AutoMapping,
-    GatedMLPMapping,
     QKVMapping,
     ReplicatedMapping,
 )
@@ -115,7 +115,6 @@ class Qwen3VLBridge(MegatronModelBridge):
                     k="model.language_model.layers.*.self_attn.k_proj.weight",
                     v="model.language_model.layers.*.self_attn.v_proj.weight",
                 ),
-
                 ExpertMLPGateUpProjMapping(
                     megatron_param="language_model.decoder.layers.*.mlp.experts.linear_fc1.weight*",
                     hf_param="model.language_model.layers.*.mlp.experts.gate_up_proj",
@@ -131,38 +130,31 @@ class Qwen3VLBridge(MegatronModelBridge):
 
 
 class ExpertMLPDownProjMapping(AutoMapping):
-
     def hf_to_megatron(self, hf_weights: torch.Tensor, megatron_module: nn.Module) -> torch.Tensor:
         global_expert_number = extract_expert_number_from_param(self.megatron_param)
-        return super().hf_to_megatron(hf_weights[global_expert_number], megatron_module)
+        return super().hf_to_megatron(hf_weights[global_expert_number].transpose(0, 1), megatron_module)
 
     def megatron_to_hf(self, megatron_weights: torch.Tensor, megatron_module: nn.Module) -> Dict[str, torch.Tensor]:
         if megatron_weights is None:
             return super().megatron_to_hf(megatron_weights, megatron_module)
 
-        if len(megatron_weights.shape) == 2 and isinstance(self.hf_param, str):
-            # for BF16 export
-            megatron_weights = megatron_weights.transpose(0, 1)
-        return super().megatron_to_hf(megatron_weights.contiguous(), megatron_module)
+        return super().megatron_to_hf(megatron_weights.transpose(0, 1).contiguous(), megatron_module)
 
     def _validate_patterns(self, *args, **kwargs):
         # allow number of wildcards to mismatch in this mapping
         pass
 
-class ExpertMLPGateUpProjMapping(AutoMapping):
 
+class ExpertMLPGateUpProjMapping(AutoMapping):
     def hf_to_megatron(self, hf_weights: Union[torch.Tensor, Dict], megatron_module: nn.Module) -> torch.Tensor:
         global_expert_number = extract_expert_number_from_param(self.megatron_param)
-        return super().hf_to_megatron(hf_weights[global_expert_number], megatron_module)
+        return super().hf_to_megatron(hf_weights[global_expert_number].transpose(0, 1), megatron_module)
 
     def megatron_to_hf(self, megatron_weights: torch.Tensor, megatron_module: nn.Module) -> Dict[str, torch.Tensor]:
         if megatron_weights is None:
             return super().megatron_to_hf(megatron_weights, megatron_module)
 
-        # if len(megatron_weights.shape) == 2 and isinstance(self.hf_param, str):
-        #     # for BF16 export
-        #     megatron_weights = megatron_weights.transpose(0, 1)
-        return super().megatron_to_hf(megatron_weights.contiguous(), megatron_module)
+        return super().megatron_to_hf(megatron_weights.transpose(0, 1).contiguous(), megatron_module)
 
     def _validate_patterns(self, *args, **kwargs):
         # allow number of wildcards to mismatch in this mapping
@@ -179,9 +171,10 @@ def extract_expert_number_from_param(param_name: str) -> int:
         The expert number.
 
     """
-    pattern = r'(?:experts\.|weight|bias)(\d+)'
+    pattern = r"(?:experts\.|weight|bias)(\d+)"
     match = re.search(pattern, param_name)
     if not match:
-        raise ValueError(f"No expert number found in parameter name: {param_name}. "
-                         f"Please update the regex {pattern} if necessary.")
+        raise ValueError(
+            f"No expert number found in parameter name: {param_name}. Please update the regex {pattern} if necessary."
+        )
     return int(match.group(1))
