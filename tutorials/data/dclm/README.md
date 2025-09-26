@@ -99,11 +99,11 @@ Run data preprocessing script:
 
 ```bash
 python3 Megatron-LM/tools/preprocess_data.py \
-  --input /home/data/dclm/decompressed/shuffled.jsonl \
-  --output-prefix /home/data/dclm/preprocessed \
+  --input /data/dclm/decompressed/shuffled.jsonl \
+  --output-prefix /data/dclm/preprocessed \
   --tokenizer-type HuggingFaceTokenizer \
   --tokenizer-model meta-llama/Meta-Llama-3-8B \
-  --tokenizer-metadata /path/to/metadata \
+  --log-interval 10000 \
   --workers 32 \
   --append-eod
 ```
