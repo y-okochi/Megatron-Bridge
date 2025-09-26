@@ -30,9 +30,7 @@ def arguments():
         required=True,
         help="Path where to save decompressed files.",
     )
-    parser.add_argument(
-        "--source_dir", type=str, required=True, help="Path to downloaded dataset."
-    )
+    parser.add_argument("--source_dir", type=str, required=True, help="Path to downloaded dataset.")
     parser.add_argument(
         "--num_workers",
         type=int,

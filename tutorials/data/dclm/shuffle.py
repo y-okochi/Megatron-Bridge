@@ -14,7 +14,6 @@
 
 import argparse
 import os
-import shlex
 import subprocess
 import time
 
@@ -78,9 +77,7 @@ def shuffle_data(
 
     end_time = time.time()
     elapsed_minutes = np.round((end_time - start_time) / 60, 0)
-    print(
-        f"File was successfully shuffled into {path_to_save} in {elapsed_minutes} minutes."
-    )
+    print(f"File was successfully shuffled into {path_to_save} in {elapsed_minutes} minutes.")
 
 
 if __name__ == "__main__":

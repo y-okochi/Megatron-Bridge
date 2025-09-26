@@ -75,7 +75,7 @@ def download_dataset(
 ) -> None:
     start_time = time.time()
 
-    print(f"Downloading dataset...")
+    print("Downloading dataset...")
     if isinstance(patterns, str):
         allow_patterns = [patterns]
     else:

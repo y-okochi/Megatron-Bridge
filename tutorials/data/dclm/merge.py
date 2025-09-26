@@ -13,8 +13,6 @@
 # limitations under the License.
 
 import argparse
-import os
-import shlex
 import subprocess
 import time
 
@@ -30,9 +28,7 @@ def arguments():
         required=True,
         help="Path where to save merged file.",
     )
-    parser.add_argument(
-        "--source_dir", type=str, required=True, help="Path to decompressed dataset."
-    )
+    parser.add_argument("--source_dir", type=str, required=True, help="Path to decompressed dataset.")
     parser.add_argument(
         "--remove_small_files",
         action="store_true",
@@ -50,16 +46,14 @@ def merge_data(
     start_time = time.time()
     print("Merging files...")
 
-    cmd = f"cd {source_dir} && " f"awk '1' *.jsonl > {path_to_save}"
+    cmd = f"cd {source_dir} && awk '1' *.jsonl > {path_to_save}"
     if remove_small_files:
         cmd += " && rm shard_*"
     subprocess.run(cmd, shell=True, check=True)
 
     end_time = time.time()
     elapsed_minutes = np.round((end_time - start_time) / 60, 0)
-    print(
-        f"Files were successfully merged into {path_to_save} in {elapsed_minutes} minutes."
-    )
+    print(f"Files were successfully merged into {path_to_save} in {elapsed_minutes} minutes.")
 
 
 if __name__ == "__main__":
