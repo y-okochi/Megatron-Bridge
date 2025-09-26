@@ -427,7 +427,10 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
                 hf_weights = {k: hf_state_dict[v] for k, v in task.mapping.hf_param.items()}
 
             # 2) Delegate conversion & distribution to the bridge
-            converted_weights = task.mapping.hf_to_megatron(hf_weights, task.megatron_module)
+            try:
+                converted_weights = task.mapping.hf_to_megatron(hf_weights, task.megatron_module)
+            except ValueError as e:
+                print(f"###### {torch.distributed} {task.mapping.hf_param} {hf_weights.shape}: {task.mapping.megatron_param} {task.param_weight.shape} ")
 
             # 3) Copy into Megatron param if this rank received a shard
             if converted_weights is not None:
