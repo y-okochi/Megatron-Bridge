@@ -17,7 +17,9 @@ import os
 import shlex
 import subprocess
 import time
+
 import numpy as np
+
 
 def arguments():
     parser = argparse.ArgumentParser()
@@ -29,7 +31,10 @@ def arguments():
         help="Path where to save shuffled file.",
     )
     parser.add_argument(
-        "--source_file", type=str, required=True, help="Path to .jsonl file to be shuffled."
+        "--source_file",
+        type=str,
+        required=True,
+        help="Path to .jsonl file to be shuffled.",
     )
     parser.add_argument(
         "--num_workers",
@@ -58,7 +63,9 @@ def shuffle_data(
 
     source_dir = os.path.dirname(source_file)
     chunks_dir = os.makedirs(os.path.join(source_dir, "chunks"), exist_ok=True)
-    shuffle_chunks_dir = os.makedirs(os.path.join(source_dir, "shuffled_chunks"), exist_ok=True)
+    shuffle_chunks_dir = os.makedirs(
+        os.path.join(source_dir, "shuffled_chunks"), exist_ok=True
+    )
     cmd = (
         f"split -l {lines_per_split} {source_file} {chunks_dir}/chunk_ && "
         f"ls {chunks_dir}/chunk_* | parallel -j{num_workers} "
@@ -71,7 +78,9 @@ def shuffle_data(
 
     end_time = time.time()
     elapsed_minutes = np.round((end_time - start_time) / 60, 0)
-    print(f"File was successfully shuffled into {path_to_save} in {elapsed_minutes} minutes.")
+    print(
+        f"File was successfully shuffled into {path_to_save} in {elapsed_minutes} minutes."
+    )
 
 
 if __name__ == "__main__":

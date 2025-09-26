@@ -12,12 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import time
 import argparse
-import numpy as np
-
+import time
 from typing import Union
 
+import numpy as np
 import requests
 from huggingface_hub import login, snapshot_download
 
@@ -99,7 +98,7 @@ def download_dataset(
                 time.sleep(retry_delay)
             else:
                 raise
-    
+
     end_time = time.time()
     elapsed_minutes = np.round((end_time - start_time) / 60, 0)
     print(f"Dataset was downloaded to {path_to_save} in {elapsed_minutes} minutes.")
