@@ -63,13 +63,11 @@ python3 decompress.py \
 ```bash
 python3 merge.py \
   --path_to_save /data/dclm/decompressed/merged.jsonl \
-  --source_dir /data/dclm/decompressed
+  --source_dir /data/dclm/decompressed \
+  --remove_small_files
 ```
 
 This merges all decompressed `.jsonl` files from `/data/dclm/decompressed` into single `.jsonl` file to avoid hundreds of small `.jsonl` files before the preprocessing stage.
-
-> **NOTE:**
-Script automatically removes all small `.jsonl` files after merging, keeping only the combined file to save space.
 
 
 ## Data Shuffling
