@@ -59,9 +59,10 @@ class Qwen3VLModel(MegatronModule):
 
         # Import here to avoid hard dependency errors if transformers lacks Qwen3
         from transformers.models.qwen3_vl.modeling_qwen3_vl import (
-            Qwen3VLVisionModel,
-            Qwen3VLTextModel,
             Qwen3VLModel as HFQwen3VLModel,
+        )
+        from transformers.models.qwen3_vl.modeling_qwen3_vl import (
+            Qwen3VLVisionModel,
         )
 
         if pre_process:
@@ -120,9 +121,7 @@ class Qwen3VLModel(MegatronModule):
             video_mask = None
 
             if pixel_values is not None:
-                image_embeds, deepstack_image_embeds = self.get_image_features(
-                    pixel_values, image_grid_thw
-                )
+                image_embeds, deepstack_image_embeds = self.get_image_features(pixel_values, image_grid_thw)
                 image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
                 image_mask, _ = self.get_placeholder_mask(
                     input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
@@ -130,9 +129,7 @@ class Qwen3VLModel(MegatronModule):
                 inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
             if pixel_values_videos is not None:
-                video_embeds, deepstack_video_embeds = self.get_video_features(
-                    pixel_values_videos, video_grid_thw
-                )
+                video_embeds, deepstack_video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw)
                 video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
                 _, video_mask = self.get_placeholder_mask(
                     input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
@@ -184,5 +181,3 @@ class Qwen3VLModel(MegatronModule):
         for module in modules:
             for param in module.parameters():
                 param.requires_grad = False
-
-

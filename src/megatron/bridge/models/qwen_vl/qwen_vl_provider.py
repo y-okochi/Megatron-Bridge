@@ -22,8 +22,8 @@ from megatron.bridge.models import (
     Qwen2ModelProvider,
     Qwen3MoEModelProvider,
 )
-from . import Qwen3VLModel
 
+from . import Qwen3VLModel
 from .modeling_qwen25_vl import Qwen25VLModel
 
 
