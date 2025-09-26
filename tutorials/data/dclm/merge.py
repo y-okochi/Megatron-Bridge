@@ -20,6 +20,7 @@ import numpy as np
 
 
 def arguments():
+    """Argument parser"""
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
@@ -43,6 +44,13 @@ def merge_data(
     source_dir: str,
     remove_small_files: bool = True,
 ) -> None:
+    """Merges hundreds of small .jsonl files into single .json file.
+    
+    Args:
+        path_to_save (str): path where to save merged file.
+        source_dir (str): path to decompressed dataset.
+        remove_small_files (bool): whether to remove small .jsonl files after merging.
+    """
     start_time = time.time()
     print("Merging files...")
 

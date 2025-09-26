@@ -22,6 +22,7 @@ from huggingface_hub import login, snapshot_download
 
 
 def arguments():
+    """Argument parser"""
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--token", type=str, required=True, help="HF access token.")
@@ -73,6 +74,16 @@ def download_dataset(
     resume_download: bool = True,
     patterns: Union[str | list] = "*.jsonl.zst",
 ) -> None:
+    """Downloads DCLM dataset from HF
+    
+    Args:
+        path_to_save (str): path where to save downloaded dataset.
+        num_workers (int): number of workers to be used for parallel downloading.
+        max_retries (int): max number of donwload retries when error has been reached.
+        retry_delay (int): delay in seconds between code retries.
+        resume_download (bool): whether to resume download from latest saved datafile.
+        patterns (Union[str|list]): patterns to download specific subdataset.
+    """
     start_time = time.time()
 
     print("Downloading dataset...")
