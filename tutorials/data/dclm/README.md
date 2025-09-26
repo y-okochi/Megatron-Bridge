@@ -84,7 +84,7 @@ python3 shuffle.py \
 
 ## Preprocessing to bin/idx format
 
-This step will convert the merged `.jsonl` files into a bin/idx format for training. It requires Megatron-LM to be installed:
+This step will convert the merged `.jsonl` files into a `bin/idx` format for training. It requires Megatron-LM to be installed:
 
 ```bash
 # 1. Install Megatron Core with required dependencies
