@@ -16,6 +16,8 @@ import argparse
 import os
 import shlex
 import subprocess
+import time
+import numpy as np
 
 
 def arguments():
@@ -40,14 +42,19 @@ def arguments():
 def merge_data(
     path_to_save: str,
     source_dir: str,
-    remove_small_files: bool,
+    remove_small_files: bool = True,
 ) -> None:
+    start_time = time.time()
+    print("Merging files...")
+    
     cmd = f"cd {source_dir} && " f"awk '1' *.jsonl > {path_to_save}"
     if remove_small_files:
         cmd += " && rm shard_*"
-
-    print("Merging files...")
     subprocess.run(cmd, shell=True, check=True)
+
+    end_time = time.time()
+    elapsed_minutes = np.round((end_time - start_time) / 60, 0)
+    print(f"Files were successfully merged into {path_to_save} in {elapsed_minutes} minutes.")
 
 
 if __name__ == "__main__":

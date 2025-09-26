@@ -19,7 +19,6 @@ import subprocess
 import time
 import numpy as np
 
-
 def arguments():
     parser = argparse.ArgumentParser()
 
@@ -27,45 +26,60 @@ def arguments():
         "--path_to_save",
         type=str,
         required=True,
-        help="Path where to save decompressed files.",
+        help="Path where to save shuffled file.",
     )
     parser.add_argument(
-        "--source_dir", type=str, required=True, help="Path to downloaded dataset."
+        "--source_file", type=str, required=True, help="Path to .jsonl file to be shuffled."
     )
     parser.add_argument(
         "--num_workers",
         type=int,
         default=1,
-        help="Number of workers to be used to decompress data.",
+        help="Number of workers to be used to shuffle data.",
+    )
+    parser.add_argument(
+        "--lines_per_split",
+        type=int,
+        default=1000000,
+        help="Number lines per every splitted file.",
     )
 
     return parser
 
 
-def decompress_data(path_to_save: str, source_dir: str, num_workers: int = 1) -> None:
+def shuffle_data(
+    path_to_save: str,
+    source_file: str,
+    num_workers: int = 1,
+    lines_per_split: int = 1000000,
+) -> None:
     start_time = time.time()
-    print("Decompressing files...")
+    print("Shuffling file...")
 
-    os.makedirs(path_to_save, exist_ok=True)
+    source_dir = os.path.dirname(source_file)
+    chunks_dir = os.makedirs(os.path.join(source_dir, "chunks"), exist_ok=True)
+    shuffle_chunks_dir = os.makedirs(os.path.join(source_dir, "shuffled_chunks"), exist_ok=True)
     cmd = (
-        f"mkdir -p {shlex.quote(path_to_save)} && "
-        f"cd {shlex.quote(source_dir)} && "
-        f'find . -name "*.zst" | '
-        f"parallel -j{num_workers} "
-        '"zstd -d {} -o ' + shlex.quote(path_to_save) + '/{.}"'
+        f"split -l {lines_per_split} {source_file} {chunks_dir}/chunk_ && "
+        f"ls {chunks_dir}/chunk_* | parallel -j{num_workers} "
+        f"'shuf {{}} -o {shuffle_chunks_dir}/$(basename {{}})_shuf' && "
+        f"rm -rf {chunks_dir} && "
+        f"awk '1' {shuffle_chunks_dir}/chunk_* > {path_to_save} && "
+        f"rm -rf {shuffle_chunks_dir}"
     )
     subprocess.run(cmd, shell=True, check=True)
 
     end_time = time.time()
     elapsed_minutes = np.round((end_time - start_time) / 60, 0)
-    print(f"Files were successfully decompressed in {elapsed_minutes} minutes.")
+    print(f"File was successfully shuffled into {path_to_save} in {elapsed_minutes} minutes.")
 
 
 if __name__ == "__main__":
     args = arguments().parse_args()
 
-    decompress_data(
+    shuffle_data(
         path_to_save=args.path_to_save,
-        source_dir=args.source_dir,
+        source_file=args.source_file,
         num_workers=args.num_workers,
+        lines_per_split=args.lines_per_split,
     )

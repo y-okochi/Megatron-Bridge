@@ -39,15 +39,6 @@ python3 download.py \
 
 ## Decompressing Dataset
 
-After downloading, decompress `.zst` files to `.jsonl`:
-
-```bash
-python3 decompress.py \
-  --path_to_save /data/dclm/decompressed \
-  --source_dir /data/dclm/global-shard_01_of_10/local-shard_0_of_10 \
-  --num_workers 32
-```
-
 > **NOTE:**
 Dependencies: parallel and zstd may need to be installed:
 
@@ -55,6 +46,15 @@ Dependencies: parallel and zstd may need to be installed:
 apt update
 apt install parallel
 apt install zstd
+```
+
+After downloading, decompress `.zst` files to `.jsonl`:
+
+```bash
+python3 decompress.py \
+  --path_to_save /data/dclm/decompressed \
+  --source_dir /data/dclm/global-shard_01_of_10/local-shard_0_of_10 \
+  --num_workers 32
 ```
 
 
@@ -74,4 +74,19 @@ Script automatically removes all small `.jsonl` files after merging, keeping onl
 
 ## Preprocessing to bin/idx format
 
-This step will convert the merged `.jsonl` files into a bin/idx format for training.
+This step will convert the merged `.jsonl` files into a bin/idx format for training. It requires Megatron-LM to be installed:
+
+```bash
+# 1. Install Megatron Core with required dependencies
+pip install megatron-core
+pip install --no-build-isolation transformer-engine[pytorch]
+
+# 2. Clone repository for examples
+git clone https://github.com/NVIDIA/Megatron-LM.git
+```
+
+```bash
+python3 merge.py \
+  --path_to_save /data/dclm/decompressed/example.jsonl \
+  --source_dir /data/dclm/decompressed
+```

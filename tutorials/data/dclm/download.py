@@ -12,7 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import time
 import argparse
+import numpy as np
+
 from typing import Union
 
 import requests
@@ -71,8 +74,9 @@ def download_dataset(
     resume_download: bool = True,
     patterns: Union[str | list] = "*.jsonl.zst",
 ) -> None:
-    print(f"Downloading dataset...")
+    start_time = time.time()
 
+    print(f"Downloading dataset...")
     if isinstance(patterns, str):
         allow_patterns = [patterns]
     else:
@@ -95,7 +99,10 @@ def download_dataset(
                 time.sleep(retry_delay)
             else:
                 raise
-    print(f"Dataset downloaded to {path_to_save}")
+    
+    end_time = time.time()
+    elapsed_minutes = np.round((end_time - start_time) / 60, 0)
+    print(f"Dataset was downloaded to {path_to_save} in {elapsed_minutes} minutes.")
 
 
 if __name__ == "__main__":
