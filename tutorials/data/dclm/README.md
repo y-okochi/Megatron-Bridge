@@ -62,7 +62,7 @@ python3 decompress.py \
 
 ```bash
 python3 merge.py \
-  --path_to_save /data/dclm/decompressed/example.jsonl \
+  --path_to_save /data/dclm/decompressed/merged.jsonl \
   --source_dir /data/dclm/decompressed
 ```
 
@@ -70,6 +70,18 @@ This merges all decompressed `.jsonl` files from `/data/dclm/decompressed` into 
 
 > **NOTE:**
 Script automatically removes all small `.jsonl` files after merging, keeping only the combined file to save space.
+
+
+## Data Shuffling
+
+Script shuffles merged .jsonl file from previous data preparation step.
+
+```bash
+python3 shuffle.py \
+  --path_to_save /data/dclm/decompressed/shuffled.jsonl \
+  --source_file /data/dclm/decompressed/merged.jsonl \
+  --num_workers 16
+```
 
 
 ## Preprocessing to bin/idx format
