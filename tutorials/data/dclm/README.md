@@ -72,7 +72,7 @@ python3 merge.py \
 
 ## Data Shuffling
 
-Script shuffles merged .jsonl file from previous data preparation step.
+Script shuffles merged `.jsonl` file from previous data preparation step.
 
 ```bash
 python3 shuffle.py \
