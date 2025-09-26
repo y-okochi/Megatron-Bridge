@@ -25,7 +25,7 @@ This tutorial demonstrates preprocessing for a **single local shard**: global-sh
 ```bash
 python3 download.py \
   --token HF_TOKEN \
-  --num_workers 16 \
+  --num_workers 32 \
   --path_to_save /data/dclm \
   --patterns global-shard_01_of_10/local-shard_0_of_10/**
 ```
@@ -70,3 +70,8 @@ This merges all decompressed `.jsonl` files from `/data/dclm/decompressed` into 
 
 > **NOTE:**
 Script automatically removes all small `.jsonl` files after merging, keeping only the combined file to save space.
+
+
+## Preprocessing to bin/idx format
+
+This step will convert the merged `.jsonl` files into a bin/idx format for training.

@@ -30,6 +30,9 @@ def arguments():
     parser.add_argument(
         "--source_dir", type=str, required=True, help="Path to decompressed dataset."
     )
+    parser.add_argument(
+        "--remove_small_files", action="store_true", help="Removes small files after merging."
+    )
 
     return parser
 
@@ -37,8 +40,11 @@ def arguments():
 def merge_data(
     path_to_save: str,
     source_dir: str,
+    remove_small_files: bool,
 ) -> None:
-    cmd = f"cd {source_dir} && " f"cat *.jsonl > {path_to_save} && " "rm shard_*"
+    cmd = f"cd {source_dir} && " f"awk '1' *.jsonl > {path_to_save}"
+    if remove_small_files:
+        cmd += " && rm shard_*"
 
     print("Merging files...")
     subprocess.run(cmd, shell=True, check=True)
@@ -50,4 +56,5 @@ if __name__ == "__main__":
     merge_data(
         path_to_save=args.path_to_save,
         source_dir=args.source_dir,
+        remove_small_files=args.remove_small_files,
     )
