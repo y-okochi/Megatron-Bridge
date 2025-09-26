@@ -52,6 +52,7 @@ class Qwen3VLBridge(MegatronModelBridge):
             ffn_hidden_size=text_cfg.intermediate_size,
             moe_ffn_hidden_size=getattr(text_cfg, "moe_intermediate_size", None),
             num_attention_heads=text_cfg.num_attention_heads,
+            kv_channels=getattr(text_cfg, "head_dim", text_cfg.hidden_size // text_cfg.num_attention_heads),
             num_query_groups=text_cfg.num_key_value_heads,
             num_moe_experts=getattr(text_cfg, "num_experts", None),
             moe_router_topk=getattr(text_cfg, "num_experts_per_tok", None),
