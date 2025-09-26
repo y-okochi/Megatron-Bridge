@@ -59,14 +59,13 @@ def shuffle_data(
     lines_per_split: int = 1000000,
 ) -> None:
     """Merges hundreds of small .jsonl files into single .json file.
-    
+
     Args:
         path_to_save (str): path where to save shuffled file.
         source_file (str): path to merged file.
         num_workers (int): number of workers to be used for parallel shuffling.
         lines_per_split (int): lines per file to split for parallel shuffling.
     """
-
     start_time = time.time()
     print("Shuffling file...")
 

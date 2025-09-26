@@ -75,7 +75,7 @@ def download_dataset(
     patterns: Union[str | list] = "*.jsonl.zst",
 ) -> None:
     """Downloads DCLM dataset from HF
-    
+
     Args:
         path_to_save (str): path where to save downloaded dataset.
         num_workers (int): number of workers to be used for parallel downloading.
@@ -84,7 +84,6 @@ def download_dataset(
         resume_download (bool): whether to resume download from latest saved datafile.
         patterns (Union[str|list]): patterns to download specific subdataset.
     """
-
     start_time = time.time()
 
     print("Downloading dataset...")
