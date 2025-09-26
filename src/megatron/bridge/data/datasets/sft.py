@@ -691,7 +691,9 @@ class GPTSFTDataset(Dataset):
         if self.pad_to_max_length:
             max_length = self.max_sequence_length
         else:
-            max_length = min(self.max_sequence_length, self._ceil_to_nearest(max_length, self.pad_sequence_length_to_mult))
+            max_length = min(
+                self.max_sequence_length, self._ceil_to_nearest(max_length, self.pad_sequence_length_to_mult)
+            )
         assert max_length <= self.max_sequence_length
 
         if not self.get_attention_mask_from_fusion:
@@ -876,7 +878,9 @@ class GPTSFTPackedDataset(GPTSFTDataset):
             # for many datasets in practice, all packed sequence lengths are very close to the
             # target length (2048, 4096, 8192), so there is very minimal padding
             max_length = max(len(length) for length in input_ids)
-            max_length = min(self.max_sequence_length, self._ceil_to_nearest(max_length, self.pad_sequence_length_to_mult))
+            max_length = min(
+                self.max_sequence_length, self._ceil_to_nearest(max_length, self.pad_sequence_length_to_mult)
+            )
         assert max_length <= self.max_sequence_length
 
         position_ids: List[List[int]] = []
