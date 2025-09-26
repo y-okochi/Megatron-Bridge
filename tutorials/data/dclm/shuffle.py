@@ -62,10 +62,10 @@ def shuffle_data(
     print("Shuffling file...")
 
     source_dir = os.path.dirname(source_file)
-    chunks_dir = os.makedirs(os.path.join(source_dir, "chunks"), exist_ok=True)
-    shuffle_chunks_dir = os.makedirs(
-        os.path.join(source_dir, "shuffled_chunks"), exist_ok=True
-    )
+    chunks_dir = os.path.join(source_dir, "chunks")
+    os.makedirs(chunks_dir, exist_ok=True)
+    shuffle_chunks_dir = os.path.join(source_dir, "shuffled_chunks")
+    os.makedirs(shuffle_chunks_dir, exist_ok=True)
     cmd = (
         f"split -l {lines_per_split} {source_file} {chunks_dir}/chunk_ && "
         f"ls {chunks_dir}/chunk_* | parallel -j{num_workers} "
