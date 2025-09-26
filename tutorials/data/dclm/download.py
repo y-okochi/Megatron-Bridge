@@ -84,6 +84,7 @@ def download_dataset(
         resume_download (bool): whether to resume download from latest saved datafile.
         patterns (Union[str|list]): patterns to download specific subdataset.
     """
+
     start_time = time.time()
 
     print("Downloading dataset...")

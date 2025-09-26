@@ -50,6 +50,7 @@ def decompress_data(path_to_save: str, source_dir: str, num_workers: int = 1) ->
         source_dir (str): path to downloaded dataset.
         num_workers (int): number of workers to be used for parallel decompressing.
     """
+
     start_time = time.time()
     print("Decompressing files...")
 

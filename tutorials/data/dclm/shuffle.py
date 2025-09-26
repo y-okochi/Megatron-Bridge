@@ -66,6 +66,7 @@ def shuffle_data(
         num_workers (int): number of workers to be used for parallel shuffling.
         lines_per_split (int): lines per file to split for parallel shuffling.
     """
+
     start_time = time.time()
     print("Shuffling file...")
 

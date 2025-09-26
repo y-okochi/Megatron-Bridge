@@ -51,6 +51,7 @@ def merge_data(
         source_dir (str): path to decompressed dataset.
         remove_small_files (bool): whether to remove small .jsonl files after merging.
     """
+
     start_time = time.time()
     print("Merging files...")
 
