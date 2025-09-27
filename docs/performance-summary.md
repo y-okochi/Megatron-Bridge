@@ -2,17 +2,7 @@
 
 This page provides performance benchmarks for large language models using Megatron-Bridge across different GPU systems and configurations.
 
-## Performance Summary for Large Language Models
-
-Below are performance benchmarks for various large language models. These results were obtained using a version of the performance recipes available [here](https://github.com/NVIDIA/Megatron-Bridge/tree/main/scripts/performance).
-
-The performance data includes:
-
-- **Pre-training Performance**: Throughput metrics for various model sizes and architectures
-- **System Configurations**: Results across different GPU systems (DGX-GB200, DGX-B200, DGX-H100)
-- **Precision Options**: Performance comparisons between different precision modes (BF16, FP8, MXFP8)
-
-### Nomenclature
+## Nomenclature
 
 - **GBS**: Global Batch Size
 - **MBS**: Micro Batch Size
@@ -26,12 +16,41 @@ The performance data includes:
 - **EP**: Expert Parallel Size
 - **GA**: Number of Gradient Accumulations
 
-### Performance Metrics
+## Performance Metrics
 
 Performance is measured using:
 - **Tokens/sec/GPU**: Throughput per GPU
 - **Model TFLOP/sec/GPU**: Model floating-point operations per second per GPU
 
+```{contents}
+:local:
+:depth: 2
+```
+
+## Performance Summary for Large Language Models
+
+Below are performance benchmarks for various large language models organized by release version. These results were obtained using performance recipes available [here](https://github.com/NVIDIA/Megatron-Bridge/tree/main/scripts/performance).
+
+The performance data includes:
+
+- **Pre-training Performance**: Throughput metrics for various model sizes and architectures
+- **System Configurations**: Results across different GPU systems (DGX-GB200, DGX-B200, DGX-H100)
+- **Precision Options**: Performance comparisons between different precision modes (BF16, FP8, MXFP8)
+
+---
+
+## 25.09 NeMo Container
+
 ### Pre-Training Performance
 
-Coming soon..
+#### System: DGX-GB200
+
+*Performance tables will be added here*
+
+#### System: DGX-B200
+
+*Performance tables will be added here*
+
+#### System: DGX-H100
+
+*Performance tables will be added here*
