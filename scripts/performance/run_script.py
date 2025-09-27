@@ -49,7 +49,7 @@ def main():
     elif args.model_name == "llama31" and args.model_size == "405b":
         recipe = llama31_405b_pretrain_config(mock=True, precision_config=precision_config)
     elif args.model_name == "deepseek" and args.model_size == "v3":
-        enable_deepep = bool(args.gpu.lower() in ["h100"])
+        enable_deepep = bool(args.gpu.lower() in ["h100", "b200"])
         recipe = deepseek_v3_pretrain_config(
             mock=True,
             precision_config=precision_config,
