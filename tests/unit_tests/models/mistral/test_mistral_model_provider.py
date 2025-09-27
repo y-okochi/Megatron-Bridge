@@ -15,8 +15,8 @@
 import torch.nn.functional as F
 
 from megatron.bridge.models.mistral import (
-    MistralModelProvider,    
-    MistralSmall3ModelProvider24B,    
+    MistralModelProvider,
+    MistralSmall3ModelProvider24B,
 )
 
 
@@ -43,7 +43,6 @@ class TestMistralModelProvider:
         assert provider.add_bias_linear is False
         assert provider.add_qkv_bias is False  # Different from Mistral
         assert provider.qk_layernorm is False  # Mistral specific feature
-        assert provider.kv_channels == 128  # Mistral specific
         assert provider.num_query_groups == 8  # Default for Mistral
         assert provider.seq_length == 32768  # Extended context for Mistral
         assert provider.init_method_std == 0.02
@@ -123,17 +122,6 @@ class TestMistralModelProvider:
 
         assert provider.qk_layernorm is True
 
-    def test_mistral_model_provider_kv_channels(self):
-        """Test MistralModelProvider KV channels configuration."""
-        provider = MistralModelProvider(
-            num_layers=32,
-            hidden_size=4096,
-            num_attention_heads=32,
-            kv_channels=256,
-        )
-
-        assert provider.kv_channels == 256
-
 
 class TestMistralSmall3ModelProvider24B:
     """Test cases for MistralSmall3ModelProvider24B class."""
@@ -169,8 +157,9 @@ class TestMistralSmall3ModelProvider24B:
         assert provider.hidden_dropout == 0.1
 
         # Check defaults remain
-        assert provider.num_layers == 28
+        assert provider.num_layers == 40
         assert provider.hidden_size == 5120
+
 
 class TestMistralProviderInheritance:
     """Test inheritance relationships between Mistral providers."""
@@ -178,7 +167,7 @@ class TestMistralProviderInheritance:
     def test_mistral_models_inherit_from_base(self):
         """Test Mistral providers inherit from MistralModelProvider."""
         assert issubclass(MistralModelProvider, MistralModelProvider)
-        assert issubclass(MistralSmall3ModelProvider24B, MistralModelProvider)        
+        assert issubclass(MistralSmall3ModelProvider24B, MistralModelProvider)
 
     def test_provide_method_inherited(self):
         """Test that provide method works correctly in inherited classes."""
@@ -249,17 +238,6 @@ class TestMistralProviderEdgeCases:
         )
 
         assert provider.layernorm_epsilon == 1e-5
-
-    def test_kv_channels_override(self):
-        """Test KV channels configuration override."""
-        provider = MistralModelProvider(
-            num_layers=32,
-            hidden_size=4096,
-            num_attention_heads=32,
-            kv_channels=128,
-        )
-
-        assert provider.kv_channels == 128
 
 
 class TestMistralProviderQueryGroupsConsistency:

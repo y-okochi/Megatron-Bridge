@@ -18,7 +18,8 @@ from pathlib import Path
 
 import pytest
 import torch
-from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoConfig, AutoTokenizer, MistralForCausalLM
+
 
 HF_MISTRAL_TOY_MODEL_CONFIG = {
     "architectures": ["MistralForCausalLM"],
@@ -32,7 +33,7 @@ HF_MISTRAL_TOY_MODEL_CONFIG = {
     "max_position_embeddings": 32768,
     "model_type": "mistral",
     "num_attention_heads": 32,
-    "num_hidden_layers": 32,
+    "num_hidden_layers": 2,
     "num_key_value_heads": 8,
     "rms_norm_eps": 1e-05,
     "rope_theta": 1000000.0,
@@ -66,11 +67,13 @@ class TestMistralConversion:
         model_dir = temp_dir / "mistral_toy"
 
         # Create Mistral config from the toy model config
-        config = AutoConfig(**HF_MISTRAL_TOY_MODEL_CONFIG)
+        config = AutoConfig.from_pretrained("mistralai/Mistral-7B-Instruct-v0.3", trust_remote_code=True)
+        for k, v in HF_MISTRAL_TOY_MODEL_CONFIG.items():
+            setattr(config, k, v)
         config.torch_dtype = torch.bfloat16  # Explicitly set the torch_dtype in config
 
         # Create model with random weights and convert to bfloat16
-        model = AutoModelForCausalLM(config)
+        model = MistralForCausalLM(config)
         model = model.bfloat16()  # Use .bfloat16() method instead of .to()
 
         # Debug: Check model dtype before saving
@@ -147,7 +150,7 @@ class TestMistralConversion:
 
         # Try loading the model to verify it's valid
         try:
-            model = AutoModelForCausalLM.from_pretrained(
+            model = MistralForCausalLM.from_pretrained(
                 mistral_toy_model_path,
                 torch_dtype=torch.bfloat16,
                 low_cpu_mem_usage=False,  # Ensure full loading
