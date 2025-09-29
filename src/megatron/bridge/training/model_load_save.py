@@ -363,7 +363,7 @@ def save_megatron_model(
         >>> save_megatron_model(
         ...     megatron_model,
         ...     "./megatron_checkpoint",
-        ...     hf_tokenizer_path="meta-llama/Llama-3-8B"
+        ...     hf_tokenizer_path="meta-llama/Meta-Llama-3-8B"
         ... )
 
     Note:

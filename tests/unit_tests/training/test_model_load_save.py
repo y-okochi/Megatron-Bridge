@@ -461,7 +461,7 @@ class TestSaveMegatronModel:
         # Test with tokenizer path
         with tempfile.TemporaryDirectory() as temp_dir:
             save_megatron_model(
-                [mock_model], temp_dir, ckpt_format="torch_dist", hf_tokenizer_path="meta-llama/Llama-3-8B"
+                [mock_model], temp_dir, ckpt_format="torch_dist", hf_tokenizer_path="meta-llama/Meta-Llama-3-8B"
             )
 
         # Assertions
@@ -474,7 +474,7 @@ class TestSaveMegatronModel:
         assert "tokenizer" in call_kwargs
         tokenizer_config = call_kwargs["tokenizer"]
         assert tokenizer_config.tokenizer_type == "HuggingFaceTokenizer"
-        assert tokenizer_config.tokenizer_model == "meta-llama/Llama-3-8B"
+        assert tokenizer_config.tokenizer_model == "meta-llama/Meta-Llama-3-8B"
         assert tokenizer_config.vocab_size is None
 
         mock_save_checkpoint.assert_called_once_with(
