@@ -12,6 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+#
+# Test purpose:
+# - Parametrize over all exported Qwen recipe functions in `megatron.bridge.recipes.qwen`.
+# - For each recipe, monkeypatch `AutoBridge` with a lightweight fake to avoid I/O.
+# - Build a config with small, safe overrides and assert it forms a valid `ConfigContainer`.
+# - Verify tokenizer selection honors `use_null_tokenizer`, and sanity-check parallelism fields.
+#
+
 import importlib
 from typing import Callable, List
 
