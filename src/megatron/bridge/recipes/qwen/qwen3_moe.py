@@ -72,6 +72,7 @@ class Qwen3MoeCommonKwargs(TypedDict, total=False):
     lr: float
     min_lr: float
     lr_warmup_iters: int
+    lr_decay_iters: Optional[int]
     eval_interval: int
     save_interval: int
     use_null_tokenizer: bool
@@ -154,6 +155,7 @@ def _qwen3_moe_common(
     lr: float = 3e-4,
     min_lr: float = 3e-5,
     lr_warmup_iters: int = 500,
+    lr_decay_iters: Optional[int] = None,
     eval_interval: int = 500,
     save_interval: int = 500,
     use_null_tokenizer: bool = False,
@@ -194,6 +196,7 @@ def _qwen3_moe_common(
         lr (float): Learning rate.
         min_lr (float): Minimum learning rate for cosine decay.
         lr_warmup_iters (int): Number of warmup iterations for the learning rate.
+        lr_decay_iters (Optional[int]): Number of iterations over which to decay the LR.
         precision_config (Optional[Union[MixedPrecisionConfig, str]]): Precision configuration for the model.
         comm_overlap_config (Optional[CommOverlapConfig]): Communication overlap configuration.
 
@@ -240,7 +243,7 @@ def _qwen3_moe_common(
 
     opt_config, scheduler = distributed_fused_adam_with_cosine_annealing(
         lr_warmup_iters=lr_warmup_iters,
-        lr_decay_iters=train_iters,
+        lr_decay_iters=lr_decay_iters,
         max_lr=lr,
         min_lr=min_lr,
     )
