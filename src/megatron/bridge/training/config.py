@@ -25,7 +25,7 @@ from megatron.core.optimizer import OptimizerConfig as MCoreOptimizerConfig
 
 from megatron.bridge.data.datasets.packed_sequence import PackedSequenceSpecs
 from megatron.bridge.models import GPTModelProvider, T5ModelProvider
-from megatron.bridge.models.mamba.mamba_provider import MambaProvider
+from megatron.bridge.models.mamba.mamba_provider import MambaModelProvider
 from megatron.bridge.peft.base import PEFT
 from megatron.bridge.training.comm_overlap import CommOverlapConfig
 from megatron.bridge.training.deepep import validate_deepep
@@ -869,7 +869,7 @@ class ConfigContainer(Container):
     rng: RNGConfig = field(default_factory=RNGConfig)
     rerun_state_machine: RerunStateMachineConfig = field(default_factory=RerunStateMachineConfig)
     train: TrainingConfig
-    model: GPTModelProvider | T5ModelProvider | MambaProvider
+    model: GPTModelProvider | T5ModelProvider | MambaModelProvider
     optimizer: OptimizerConfig
     ddp: DistributedDataParallelConfig = field(default_factory=DistributedDataParallelConfig)
     scheduler: SchedulerConfig
@@ -987,15 +987,13 @@ class ConfigContainer(Container):
             self.dist.use_megatron_fsdp = True
             self.ddp.use_megatron_fsdp = True
 
+            assert not self.dist.use_tp_pp_dp_mapping, "use_tp_pp_dp_mapping is not supported with Megatron FSDP"
+
             if self.checkpoint.save is not None or self.checkpoint.load is not None:
                 # only check if saving or loading
                 assert self.checkpoint.ckpt_format == "fsdp_dtensor", (
                     "Megatron FSDP only supports fsdp_dtensor checkpoint format"
                 )
-
-            if self.model.gradient_accumulation_fusion:
-                print_rank_0("Gradient accumulation fusion is not supported with Megatron FSDP, setting to False")
-                self.model.gradient_accumulation_fusion = False
 
             if self.ddp.average_in_collective:
                 print_rank_0("average_in_collective is not supported with Megatron FSDP, setting to True")
@@ -1037,7 +1035,7 @@ class ConfigContainer(Container):
         if self.scheduler.lr_wsd_decay_iters is not None:
             self.scheduler.wsd_decay_steps = self.scheduler.lr_wsd_decay_iters * self.train.global_batch_size
         if self.scheduler.lr_warmup_fraction is not None:
-            self.scheduler.lr_warmup_steps = self.scheduler.lr_warmup_fraction * self.scheduler.lr_decay_iters
+            self.scheduler.lr_warmup_steps = self.scheduler.lr_warmup_fraction * self.scheduler.lr_decay_steps
         else:
             self.scheduler.lr_warmup_steps = self.scheduler.lr_warmup_iters * self.train.global_batch_size
 

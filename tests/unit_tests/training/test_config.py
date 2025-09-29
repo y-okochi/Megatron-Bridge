@@ -586,7 +586,7 @@ class TestConfigContainerValidation:
         try:
             container.validate()
             # lr_decay_iters in scheduler_config defaults to train_config.train_iters
-            expected_lr_warmup_steps = lr_warmup_fraction * train_cfg.train_iters
+            expected_lr_warmup_steps = lr_warmup_fraction * train_cfg.train_iters * train_cfg.global_batch_size
             assert container.scheduler.lr_warmup_steps == expected_lr_warmup_steps
         finally:
             restore_get_world_size_safe(og_ws, cfg_mod)
@@ -622,7 +622,7 @@ class TestConfigContainerValidation:
         )
         try:
             container.validate()
-            expected_lr_warmup_steps = lr_warmup_fraction * train_cfg.train_iters
+            expected_lr_warmup_steps = lr_warmup_fraction * train_cfg.train_iters * train_cfg.global_batch_size
             assert container.scheduler.lr_warmup_steps == expected_lr_warmup_steps
         finally:
             restore_get_world_size_safe(og_ws, cfg_mod)
@@ -898,7 +898,7 @@ class TestConfigContainerValidation:
             container.model.gradient_accumulation_fusion = True
             container.ddp.average_in_collective = True
             container.validate()
-            assert container.model.gradient_accumulation_fusion is False
+            assert container.model.gradient_accumulation_fusion is True
             assert container.ddp.average_in_collective is False
         finally:
             restore_get_world_size_safe(og_ws, cfg_mod)
@@ -919,6 +919,26 @@ class TestConfigContainerValidation:
         )
         try:
             with pytest.raises(ValueError):
+                container.validate()
+        finally:
+            restore_get_world_size_safe(og_ws, cfg_mod)
+
+    def test_megatron_fsdp_config_with_dp_last_dim(self, monkeypatch):
+        """Test MegatronFSDP config with use_tp_pp_dp_mapping, should raise ValueError."""
+        gpt_model_cfg = create_test_gpt_config()
+        train_cfg = create_test_training_config(train_iters=500, global_batch_size=16)
+        sched_cfg = create_test_scheduler_config()
+        dist_cfg = create_test_distributed_init_config(use_megatron_fsdp=True, use_tp_pp_dp_mapping=True)
+
+        container, og_ws, cfg_mod = create_test_config_container(
+            world_size_override=1,
+            model_config=gpt_model_cfg,
+            train_config=train_cfg,
+            scheduler_config=sched_cfg,
+            dist_config=dist_cfg,
+        )
+        try:
+            with pytest.raises(AssertionError):
                 container.validate()
         finally:
             restore_get_world_size_safe(og_ws, cfg_mod)
