@@ -66,7 +66,7 @@ def get_batch_from_iterator(
         required_host_keys.add("max_seqlen")
 
     if parallel_state.is_pipeline_first_stage() or use_mtp:
-        required_device_keys.update(("tokens", "position_ids"))
+        required_device_keys.update(("tokens", "input_ids", "position_ids"))
     if parallel_state.is_pipeline_last_stage():
         required_device_keys.update(("labels", "loss_mask"))
 
@@ -134,8 +134,9 @@ def get_batch(
     if image_grid_thw is not None:
         batch["image_grid_thw"] = image_grid_thw
 
+    assert batch.get("tokens") is not None or batch.get("input_ids") is not None, "tokens or input_ids must be present"
     return (
-        batch["tokens"],
+        batch.get("tokens") or batch.get("input_ids"),
         batch["labels"],
         batch["loss_mask"],
         batch["attention_mask"],

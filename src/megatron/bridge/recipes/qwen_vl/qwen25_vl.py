@@ -22,6 +22,7 @@ from megatron.bridge.recipes.utils.dataset_utils import get_blend_fields_from_da
 from megatron.bridge.recipes.utils.optimizer_utils import distributed_fused_adam_with_cosine_annealing
 from megatron.bridge.recipes.utils.tokenizer_utils import DEFAULT_NULL_TOKENIZER_VOCAB_SIZE
 from megatron.bridge.training.comm_overlap import CommOverlapConfig
+from megatron.bridge.data.vlm_datasets import HFDatasetConversationProvider
 from megatron.bridge.training.config import (
     CheckpointConfig,
     ConfigContainer,
@@ -46,7 +47,7 @@ def pretrain_config(
     valid_data_path: Optional[List[str]] = None,
     test_data_path: Optional[List[str]] = None,
     per_split_data_args_path: Optional[str] = None,
-    mock: bool = True,
+    mock: bool = False,
     # Model configuration
     tensor_parallelism: int = 2,
     pipeline_parallelism: int = 1,
@@ -124,20 +125,17 @@ def pretrain_config(
             pad_to_max_length=True,
         )
     else:
-        dataset_cfg = GPTDatasetConfig(
-            random_seed=1234,
-            reset_attention_mask=False,
-            reset_position_ids=False,
-            eod_mask_loss=False,
+        # Use HF-based VLM conversation dataset provider (CORD-V2 maker)
+        dataset_cfg: DatasetProvider = HFDatasetConversationProvider(
             sequence_length=seq_length,
-            num_dataset_builder_threads=1,
-            blend=blend,
-            blend_per_split=blend_per_split,
-            split=split,
+            hf_processor_path=tokenizer_model,
+            maker_name="make_rdr_dataset",
             # Dataloader config parameters
-            data_sharding=True,
+            num_workers=2,
             dataloader_type="single",
-            skip_getting_attention_mask_from_dataset=True,
+            data_sharding=True,
+            pin_memory=True,
+            persistent_workers=False,
         )
 
     cfg = ConfigContainer(
