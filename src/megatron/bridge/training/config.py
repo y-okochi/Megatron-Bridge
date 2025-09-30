@@ -18,7 +18,7 @@ import signal
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, fields
 from pathlib import Path
-from typing import Any, Literal, Optional, Tuple, Union, Tuple
+from typing import Any, Literal, Optional, Tuple, Union
 
 from megatron.core.datasets.gpt_dataset import GPTDatasetConfig as MCoreGPTDatasetConfig
 from megatron.core.distributed import DistributedDataParallelConfig as MCoreDistributedDataParallelConfig
@@ -349,6 +349,7 @@ class MockQwen25VLDatasetConfig(DataloaderConfig):
     image_size: Tuple[int, int] = (256, 256)
     pad_to_max_length: bool = True
     create_attention_mask: bool = True
+
 
 @dataclass(kw_only=True)
 class FinetuningDatasetConfig(DataloaderConfig):

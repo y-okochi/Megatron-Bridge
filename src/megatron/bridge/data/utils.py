@@ -23,6 +23,14 @@ from transformers import AutoProcessor
 
 from megatron.bridge.data.builders.finetuning_dataset import FinetuningDatasetBuilder
 from megatron.bridge.data.builders.hf_dataset import HFDatasetBuilder, HFDatasetConfig
+from megatron.bridge.data.datasets.gpt_dataset import (
+    MockQwen25VLConfig as _MockQwen25VLConfig,
+)
+
+# Local mock VL dataset
+from megatron.bridge.data.datasets.gpt_dataset import (
+    MockQwen25VLDataset,
+)
 from megatron.bridge.training.config import (
     DataloaderConfig,
     DatasetBuildContext,
@@ -34,12 +42,6 @@ from megatron.bridge.training.config import (
 )
 from megatron.bridge.training.tokenizers.tokenizer import MegatronTokenizer
 from megatron.bridge.utils.common_utils import print_rank_0
-
-# Local mock VL dataset
-from megatron.bridge.data.datasets.gpt_dataset import (
-    MockQwen25VLDataset,
-    MockQwen25VLConfig as _MockQwen25VLConfig,
-)
 
 
 def is_dataset_built_on_rank() -> bool:
@@ -169,9 +171,7 @@ def qwen25_vl_mock_train_valid_test_datasets_provider(
     Returns:
         Tuple of train, valid, test datasets
     """
-    print_rank_0(
-        f"> building mock Qwen2.5-VL datasets with processor from {dataset_config.hf_model_path} ..."
-    )
+    print_rank_0(f"> building mock Qwen2.5-VL datasets with processor from {dataset_config.hf_model_path} ...")
 
     processor = AutoProcessor.from_pretrained(dataset_config.hf_model_path, trust_remote_code=True)
 
@@ -190,9 +190,7 @@ def qwen25_vl_mock_train_valid_test_datasets_provider(
     valid_ds = MockQwen25VLDataset(size=valid_size, config=vl_cfg) if valid_size > 0 else None
     test_ds = MockQwen25VLDataset(size=test_size, config=vl_cfg) if test_size > 0 else None
 
-    print_rank_0(
-        "> finished creating mock Qwen2.5-VL datasets ..."
-    )
+    print_rank_0("> finished creating mock Qwen2.5-VL datasets ...")
 
     return train_ds, valid_ds, test_ds
 

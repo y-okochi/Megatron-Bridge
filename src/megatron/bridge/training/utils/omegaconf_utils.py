@@ -16,8 +16,8 @@
 """Utilities for working with OmegaConf and dataclass configurations."""
 
 import dataclasses
-import inspect
 import functools
+import inspect
 import logging
 from typing import Any, Dict, Tuple, TypeVar
 
@@ -169,7 +169,6 @@ def _dataclass_to_omegaconf_dict(val_to_convert: Any, path: str = "") -> Any:
     """
     current_path = path
 
-
     # Handle Hugging Face GenerationConfig / PretrainedConfig by converting to a callable dict
     # compatible with our YAML representer logic
     try:
@@ -178,9 +177,7 @@ def _dataclass_to_omegaconf_dict(val_to_convert: Any, path: str = "") -> Any:
         if isinstance(val_to_convert, (GenerationConfig, PretrainedConfig)):
             cfg_class = val_to_convert.__class__
             target = f"{inspect.getmodule(cfg_class).__name__}.{cfg_class.__qualname__}.from_dict"
-            logger.debug(
-                f"Converting {cfg_class.__qualname__} at {current_path} to callable dict"
-            )
+            logger.debug(f"Converting {cfg_class.__qualname__} at {current_path} to callable dict")
             return {
                 "_target_": target,
                 "_call_": True,

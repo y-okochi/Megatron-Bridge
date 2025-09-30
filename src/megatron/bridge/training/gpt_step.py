@@ -347,9 +347,7 @@ def forward_step(
             max_seqlen,
             pixel_values,
             image_grid_thw,
-        ) = get_batch(
-            data_iterator, state.cfg, use_mtp
-        )
+        ) = get_batch(data_iterator, state.cfg, use_mtp)
     timers("batch-generator").stop()
 
     forward_args = {

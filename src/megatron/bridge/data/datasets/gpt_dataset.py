@@ -9,7 +9,6 @@ from typing import Any, Dict, Optional, Tuple
 
 import numpy
 import torch
-
 from megatron.core.datasets.blended_megatron_dataset_config import BlendedMegatronDatasetConfig
 from megatron.core.datasets.indexed_dataset import IndexedDataset
 from megatron.core.datasets.megatron_dataset import MegatronDataset
@@ -17,6 +16,7 @@ from megatron.core.datasets.object_storage_utils import ObjectStorageConfig, is_
 from megatron.core.datasets.utils import Split
 from megatron.core.tokenizers import MegatronTokenizerBase
 from megatron.core.utils import log_single_rank
+
 
 logger = logging.getLogger(__name__)
 
@@ -91,9 +91,7 @@ class GPTDataset(MegatronDataset):
         index_split: Split,
         config: GPTDatasetConfig,
     ) -> None:
-        super().__init__(
-            indexed_dataset, dataset_path, indexed_indices, num_samples, index_split, config
-        )
+        super().__init__(indexed_dataset, dataset_path, indexed_indices, num_samples, index_split, config)
         self.masks_and_position_ids_are_cacheable = not any(
             [
                 self.config.reset_position_ids,
@@ -111,9 +109,7 @@ class GPTDataset(MegatronDataset):
         except Exception:
             self._pad_token_id = _PAD_TOKEN_ID
 
-        (self.document_index, self.sample_index, self.shuffle_index) = (
-            self._build_document_sample_shuffle_indices()
-        )
+        (self.document_index, self.sample_index, self.shuffle_index) = self._build_document_sample_shuffle_indices()
 
     @staticmethod
     def numel_low_level_dataset(low_level_dataset: IndexedDataset) -> int:
@@ -148,9 +144,7 @@ class GPTDataset(MegatronDataset):
                 dataset_path,
                 multimodal=False,
                 mmap=config.mmap_bin_files,
-                object_storage_config=ObjectStorageConfig(
-                    path_to_idx_cache=config.object_storage_cache_path
-                ),
+                object_storage_config=ObjectStorageConfig(path_to_idx_cache=config.object_storage_cache_path),
             )
         return IndexedDataset(dataset_path, multimodal=False, mmap=config.mmap_bin_files)
 
@@ -186,10 +180,7 @@ class GPTDataset(MegatronDataset):
             labels = torch.roll(text, shifts=-1, dims=0)
             labels[-1] = self._pad_token_id
 
-        if (
-            not self.masks_and_position_ids_are_cacheable
-            or not self.masks_and_position_ids_are_cached
-        ):
+        if not self.masks_and_position_ids_are_cacheable or not self.masks_and_position_ids_are_cached:
             attention_mask, loss_mask, position_ids = _get_ltor_masks_and_position_ids(
                 tokens,
                 self.config.tokenizer.eod,
@@ -235,9 +226,7 @@ class GPTDataset(MegatronDataset):
                 "position_ids": position_ids,
             }
 
-    def _query_document_sample_shuffle_indices(
-        self, idx: int
-    ) -> Tuple[numpy.ndarray, numpy.ndarray]:
+    def _query_document_sample_shuffle_indices(self, idx: int) -> Tuple[numpy.ndarray, numpy.ndarray]:
         """Get the text (token ids) and document ids for a given index
 
         Args:
@@ -266,9 +255,7 @@ class GPTDataset(MegatronDataset):
                 self.dataset.get(
                     self.document_index[doc_index_beg],
                     offset=doc_index_beg_offset,
-                    length=doc_index_end_offset
-                    - doc_index_beg_offset
-                    + self.config.add_extra_token_to_sequence,
+                    length=doc_index_end_offset - doc_index_beg_offset + self.config.add_extra_token_to_sequence,
                 )
             )
 
@@ -280,25 +267,18 @@ class GPTDataset(MegatronDataset):
 
                 # Add the sample part
                 offset = 0 if i > doc_index_beg else doc_index_beg_offset
-                length = (
-                    None
-                    if i < doc_index_end
-                    else doc_index_end_offset + self.config.add_extra_token_to_sequence
-                )
-                sample_parts.append(
-                    self.dataset.get(self.document_index[i], offset=offset, length=length)
-                )
-        assert len(document_ids) == len(
-            sample_parts
-        ), f"len(document_ids) ({len(document_ids)}) != len(sample_parts) ({len(sample_parts)})"
+                length = None if i < doc_index_end else doc_index_end_offset + self.config.add_extra_token_to_sequence
+                sample_parts.append(self.dataset.get(self.document_index[i], offset=offset, length=length))
+        assert len(document_ids) == len(sample_parts), (
+            f"len(document_ids) ({len(document_ids)}) != len(sample_parts) ({len(sample_parts)})"
+        )
 
         length = sum(map(len, sample_parts))
 
         # Pad the sample if necessary
         if length < (self.config.sequence_length + self.config.add_extra_token_to_sequence):
             sample_parts.append(
-                [self._pad_token_id]
-                * (self.config.sequence_length + self.config.add_extra_token_to_sequence - length)
+                [self._pad_token_id] * (self.config.sequence_length + self.config.add_extra_token_to_sequence - length)
             )
 
         return (
@@ -329,9 +309,7 @@ class GPTDataset(MegatronDataset):
         """
         path_to_cache = self.config.path_to_cache
         if path_to_cache is None and not self.config.mock:
-            path_to_cache = os.path.join(
-                self.dataset.path_prefix, "cache", f"{type(self).__name__}_indices"
-            )
+            path_to_cache = os.path.join(self.dataset.path_prefix, "cache", f"{type(self).__name__}_indices")
 
         if path_to_cache:
             base = f"{self.unique_description_hash}-{type(self).__name__}-{self.index_split.name}"
@@ -355,8 +333,7 @@ class GPTDataset(MegatronDataset):
             cache_hit = False
 
         if not path_to_cache or (
-            not cache_hit
-            and (not torch.distributed.is_initialized() or torch.distributed.get_rank() == 0)
+            not cache_hit and (not torch.distributed.is_initialized() or torch.distributed.get_rank() == 0)
         ):
             log_single_rank(
                 logger,
@@ -374,8 +351,7 @@ class GPTDataset(MegatronDataset):
             else:
                 # Get the number of samples for the last epoch
                 num_samples_sans_final_epoch = (
-                    (num_epochs - 1) * num_tokens_per_epoch
-                    - self.config.add_extra_token_to_sequence
+                    (num_epochs - 1) * num_tokens_per_epoch - self.config.add_extra_token_to_sequence
                 ) // sequence_length
                 num_samples_from_final_epoch = self.num_samples - num_samples_sans_final_epoch
                 num_samples_per_epoch = (
@@ -390,9 +366,7 @@ class GPTDataset(MegatronDataset):
 
                 # Separate the final epoch if it falls below the threshold
                 threshold = 0.80
-                separate_final_epoch = num_samples_from_final_epoch < int(
-                    threshold * num_samples_per_epoch
-                )
+                separate_final_epoch = num_samples_from_final_epoch < int(threshold * num_samples_per_epoch)
 
                 log_single_rank(
                     logger,
@@ -400,20 +374,14 @@ class GPTDataset(MegatronDataset):
                     f"> num_samples_from_final_epoch: {num_samples_from_final_epoch}",
                 )
                 log_single_rank(logger, logging.DEBUG, f"> threshold: {threshold}")
-                log_single_rank(
-                    logger, logging.DEBUG, f"> num_samples_per_epoch: {num_samples_per_epoch}"
-                )
+                log_single_rank(logger, logging.DEBUG, f"> num_samples_per_epoch: {num_samples_per_epoch}")
 
-            log_single_rank(
-                logger, logging.DEBUG, f"> separate_final_epoch: {separate_final_epoch}"
-            )
+            log_single_rank(logger, logging.DEBUG, f"> separate_final_epoch: {separate_final_epoch}")
 
             numpy_random_state = numpy.random.RandomState(self.config.random_seed)
 
             # Build the document index
-            document_index = _build_document_index(
-                self.indices, num_epochs, numpy_random_state, separate_final_epoch
-            )
+            document_index = _build_document_index(self.indices, num_epochs, numpy_random_state, separate_final_epoch)
 
             # Build the sample index
             from megatron.core.datasets import helpers
@@ -474,16 +442,12 @@ class GPTDataset(MegatronDataset):
             t_end = time.time()
             log_single_rank(logger, logging.DEBUG, f"\t> time elapsed: {t_end - t_beg:4f} seconds")
 
-            log_single_rank(
-                logger, logging.INFO, f"> total number of samples: {sample_index.shape[0] - 1}"
-            )
+            log_single_rank(logger, logging.INFO, f"> total number of samples: {sample_index.shape[0] - 1}")
             log_single_rank(logger, logging.INFO, f"> total number of epochs: {num_epochs}")
 
             return document_index, sample_index, shuffle_index
 
-        log_single_rank(
-            logger, logging.INFO, f"Load the {type(self).__name__} {self.index_split.name} indices"
-        )
+        log_single_rank(logger, logging.INFO, f"Load the {type(self).__name__} {self.index_split.name} indices")
 
         log_single_rank(
             logger,
@@ -515,9 +479,7 @@ class GPTDataset(MegatronDataset):
         t_end = time.time()
         log_single_rank(logger, logging.DEBUG, f"\t> time elapsed: {t_end - t_beg:4f} seconds")
 
-        log_single_rank(
-            logger, logging.INFO, f"> total number of samples: {sample_index.shape[0] - 1}"
-        )
+        log_single_rank(logger, logging.INFO, f"> total number of samples: {sample_index.shape[0] - 1}")
 
         return document_index, sample_index, shuffle_index
 
@@ -652,9 +614,7 @@ def _get_ltor_masks_and_position_ids(
     seq_length = data.numel()
 
     if create_attention_mask:
-        attention_mask = torch.tril(
-            torch.ones((seq_length, seq_length), device=data.device)
-        ).unsqueeze(0)
+        attention_mask = torch.tril(torch.ones((seq_length, seq_length), device=data.device)).unsqueeze(0)
     else:
         attention_mask = None
 
@@ -718,18 +678,14 @@ class MockGPTLowLevelDataset:
     def __init__(self, tokenizer: MegatronTokenizerBase) -> None:
         self.tokenizer = tokenizer
         rng = numpy.random.default_rng(seed=self.seed)
-        self.sequence_lengths = rng.integers(
-            low=1, high=self.max_sequence_length, size=self.size, dtype=numpy.int32
-        )
+        self.sequence_lengths = rng.integers(low=1, high=self.max_sequence_length, size=self.size, dtype=numpy.int32)
 
     def __len__(self) -> int:
         return self.size
 
     def __getitem__(self, idx: int) -> numpy.number:
         length = self.sequence_lengths[idx]
-        sample = numpy.int64(
-            numpy.concatenate([numpy.arange(length - 1) + 1, [self.tokenizer.eod]])
-        )
+        sample = numpy.int64(numpy.concatenate([numpy.arange(length - 1) + 1, [self.tokenizer.eod]]))
         return sample
 
     def get(self, idx: int, offset: int = 0, length: Optional[int] = None) -> numpy.ndarray:
@@ -884,9 +840,7 @@ class MockQwen25VLDataset(torch.utils.data.Dataset):
 
     def __init__(self, size: int, config: MockQwen25VLConfig) -> None:
         if Image is None:
-            raise ImportError(
-                "PIL is required for MockQwen25VLDataset. Please install pillow."
-            )
+            raise ImportError("PIL is required for MockQwen25VLDataset. Please install pillow.")
 
         self.size = size
         self.config = config
@@ -932,9 +886,7 @@ class MockQwen25VLDataset(torch.utils.data.Dataset):
         ]
 
         # The chat template will insert appropriate placeholders for the image token(s)
-        text = self.config.processor.apply_chat_template(
-            messages, tokenize=False, add_generation_prompt=True
-        )
+        text = self.config.processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
 
         image = self._generate_random_image()
 
@@ -970,9 +922,7 @@ class MockQwen25VLDataset(torch.utils.data.Dataset):
         labels = input_ids[1:].contiguous()
 
         # Position IDs: [0, 1, ..., L-1]
-        position_ids = torch.arange(
-            tokens.numel(), dtype=torch.long, device=tokens.device
-        )
+        position_ids = torch.arange(tokens.numel(), dtype=torch.long, device=tokens.device)
 
         # Attention mask: 1D valid-token mask (all ones by default)
         attention_mask = torch.ones_like(tokens, dtype=torch.bool)
