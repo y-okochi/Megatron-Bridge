@@ -177,13 +177,13 @@ def main() -> None:
         logger.info("----------------------------------")
 
     # Start training
-    callbacks = []
-    callbacks.append(MemoryMonitor())
-    callbacks.append(SpeedMonitor())
-    callbacks.append(RuntimeEstimator())
-    callbacks.append(OptimizerMonitor())
-    callbacks.append(FLOPsMonitor(cfg.model, cfg.dataset, cfg.train.global_batch_size, cfg.tokenizer.vocab_size, "llama3"))
-    cfg.logger.callbacks = callbacks
+    #callbacks = []
+    #callbacks.append(MemoryMonitor())
+    #callbacks.append(SpeedMonitor())
+    #callbacks.append(RuntimeEstimator())
+    #callbacks.append(OptimizerMonitor())
+    #callbacks.append(FLOPsMonitor(cfg.model, cfg.dataset, cfg.train.global_batch_size, cfg.tokenizer.vocab_size, "llama3"))
+    #cfg.logger.callbacks = callbacks
     logger.debug("Starting pretraining...")
     pretrain(config=cfg, forward_step_func=forward_step)
 

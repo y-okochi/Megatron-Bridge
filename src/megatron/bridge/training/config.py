@@ -699,6 +699,27 @@ class LoggerConfig:
     log_memory_to_tensorboard: bool = False
     """Enable memory logging to tensorboard."""
 
+    log_memory_to_wandb: bool = False
+    """Enable memory logging to wandb."""
+
+    log_l2_norm_grad_to_tensorboard: bool = False
+    """Enable gradients logging to tensorboard."""
+
+    log_l2_norm_grad_to_wandb: bool = False
+    """Enable gradients logging to wandb."""
+
+    log_throughput_to_tensorboard: bool = False
+    """Enable throughput logging to tensorboard."""
+
+    log_throughput_to_wandb: bool = False
+    """Enable throughput logging to wandb."""
+
+    log_runtime_to_tensorboard: bool = False
+    """Enable runtime metrics logging to tensorboard."""
+
+    log_runtime_to_wandb: bool = False
+    """Enable runtime metrics logging to wandb."""
+
     log_world_size_to_tensorboard: bool = False
     """Enable world size logging to tensorboard."""
 

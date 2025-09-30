@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import time
+import math
 import inspect
 from collections import defaultdict
 from datetime import datetime
@@ -52,6 +54,19 @@ except ImportError:
 
         from megatron.core.utils import local_multi_tensor_applier as multi_tensor_applier
         from megatron.core.utils import local_multi_tensor_l2_norm as multi_tensor_l2norm
+
+
+MEMORY_KEYS = {
+    'allocated_bytes.all.current': 'current_allocated_mem',
+    'active_bytes.all.current': 'current_active_mem',
+    'inactive_split_bytes.all.current': 'current_inactive_mem',
+    'reserved_bytes.all.current': 'current_reserved_mem',
+    'allocated_bytes.all.peak': 'peak_allocated_mem',
+    'active_bytes.all.peak': 'peak_active_mem',
+    'inactive_split_bytes.all.peak': 'peak_inactive_mem',
+    'reserved_bytes.all.peak': 'peak_reserved_mem',
+    'num_alloc_retries': 'alloc_retries',
+}
 
 
 def param_is_not_shared(param: nn.Parameter) -> bool:
@@ -251,6 +266,33 @@ def calc_dtensor_params_l2_norm(params):
     return total_norm_2.item() ** 0.5
 
 
+def calc_l2_norm_grad(model: Union[MegatronModule, list[MegatronModule]]) -> dict:
+    """ """
+    norm = 0.0
+    optimizer_metrics = {}
+
+    for model_chunk in model:
+        for name, p in model_chunk.named_parameters():
+            if p.main_grad is not None and p.requires_grad:
+
+                # Always log grad norm as a default metric if it's not specified
+                if f'l2_norm/grad/{name}' not in optimizer_metrics:
+                    param_grad_norm = torch.linalg.vector_norm(p.main_grad)
+                    optimizer_metrics[f'l2_norm/grad/{name}'] = param_grad_norm
+
+        for metric in optimizer_metrics:
+            if metric.startswith('l2_norm/grad'):
+                norm += optimizer_metrics[metric] ** 2
+
+        optimizer_metrics['l2_norm/grad/global'] = norm**0.5
+
+        for metric in optimizer_metrics:
+            if isinstance(optimizer_metrics[metric], torch.Tensor):
+                optimizer_metrics[metric] = optimizer_metrics[metric].item()
+    
+    return optimizer_metrics
+
+
 def reduce_max_stat_across_model_parallel_group(stat: Optional[float]) -> Optional[float]:
     """Calculates the max of a stat across the model parallel group.
 
@@ -418,20 +460,15 @@ def training_log(
 
                 with open(config.profiling.memory_snapshot_path, "wb") as f:
                     dump(snapshot, f)
-        if callbacks:
-            elapsed_time = timers("interval-time").elapsed()
-            time_per_iteration = elapsed_time / total_iterations
-            for callback in callbacks:
-                callback.track(
-                    iteration=iteration,
-                    writer=writer,
-                    wandb_writer=wandb_writer,
-                    start_time=global_state.start_time,
-                    train_config=train_config,
-                    seq_length=config.dataset.sequence_length,
-                    model=model,
-                    time_per_iteration=time_per_iteration,
-                )
+        if wandb_writer and logger_config.log_memory_to_wandb:
+            memory_report = {f"memory/{metric}": value for metric, value in report_memory().items()}
+            wandb_writer.log(memory_report, iteration)
+            wandb_writer.log(runtime_report(train_state, global_state.start_time, config.dataset.sequence_length, train_config.train_iters), iteration)
+        if wandb_writer and logger_config.log_l2_norm_grad_to_wandb:
+            wandb_writer.log(calc_l2_norm_grad(model), iteration)
+        if logger_config.log_l2_norm_grad_to_tensorboard:
+            for metric, value in calc_l2_norm_grad(model).items():
+                writer.add_scalar(metric, value, iteration)
         if wandb_writer:
             wandb_writer.log({"samples vs steps": global_state.train_state.consumed_train_samples}, iteration)
         writer.add_scalar("learning-rate", learning_rate, iteration)
@@ -483,27 +520,9 @@ def training_log(
             if wandb_writer:
                 wandb_writer.log({"params-norm": params_norm}, iteration)
         if logger_config.log_memory_to_tensorboard:
-            mem_stats = torch.cuda.memory_stats()
-            writer.add_scalar(
-                "mem-reserved-bytes",
-                mem_stats["reserved_bytes.all.current"],
-                iteration,
-            )
-            writer.add_scalar(
-                "mem-allocated-bytes",
-                mem_stats["allocated_bytes.all.current"],
-                iteration,
-            )
-            writer.add_scalar(
-                "mem-max-allocated-bytes",
-                mem_stats["allocated_bytes.all.peak"],
-                iteration,
-            )
-            writer.add_scalar(
-                "mem-allocated-count",
-                mem_stats["allocation.all.current"],
-                iteration,
-            )
+            for metric, value in report_memory():
+                writer.add_scalar(metric, value, iteration)
+
     if config.model.num_moe_experts is not None:
         moe_loss_scale = 1 / get_num_microbatches()
         track_names = []
@@ -603,27 +622,80 @@ def training_log(
             if torch.distributed.get_rank() == 0:
                 num_microbatches = get_num_microbatches()
                 report_theoretical_memory(config, num_microbatches=num_microbatches, verbose=True)
-            report_memory(f"(after {iteration} iterations)")
+            memory_string = f"(after {iteration} iterations) memory (GB)"
+            for metric, value in report_memory().items():
+                memory_string += f" | {metric}: {value}"
+            if parallel_state.get_data_parallel_rank() == 0:
+                print("[Rank {}] {}".format(torch.distributed.get_rank(), memory_string), flush=True)
             report_memory_flag = False
         timers.log(timers_to_log, normalizer=logger_config.log_interval)
 
     return report_memory_flag
 
 
-def report_memory(name: str) -> None:
+def report_memory() -> dict:
     """Report current and peak GPU memory usage for the current rank.
 
     Args:
         name (str): A name to include in the output message (e.g., stage of training).
     """
-    mega_bytes = 1024.0 * 1024.0
-    string = name + " memory (MB)"
-    string += " | allocated: {}".format(torch.cuda.memory_allocated() / mega_bytes)
-    string += " | max allocated: {}".format(torch.cuda.max_memory_allocated() / mega_bytes)
-    string += " | reserved: {}".format(torch.cuda.memory_reserved() / mega_bytes)
-    string += " | max reserved: {}".format(torch.cuda.max_memory_reserved() / mega_bytes)
-    if parallel_state.get_data_parallel_rank() == 0:
-        print("[Rank {}] {}".format(torch.distributed.get_rank(), string), flush=True)
+
+    memory_stats = torch.cuda.memory_stats()
+    memory_keys = MEMORY_KEYS
+
+    # simplify and reformat the memory_stats
+    memory_report = {}
+    for torch_name, name in memory_keys.items():
+        if torch_name in memory_stats:
+            # Convert to gigabytes
+            if 'bytes' in torch_name:
+                gigabytes = memory_stats[torch_name] / 1.0e9
+                # Round to preserve 5 significant digits
+                if gigabytes != 0:
+                    order_of_magnitude = int(math.floor(math.log10(abs(gigabytes))))
+                    gigabytes = round(gigabytes, -order_of_magnitude + 4)
+                memory_report[name.replace('bytes', 'gigabytes')] = gigabytes
+            else:
+                memory_report[name] = memory_stats[torch_name]
+    
+    return memory_report
+
+
+def runtime_report(
+    train_state,
+    start_time: int,
+    seq_length: int,
+    train_iters: int,
+    time_unit: str = 'seconds'
+) -> dict:
+    elapsed_dur = train_state.step / train_iters
+
+    divider = 1
+    if time_unit == 'seconds':
+        divider = 1
+    elif time_unit == 'minutes':
+        divider = 60
+    elif time_unit == 'hours':
+        divider = 60 * 60
+    elif time_unit == 'days':
+        divider = 60 * 60 * 24
+    else:
+        raise ValueError(
+            f'Invalid time_unit: {time_unit}. Must be one of "seconds", "minutes", "hours", or "days".',
+        )
+
+    time_metrics = {}
+    elapsed_time = time.time() - start_time
+    rate = elapsed_time / elapsed_dur
+    remaining_time = rate * (1 - elapsed_dur)
+    time_metrics['time/remaining_estimate'] = remaining_time / divider
+
+    time_metrics['time/tokens'] = train_state.consumed_train_samples * seq_length
+    time_metrics['time/samples'] = train_state.consumed_train_samples
+    time_metrics['time/batches'] = train_state.step
+    time_metrics['time/total'] = (time.time() - start_time) / divider
+
+    return time_metrics
 
 
 def maybe_inject_state(forward_step_func: Callable, state: GlobalState, num_fw_args: Optional[int] = None) -> Callable:
