@@ -205,7 +205,7 @@ class TestGemmaConversion:
             "--data-file=/workspace/.coverage",
             "--source=/workspace/",
             "--parallel-mode",
-            "examples/models/multi_gpu_hf.py",
+            "examples/conversion/hf_megatron_roundtrip_multi_gpu.py",
             "--hf-model-id",
             gemma_toy_model_path,
             "--output-dir",
