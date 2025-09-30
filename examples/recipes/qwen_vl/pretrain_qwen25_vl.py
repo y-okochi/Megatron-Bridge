@@ -42,7 +42,7 @@ from omegaconf import OmegaConf
 
 from megatron.bridge.recipes.qwen_vl.qwen25_vl import pretrain_config
 from megatron.bridge.training.config import ConfigContainer
-from megatron.bridge.training.gpt_step import forward_step
+from megatron.bridge.recipes.qwen_vl.qwen25_vl_step import forward_step
 from megatron.bridge.training.pretrain import pretrain
 from megatron.bridge.training.utils.omegaconf_utils import (
     apply_overrides,

@@ -28,7 +28,7 @@ from megatron.bridge.training.config import (
     DistributedDataParallelConfig,
     GPTDatasetConfig,
     LoggerConfig,
-    MockQwen25VLDatasetConfig,
+    DatasetProvider,
     RNGConfig,
     TokenizerConfig,
     TrainingConfig,
@@ -46,7 +46,7 @@ def pretrain_config(
     valid_data_path: Optional[List[str]] = None,
     test_data_path: Optional[List[str]] = None,
     per_split_data_args_path: Optional[str] = None,
-    mock: bool = False,
+    mock: bool = True,
     # Model configuration
     tensor_parallelism: int = 2,
     pipeline_parallelism: int = 1,
@@ -67,7 +67,7 @@ def pretrain_config(
     precision_config: Optional[Union[MixedPrecisionConfig, str]] = "bf16_mixed",
     comm_overlap_config: Optional[CommOverlapConfig] = None,
     # Tokenizer
-    tokenizer_model: str = "Qwen/Qwen2.5-VL",
+    tokenizer_model: str = "Qwen/Qwen2.5-VL-3B-Instruct",
     # Freeze options
     freeze_language_model: bool = False,
     freeze_vision_model: bool = False,
@@ -107,8 +107,11 @@ def pretrain_config(
     )
 
     # Config Container
-    dataset_cfg = (
-        MockQwen25VLDatasetConfig(
+    if mock:
+        # Use DatasetProvider path for mock VL dataset
+        from megatron.bridge.recipes.qwen_vl.qwen25_vl_dataset import MockQwen25VLDatasetProvider
+
+        dataset_cfg: DatasetProvider = MockQwen25VLDatasetProvider(
             sequence_length=seq_length,
             hf_model_path=tokenizer_model,
             prompt="Describe this image.",
@@ -117,9 +120,11 @@ def pretrain_config(
             data_sharding=True,
             pin_memory=True,
             persistent_workers=False,
+            create_attention_mask=True,
+            pad_to_max_length=True,
         )
-        if mock
-        else GPTDatasetConfig(
+    else:
+        dataset_cfg = GPTDatasetConfig(
             random_seed=1234,
             reset_attention_mask=False,
             reset_position_ids=False,
@@ -134,7 +139,6 @@ def pretrain_config(
             dataloader_type="single",
             skip_getting_attention_mask_from_dataset=True,
         )
-    )
 
     cfg = ConfigContainer(
         model=model_cfg,
