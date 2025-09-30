@@ -434,8 +434,8 @@ class TestAutoBridgeIntegration:
             json.dump(tokenizer_data, f, indent=2)
 
     @patch("megatron.bridge.models.conversion.auto_bridge.PreTrainedCausalLM.from_pretrained")
-    @patch("megatron.bridge.models.conversion.auto_bridge.AutoConfig.from_pretrained")
-    def test_from_pretrained_with_temp_dir(self, mock_autoconfig, mock_pretrained, gemma_configs):
+    @patch("megatron.bridge.models.conversion.auto_bridge.safe_load_config_with_retry")
+    def test_from_pretrained_with_temp_dir(self, mock_safe_load_config, mock_pretrained, gemma_configs):
         """Test AutoBridge.from_hf_pretrained with temporary directory."""
         with tempfile.TemporaryDirectory() as temp_dir:
             # Test with Gemma 2B config
@@ -444,7 +444,7 @@ class TestAutoBridgeIntegration:
 
             # Mock the config loading
             config = GemmaConfig(**config_dict)
-            mock_autoconfig.return_value = config
+            mock_safe_load_config.return_value = config
 
             # Mock the pretrained model
             mock_model = Mock(spec=PreTrainedCausalLM)
@@ -458,12 +458,12 @@ class TestAutoBridgeIntegration:
             # Verify
             assert isinstance(bridge, AutoBridge)
             assert bridge.hf_pretrained == mock_model
-            mock_autoconfig.assert_called_once_with(temp_dir, trust_remote_code=False)
+            mock_safe_load_config.assert_called_once_with(temp_dir, trust_remote_code=False)
             mock_pretrained.assert_called_once_with(temp_dir)
 
     @patch("megatron.bridge.models.conversion.auto_bridge.PreTrainedCausalLM.from_pretrained")
-    @patch("megatron.bridge.models.conversion.auto_bridge.AutoConfig.from_pretrained")
-    def test_from_pretrained_multiple_models(self, mock_autoconfig, mock_pretrained, gemma_configs):
+    @patch("megatron.bridge.models.conversion.auto_bridge.safe_load_config_with_retry")
+    def test_from_pretrained_multiple_models(self, mock_safe_load_config, mock_pretrained, gemma_configs):
         """Test AutoBridge.from_hf_pretrained with different Gemma model configs."""
         for model_name, config_dict in gemma_configs.items():
             with tempfile.TemporaryDirectory() as temp_dir:
@@ -471,7 +471,7 @@ class TestAutoBridgeIntegration:
 
                 # Mock the config loading
                 config = GemmaConfig(**config_dict)
-                mock_autoconfig.return_value = config
+                mock_safe_load_config.return_value = config
 
                 # Mock the pretrained model
                 mock_model = Mock(spec=PreTrainedCausalLM)
@@ -501,12 +501,12 @@ class TestAutoBridgeIntegration:
                     mock_bridge.provider_bridge.assert_called_once_with(mock_model)
 
                 # Clear mocks for next iteration
-                mock_autoconfig.reset_mock()
+                mock_safe_load_config.reset_mock()
                 mock_pretrained.reset_mock()
 
     @patch("megatron.bridge.models.conversion.auto_bridge.PreTrainedCausalLM.from_pretrained")
-    @patch("megatron.bridge.models.conversion.auto_bridge.AutoConfig.from_pretrained")
-    def test_from_pretrained_with_kwargs(self, mock_autoconfig, mock_pretrained, gemma_configs):
+    @patch("megatron.bridge.models.conversion.auto_bridge.safe_load_config_with_retry")
+    def test_from_pretrained_with_kwargs(self, mock_safe_load_config, mock_pretrained, gemma_configs):
         """Test AutoBridge.from_hf_pretrained with various kwargs."""
         with tempfile.TemporaryDirectory() as temp_dir:
             config_dict = gemma_configs["gemma-7b"]
@@ -514,7 +514,7 @@ class TestAutoBridgeIntegration:
 
             # Mock the config loading
             config = GemmaConfig(**config_dict)
-            mock_autoconfig.return_value = config
+            mock_safe_load_config.return_value = config
 
             # Mock the pretrained model
             mock_model = Mock(spec=PreTrainedCausalLM)
