@@ -19,15 +19,17 @@ The conventional solution is to build a custom attention mask (specifically, a b
 
 Instead, Megatron Bridge provides a highly optimized version of sequence packing which makes use of variable-length attention kernels in FlashAttention and TransformerEngine. Instead of providing a custom attention mask, information about sequence boundaries is passed in with the `cu_seqlens` variable (short for cumulative sequence length). With this approach, attention values between sequences are never calculated, so the complexity of attention remains at $\sum_i {s_i}^2$. This allows the packed sequence size to increase to arbitrary lengths without affecting the memory complexity, so that GPU memory can be fully utilized.
 
+The packed sequence implementation automatically creates {py:class}`bridge.data.datasets.sft.GPTSFTPackedDataset` instances when `.npy` files are detected, providing optimized data loading and batching for packed sequences.
+
 ## Using Packed Sequences
 
 ### Prepare the Dataset
 
-In Megatron Bridge, the packed dataset is automatically prepared before training, eliminating the need for any additional preprocessing steps.
+In Megatron Bridge, the packed dataset is automatically prepared before training using the {py:func}`bridge.data.datasets.packed_sequence.prepare_packed_sequence_data` function, eliminating the need for any additional preprocessing steps.
 
 ### Configure Packed Sequences
 
-Packed sequences are configured through the `FinetuningDatasetConfig` by specifying `packed_sequence_specs`:
+Packed sequences are configured through the {py:class}`bridge.training.config.FinetuningDatasetConfig` by specifying `packed_sequence_specs`:
 
 ```python
 from megatron.bridge.training.config import ConfigContainer, FinetuningDatasetConfig
@@ -49,7 +51,7 @@ config = ConfigContainer(
 
 ### PackedSequenceSpecs Configuration
 
-The `PackedSequenceSpecs` class provides the following configuration options:
+The {py:class}`bridge.data.datasets.packed_sequence.PackedSequenceSpecs` class provides the following configuration options:
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
@@ -124,7 +126,7 @@ config = ConfigContainer(
 
 ## File Organization
 
-When using packed sequences, Megatron Bridge automatically organizes files in your dataset directory:
+When using packed sequences, the {py:class}`bridge.data.builders.finetuning_dataset.FinetuningDatasetBuilder` automatically organizes files in your dataset directory:
 
 ```
 dataset_root/
@@ -168,3 +170,14 @@ packed_sequence_specs = PackedSequenceSpecs(
 ```
 
 When `pad_cu_seqlens=True`, you must also set `pad_to_max_length=True` in your dataset configuration.
+
+## API Reference
+
+For detailed API documentation, see:
+
+- {py:class}`bridge.training.config.FinetuningDatasetConfig` - Main dataset configuration class
+- {py:class}`bridge.data.datasets.packed_sequence.PackedSequenceSpecs` - Packed sequence configuration
+- {py:func}`bridge.data.datasets.packed_sequence.prepare_packed_sequence_data` - Data preparation function
+- {py:class}`bridge.data.datasets.sft.GPTSFTPackedDataset` - Packed sequence dataset implementation
+- {py:class}`bridge.data.builders.finetuning_dataset.FinetuningDatasetBuilder` - Dataset builder with packing support
+- {py:func}`bridge.training.gpt_step.get_packed_seq_params` - Packed sequence parameter extraction for training
