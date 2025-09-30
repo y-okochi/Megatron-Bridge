@@ -14,19 +14,16 @@
 
 import json
 import random
-
-from datasets import load_dataset
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import torch
-
+from datasets import load_dataset
 from transformers import AutoProcessor
 
 from megatron.bridge.training.config import DatasetBuildContext, DatasetProvider
 
 from .collate_fns import COLLATE_FNS, default_collate_fn
-
 from .utils import json2token
 
 

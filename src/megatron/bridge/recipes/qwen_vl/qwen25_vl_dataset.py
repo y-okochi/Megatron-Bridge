@@ -13,12 +13,13 @@
 # limitations under the License.
 
 from dataclasses import dataclass
-from typing import Any, Optional, Tuple, Dict
+from typing import Any, Dict, Optional, Tuple
 
-import torch
-from megatron.bridge.training.config import DatasetBuildContext, DatasetProvider
 import numpy
+import torch
 from PIL import Image
+
+from megatron.bridge.training.config import DatasetBuildContext, DatasetProvider
 
 
 class MockQwen25VLDataset(torch.utils.data.Dataset):

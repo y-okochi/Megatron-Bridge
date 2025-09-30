@@ -22,11 +22,11 @@ from megatron.core.models.gpt import GPTModel
 from megatron.core.utils import get_batch_on_this_cp_rank, get_model_config
 
 from megatron.bridge.training.config import ConfigContainer
-from megatron.bridge.training.state import GlobalState
 from megatron.bridge.training.gpt_step import (
-    get_packed_seq_params,
     _create_loss_function,
+    get_packed_seq_params,
 )
+from megatron.bridge.training.state import GlobalState
 
 
 logger = logging.getLogger(__name__)
@@ -231,4 +231,3 @@ def forward_step(
     loss_function = _create_loss_function(loss_mask, check_for_nan_in_loss, check_for_spiky_loss)
 
     return output_tensor, loss_function
-

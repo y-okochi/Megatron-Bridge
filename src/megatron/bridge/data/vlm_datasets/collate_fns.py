@@ -17,6 +17,7 @@ import torch
 
 from .utils import extract_skipped_token_ids
 
+
 # Local message used when optional qwen_vl_utils dependency is missing
 MISSING_QWEN_VL_UTILS_MSG = (
     "qwen_vl_utils is required for Qwen2.5 VL processing. Please `pip install qwen-vl-utils` or"
