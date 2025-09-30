@@ -17,9 +17,15 @@ from pathlib import Path
 
 from omegaconf import OmegaConf
 
-from .argument_parser import parse_cli_args
-from .utils.executors import slurm_executor
-from .utils.helpers import get_perf_matrix_overrides
+
+try:
+    from argument_parser import parse_cli_args
+    from utils.common import get_perf_matrix_overrides
+    from utils.executors import slurm_executor
+except (ImportError, ModuleNotFoundError):
+    from .argument_parser import parse_cli_args
+    from .utils.common import get_perf_matrix_overrides
+    from .utils.executors import slurm_executor
 
 
 try:
@@ -42,6 +48,9 @@ if __name__ == "__main__":
     exp_name = f"{args.model_name}_{args.model_size}_{args.domain}_{args.task}"
     exp_name += "_bf16" if args.compute_dtype == "bf16" else f"_{args.compute_dtype}_{args.fp8_recipe}"
 
+    if args.model_name in ["qwen3"] and args.model_size in ["30b_a3b", "235b_a22b"]:
+        assert args.hf_token is not None, "HF token is required for Qwen3 tokenizer. NullTokenizer to be used soon."
+
     SCRIPT_DIR: Path = Path(__file__).parent.resolve()
     RUN_SCRIPT_FILENAME: str = "run_script.py"
     RUN_SCRIPT_PATH: Path = SCRIPT_DIR / RUN_SCRIPT_FILENAME
@@ -58,12 +67,14 @@ if __name__ == "__main__":
         logger.error("Ensure the path passed to --config_file is correct.")
         sys.exit(1)
 
+    enable_deepep = bool(args.gpu.lower() in ["h100"])
     plugins = (
         [
             PerfEnvPlugin(
                 enable_vboost=args.enable_vboost,
                 nccl_pp_comm_chunksize=2097152 if args.model_size in ["70b", "405b"] else None,
                 gpu_sm100_or_newer=args.gpu.lower() in ["b200", "gb200"],
+                layernorm_sm_margin=20 if enable_deepep else 16,
             )
         ]
         if HAS_NEMO_RUN
@@ -101,6 +112,10 @@ if __name__ == "__main__":
         nemo_home=args.nemo_home,
         wandb_key=args.wandb_key,
     )
+
+    if args.model_name in ["llama31"] and args.model_size in ["405b"] and args.gpu.lower() in ["gb200"]:
+        if args.compute_dtype == "fp8" and args.fp8_recipe == "cs":
+            executor.env_vars["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
     target_script_args = [
         "--config_file",
