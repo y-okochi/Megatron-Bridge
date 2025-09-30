@@ -19,18 +19,9 @@ from megatron.core import mpu
 from megatron.core.datasets.blended_megatron_dataset_builder import BlendedMegatronDatasetBuilder
 from megatron.core.datasets.blended_megatron_dataset_config import BlendedMegatronDatasetConfig
 from megatron.core.datasets.gpt_dataset import GPTDataset, MockGPTDataset
-from transformers import AutoProcessor
 
 from megatron.bridge.data.builders.finetuning_dataset import FinetuningDatasetBuilder
 from megatron.bridge.data.builders.hf_dataset import HFDatasetBuilder, HFDatasetConfig
-from megatron.bridge.data.datasets.gpt_dataset import (
-    MockQwen25VLConfig as _MockQwen25VLConfig,
-)
-
-# Local mock VL dataset
-from megatron.bridge.data.datasets.gpt_dataset import (
-    MockQwen25VLDataset,
-)
 from megatron.bridge.training.config import (
     DataloaderConfig,
     DatasetBuildContext,
@@ -38,7 +29,6 @@ from megatron.bridge.training.config import (
     FinetuningDatasetConfig,
     GPTDatasetConfig,
     MockGPTDatasetConfig,
-    MockQwen25VLDatasetConfig,
 )
 from megatron.bridge.training.tokenizers.tokenizer import MegatronTokenizer
 from megatron.bridge.utils.common_utils import print_rank_0
@@ -159,48 +149,11 @@ def finetuning_train_valid_test_datasets_provider(
     return train_ds, valid_ds, test_ds
 
 
-def qwen25_vl_mock_train_valid_test_datasets_provider(
-    train_val_test_num_samples: list[int], dataset_config: MockQwen25VLDatasetConfig
-):
-    """Build mock Qwen2.5-VL train/valid/test datasets using HF AutoProcessor.
-
-    Args:
-        train_val_test_num_samples: [train, valid, test] sample counts
-        dataset_config: MockQwen25VLDatasetConfig
-
-    Returns:
-        Tuple of train, valid, test datasets
-    """
-    print_rank_0(f"> building mock Qwen2.5-VL datasets with processor from {dataset_config.hf_model_path} ...")
-
-    processor = AutoProcessor.from_pretrained(dataset_config.hf_model_path, trust_remote_code=True)
-
-    vl_cfg = _MockQwen25VLConfig(
-        processor=processor,
-        prompt=dataset_config.prompt,
-        sequence_length=dataset_config.sequence_length,
-        random_seed=dataset_config.random_seed,
-        image_size=dataset_config.image_size,
-        pad_to_max_length=True,
-        create_attention_mask=dataset_config.create_attention_mask,
-    )
-
-    train_size, valid_size, test_size = train_val_test_num_samples
-    train_ds = MockQwen25VLDataset(size=train_size, config=vl_cfg)
-    valid_ds = MockQwen25VLDataset(size=valid_size, config=vl_cfg) if valid_size > 0 else None
-    test_ds = MockQwen25VLDataset(size=test_size, config=vl_cfg) if test_size > 0 else None
-
-    print_rank_0("> finished creating mock Qwen2.5-VL datasets ...")
-
-    return train_ds, valid_ds, test_ds
-
-
 _REGISTRY: Dict[Type[Union[FinetuningDatasetConfig, BlendedMegatronDatasetConfig, HFDatasetConfig]], Callable] = {
     GPTDatasetConfig: pretrain_train_valid_test_datasets_provider,
     MockGPTDatasetConfig: pretrain_train_valid_test_datasets_provider,
     HFDatasetConfig: hf_train_valid_test_datasets_provider,
     FinetuningDatasetConfig: finetuning_train_valid_test_datasets_provider,
-    MockQwen25VLDatasetConfig: qwen25_vl_mock_train_valid_test_datasets_provider,
 }
 
 

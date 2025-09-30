@@ -86,11 +86,6 @@ def get_batch_from_iterator(
 
     if not skip_getting_attention_mask_from_dataset:
         required_device_keys.add("attention_mask")
-    # Optionally include vision inputs if present in the batch
-    if "pixel_values" in batch:
-        required_device_keys.add("pixel_values")
-    if "image_grid_thw" in batch:
-        required_device_keys.add("image_grid_thw")
 
     if "cu_seqlens" in batch:
         required_device_keys.add("cu_seqlens")
@@ -266,8 +261,6 @@ def get_batch(
     torch.Tensor,
     torch.Tensor,
     torch.Tensor,
-    torch.Tensor | None,
-    torch.Tensor | None,
 ]:
     """Generate a batch.
 
@@ -278,7 +271,7 @@ def get_batch(
 
     Returns:
         tuple of tensors containing tokens, labels, loss_mask, attention_mask, position_ids,
-        cu_seqlens, cu_seqlens_argmin, max_seqlen, pixel_values (optional), image_grid_thw (optional)
+        cu_seqlens, cu_seqlens_argmin, and max_seqlen
     """
     if (not parallel_state.is_pipeline_first_stage()) and (not parallel_state.is_pipeline_last_stage()):
         return None, None, None, None, None, None, None, None
@@ -289,16 +282,8 @@ def get_batch(
         getattr(cfg.dataset, "skip_getting_attention_mask_from_dataset", True),
     )
 
-    # Keep optional vision tensors aside to avoid being dropped by CP slicing util
-    pixel_values = batch.get("pixel_values")
-    image_grid_thw = batch.get("image_grid_thw")
-
     # slice batch along sequence dimension for context parallelism
     batch = get_batch_on_this_cp_rank(batch)
-    if pixel_values is not None:
-        batch["pixel_values"] = pixel_values
-    if image_grid_thw is not None:
-        batch["image_grid_thw"] = image_grid_thw
 
     return (
         batch["tokens"],
@@ -309,8 +294,6 @@ def get_batch(
         batch.get("cu_seqlens"),
         batch.get("cu_seqlens_argmin"),
         batch.get("max_seqlen"),
-        batch.get("pixel_values"),
-        batch.get("image_grid_thw"),
     )
 
 
@@ -336,18 +319,9 @@ def forward_step(
 
     timers("batch-generator", log_level=2).start()
     with straggler_timer(bdata=True):
-        (
-            tokens,
-            labels,
-            loss_mask,
-            attention_mask,
-            position_ids,
-            cu_seqlens,
-            cu_seqlens_argmin,
-            max_seqlen,
-            pixel_values,
-            image_grid_thw,
-        ) = get_batch(data_iterator, state.cfg, use_mtp)
+        tokens, labels, loss_mask, attention_mask, position_ids, cu_seqlens, cu_seqlens_argmin, max_seqlen = get_batch(
+            data_iterator, state.cfg, use_mtp
+        )
     timers("batch-generator").stop()
 
     forward_args = {
@@ -356,11 +330,6 @@ def forward_step(
         "attention_mask": attention_mask,
         "labels": labels,
     }
-    # Add optional vision inputs if available
-    if pixel_values is not None:
-        forward_args["pixel_values"] = pixel_values
-    if image_grid_thw is not None:
-        forward_args["image_grid_thw"] = image_grid_thw
 
     # Add packed sequence support
     if cu_seqlens is not None:
