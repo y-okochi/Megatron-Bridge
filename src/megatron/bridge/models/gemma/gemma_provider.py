@@ -27,7 +27,7 @@ from megatron.bridge.models.gemma.gemma3_utils import openai_gelu, gemma3_layer_
 from megatron.bridge.utils import fusions
 
 @dataclass
-class Gemma3ModelProvider(GPTModelProvider):
+class GemmaModelProvider(GPTModelProvider):
     """Configuration and provider for Megatron Core Gemma3 models."""
     seq_length: int = 131_072
 
@@ -46,6 +46,7 @@ class Gemma3ModelProvider(GPTModelProvider):
     interleaved_attn_pattern: tuple = (5, 1)  # (local, global)
     attention_dropout: float = 0.0
     hidden_dropout: float = 0.0
+    rope_scaling_factor: float = 1.0
     # Disable cuDNN attention since TE 1.8 does not support head dim > 128
     attention_backend: AttnBackend = AttnBackend.flash
 
@@ -58,7 +59,7 @@ class Gemma3ModelProvider(GPTModelProvider):
     is_vision_language: bool = False
     flash_decode: bool = False
     gradient_accumulation_fusion: bool = False
-    transformer_layer_spec: Union[ModuleSpec, Callable[["Gemma3ModelProvider"], ModuleSpec]] = field(default_factory=lambda: gemma3_layer_spec)
+    transformer_layer_spec: Union[ModuleSpec, Callable[["GemmaModelProvider"], ModuleSpec]] = field(default_factory=lambda: gemma3_layer_spec)
     scatter_embedding_sequence_parallel: bool = True
     apply_rope_fusion: bool = field(default_factory=fusions.can_enable_apply_rope_fusion)
     masked_softmax_fusion: bool = field(default_factory=fusions.can_enable_masked_softmax_fusion)
@@ -112,7 +113,7 @@ class Gemma3ModelProvider(GPTModelProvider):
         return model
 
 @dataclass
-class Gemma3ModelProvider1B(Gemma3ModelProvider):
+class Gemma3ModelProvider1B(GemmaModelProvider):
     """Gemma3 1B config"""
 
     is_vision_language: bool = False
@@ -130,7 +131,7 @@ class Gemma3ModelProvider1B(Gemma3ModelProvider):
 
 
 @dataclass
-class Gemma3ModelProvider4B(Gemma3ModelProvider):
+class Gemma3ModelProvider4B(GemmaModelProvider):
     """Gemma3 4B config"""
 
     is_vision_language: bool = True
@@ -145,7 +146,7 @@ class Gemma3ModelProvider4B(Gemma3ModelProvider):
     vocab_size: int = 262_208
 
 @dataclass
-class Gemma3ModelProvider12B(Gemma3ModelProvider):
+class Gemma3ModelProvider12B(GemmaModelProvider):
     """Gemma3 12B config"""
 
     is_vision_language: bool = True
@@ -161,7 +162,7 @@ class Gemma3ModelProvider12B(Gemma3ModelProvider):
 
 
 @dataclass
-class Gemma3ModelProvider27B(Gemma3ModelProvider):
+class Gemma3ModelProvider27B(GemmaModelProvider):
     """Gemma3 27B config"""
 
     is_vision_language: bool = True

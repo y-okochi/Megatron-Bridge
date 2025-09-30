@@ -25,12 +25,15 @@ from megatron.bridge.models.gemma.gemma_provider import GemmaModelProvider
 from transformers import Gemma3ForCausalLM
 from megatron.core.models.gpt.gpt_model import GPTModel
 import math
+from transformers import AutoConfig
 
 @MegatronModelBridge.register_bridge(source=Gemma3ForCausalLM, target=GPTModel)
 class GemmaModelBridge(MegatronModelBridge):
 
     def provider_bridge(self, hf_pretrained: PreTrainedCausalLM) -> GemmaModelProvider:
         hf_config = hf_pretrained.config
+        # Precision config is stored in the VL Config
+        hf_vl_config = AutoConfig.from_pretrained(hf_pretrained._model_name_or_path)
 
         provider = GemmaModelProvider(
             init_method_std=hf_config.initializer_range,
@@ -43,35 +46,43 @@ class GemmaModelBridge(MegatronModelBridge):
             num_query_groups=hf_config.num_key_value_heads,
             window_size=hf_config.sliding_window,
             rotary_base=(hf_config.rope_local_base_freq, hf_config.rope_theta),
-            rms_norm_eps=hf_config.rms_norm_eps,
+            layernorm_epsilon=hf_config.rms_norm_eps,
             vocab_size=hf_config.vocab_size,
             softmax_scale=1.0 / math.sqrt(hf_config.query_pre_attn_scalar),
-            rope_scaling_factor=hf_config.rope_scaling.factor,
-            fp16=(self.dtype_from_hf(hf_config, default=torch.float32) == torch.float16), # TODO confirm 
-            bf16=(self.dtype_from_hf(hf_config, default=torch.float32) == torch.bfloat16),
-            params_dtype=self.dtype_from_hf(hf_config, default=torch.float32),
+            rope_scaling_factor=hf_config.rope_scaling.factor if hf_config.rope_scaling else 1.0,
+            fp16=(self.dtype_from_hf(hf_vl_config, default=torch.float32) == torch.float16), # TODO confirm 
+            bf16=(self.dtype_from_hf(hf_vl_config, default=torch.float32) == torch.bfloat16),
+            params_dtype=self.dtype_from_hf(hf_vl_config, default=torch.float32),
         )
 
         return provider
     
     def mapping_registry(self) -> MegatronMappingRegistry:
         
-        mapping_list = [
-                # word emebdding
-                AutoMapping("model.embed_tokens.weight", "model.embed_tokens.weight"),      
-                # attention
-                AutoMapping("model.layers.*.input_layernorm.weight", "decoder.layers.*.self_attention.linear_qkv.layer_norm_weight"),
-                AutoMapping("model.layers.*.self_attn.q_norm.weight", "decoder.layers.*.self_attention.q_layernorm.weight"),
-                AutoMapping("model.layers.*.self_attn.k_norm.weight", "decoder.layers.*.self_attention.k_layernorm.weight"),
-                AutoMapping("model.layers.*.self_attn.o_proj.weight", "decoder.layers.*.self_attention.linear_proj.weight"),
-                AutoMapping("model.layers.*.post_attention_layernorm.weight", "decoder.layers.*.self_attention.linear_proj.post_layernorm.weight"),
-                # mlp
-                AutoMapping("model.layers.*.pre_feedforward_layernorm.weight", "decoder.layers.*.mlp.linear_fc1.layer_norm_weight"),
-                AutoMapping("model.layers.*.mlp.down_proj.weight", "decoder.layers.*.mlp.linear_fc2.weight"),
-                AutoMapping("model.layers.*.post_feedforward_layernorm.weight", "decoder.layers.*.mlp.linear_fc2.post_layernorm.weight"),
-                # final norm
-                AutoMapping("model.norm.weight", "decoder.final_layernorm.weight"),
-        ]
+        mapping = {
+            # word emebdding
+            "embedding.word_embeddings.weight": "model.embed_tokens.weight",
+            # attention
+            "decoder.layers.*.self_attention.linear_qkv.layer_norm_weight": "model.layers.*.input_layernorm.weight",
+            "decoder.layers.*.self_attention.q_layernorm.weight": "model.layers.*.self_attn.q_norm.weight",
+            "decoder.layers.*.self_attention.k_layernorm.weight": "model.layers.*.self_attn.k_norm.weight",
+            "decoder.layers.*.self_attention.linear_proj.weight": "model.layers.*.self_attn.o_proj.weight",
+            "decoder.layers.*.self_attention.linear_proj.post_layernorm.weight": (
+                "model.layers.*.post_attention_layernorm.weight"
+            ),
+            # mlp
+            "decoder.layers.*.mlp.linear_fc1.layer_norm_weight": "model.layers.*.pre_feedforward_layernorm.weight",
+            "decoder.layers.*.mlp.linear_fc2.weight": "model.layers.*.mlp.down_proj.weight",
+            "decoder.layers.*.mlp.linear_fc2.post_layernorm.weight": (
+                "model.layers.*.post_feedforward_layernorm.weight"
+            ),
+            # final norm
+            "decoder.final_layernorm.weight": "model.norm.weight",
+        }
+        mapping_list = []
+        # Convert each dictionary entry to AutoMapping(megatron_param, hf_param)
+        for megatron_param, hf_param in mapping.items():
+            mapping_list.append(AutoMapping(megatron_param=megatron_param, hf_param=hf_param))
 
         mapping_list.extend(
             [

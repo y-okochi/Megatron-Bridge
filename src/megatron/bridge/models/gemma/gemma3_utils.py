@@ -27,7 +27,8 @@ from megatron.core.transformer import ModuleSpec, TransformerConfig, Transformer
 from megatron.core.transformer.attention import SelfAttention, SelfAttentionSubmodules
 from megatron.core.transformer.enums import AttnBackend, AttnMaskType
 from megatron.core.transformer.mlp import MLP, MLPSubmodules
-from megatron.core.utils import safe_import_from
+from megatron.bridge.utils.import_utils import safe_import_from
+
 
 TENorm, _ = safe_import_from("megatron.core.extensions.transformer_engine", "TENorm")
 TELayerNormColumnParallelLinear, _ = safe_import_from(

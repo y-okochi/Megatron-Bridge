@@ -15,7 +15,7 @@
 
 from megatron.bridge.models.gemma.gemma_bridge import GemmaModelBridge
 from megatron.bridge.models.gemma.gemma_provider import (
-    Gemma3ModelProvider,
+    GemmaModelProvider,
     Gemma3ModelProvider1B,
     Gemma3ModelProvider4B,
     Gemma3ModelProvider12B,
@@ -24,7 +24,7 @@ from megatron.bridge.models.gemma.gemma_provider import (
 
 __all__ = [
     "GemmaModelBridge",
-    "Gemma3ModelProvider",
+    "GemmaModelProvider",
     "Gemma3ModelProvider1B",
     "Gemma3ModelProvider4B",
     "Gemma3ModelProvider12B",

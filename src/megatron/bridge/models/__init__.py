@@ -39,7 +39,7 @@ from megatron.bridge.models.deepseek import (
 )
 from megatron.bridge.models.gemma import (
     GemmaModelBridge,
-    Gemma3ModelProvider,
+    GemmaModelProvider,
     Gemma3ModelProvider1B,
     Gemma3ModelProvider4B,
     Gemma3ModelProvider12B,
@@ -154,7 +154,7 @@ __all__ = [
     "RowParallelMapping",
     "AutoMapping",
     "GemmaModelBridge",
-    "Gemma3ModelProvider",
+    "GemmaModelProvider",
     "Gemma3ModelProvider1B",
     "Gemma3ModelProvider4B",
     "Gemma3ModelProvider12B",
