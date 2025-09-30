@@ -42,7 +42,7 @@ from megatron.bridge.training.optim import setup_optimizer
 from megatron.bridge.training.state import GlobalState
 from megatron.bridge.training.tokenizers.tokenizer import build_tokenizer
 from megatron.bridge.training.utils.log_utils import append_to_progress_log, barrier_and_log, setup_logging
-from megatron.bridge.utils.common_utils import print_rank_0
+from megatron.bridge.utils.common_utils import print_rank_0, get_rank_safe
 
 
 
@@ -241,6 +241,11 @@ def setup(
     # Print setup timing.
     print_rank_0("done with setup ...")
     timers.log(["model-and-optimizer-setup", "train/valid/test-data-iterators-setup"], barrier=True)
+    if get_rank_safe() == 0:
+        # Print final resolved/updated/overridden configs
+        print("------- Task Configuration -------")
+        cfg.to_yaml()
+        print("----------------------------------")
 
     return SetupOutput(
         state,
