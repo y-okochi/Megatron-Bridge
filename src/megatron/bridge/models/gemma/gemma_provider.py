@@ -17,10 +17,10 @@ from typing import Callable
 
 import torch
 from megatron.core import parallel_state
+from megatron.core.activations import fast_gelu
 from megatron.core.models.gpt import GPTModel as MCoreGPTModel
 from megatron.core.transformer.enums import AttnBackend
 
-from megatron.bridge.models.activations import openai_gelu
 from megatron.bridge.models.gpt_provider import GPTModelProvider
 
 
@@ -30,7 +30,7 @@ class GemmaModelProvider(GPTModelProvider):
 
     # configs that are common across model sizes
     normalization: str = "RMSNorm"
-    activation_func: Callable = openai_gelu
+    activation_func: Callable = fast_gelu
     gated_linear_unit: bool = True
     position_embedding_type: str = "rope"
     add_bias_linear: bool = False
