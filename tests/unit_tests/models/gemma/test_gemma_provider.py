@@ -14,9 +14,9 @@
 
 from unittest.mock import Mock, patch
 
+from megatron.core.activations import fast_gelu
 from megatron.core.transformer.enums import AttnBackend
 
-from megatron.bridge.models.activations import openai_gelu
 from megatron.bridge.models.gemma.gemma_provider import (
     CodeGemmaModelProvider2B,
     CodeGemmaModelProvider7B,
@@ -44,7 +44,7 @@ class TestGemmaModelProvider:
 
         # Check Gemma-specific defaults
         assert provider.normalization == "RMSNorm"
-        assert provider.activation_func == openai_gelu
+        assert provider.activation_func == fast_gelu
         assert provider.gated_linear_unit is True
         assert provider.position_embedding_type == "rope"
         assert provider.add_bias_linear is False
@@ -167,7 +167,7 @@ class TestGemmaModelProvider2B:
 
         # Test inherited Gemma defaults
         assert provider.normalization == "RMSNorm"
-        assert provider.activation_func == openai_gelu
+        assert provider.activation_func == fast_gelu
         assert provider.gated_linear_unit is True
         assert provider.attention_backend == AttnBackend.flash
 
@@ -193,7 +193,7 @@ class TestGemmaModelProvider7B:
 
         # Test inherited Gemma defaults
         assert provider.normalization == "RMSNorm"
-        assert provider.activation_func == openai_gelu
+        assert provider.activation_func == fast_gelu
         assert provider.gated_linear_unit is True
         assert provider.attention_backend == AttnBackend.flash
 
@@ -219,7 +219,7 @@ class TestCodeGemmaModelProviders:
 
         # Test inherited Gemma defaults
         assert provider.normalization == "RMSNorm"
-        assert provider.activation_func == openai_gelu
+        assert provider.activation_func == fast_gelu
         assert provider.gated_linear_unit is True
         assert provider.attention_backend == AttnBackend.flash
 
@@ -236,7 +236,7 @@ class TestCodeGemmaModelProviders:
 
         # Test inherited Gemma defaults
         assert provider.normalization == "RMSNorm"
-        assert provider.activation_func == openai_gelu
+        assert provider.activation_func == fast_gelu
         assert provider.gated_linear_unit is True
         assert provider.attention_backend == AttnBackend.flash
 
