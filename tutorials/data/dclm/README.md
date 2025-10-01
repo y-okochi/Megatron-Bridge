@@ -87,11 +87,11 @@ python3 shuffle.py \
 This step will convert the merged `.jsonl` files into a `bin/idx` format for training. It requires Megatron-LM to be installed:
 
 ```bash
-# 1. Install Megatron Core with required dependencies
+# Install Megatron Core with required dependencies
 pip install megatron-core
 pip install --no-build-isolation transformer-engine[pytorch]
 
-# 2. Clone repository for examples
+# Clone repository for examples
 git clone https://github.com/NVIDIA/Megatron-LM.git
 ```
 
