@@ -6,6 +6,8 @@ The **DCLM-baseline** dataset contains **4T tokens** across **3B documents**, ac
 
 **Dataset source:** [Hugging Face DCLM-baseline](https://huggingface.co/datasets/mlfoundations/dclm-baseline-1.0/tree/main/global-shard_01_of_10)
 
+You can follow the examples below, which use Python scripts (useful for preprocessing subdatasets in parallel), or follow our [tutorial](https://github.com/NVIDIA-NeMo/Megatron-Bridge/blob/main/tutorials/data/dclm/data_pipeline.ipynb) in the Jupyter notebook.
+
 ---
 
 
