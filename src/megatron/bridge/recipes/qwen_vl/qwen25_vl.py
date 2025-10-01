@@ -18,8 +18,10 @@ from typing import List, Optional, Union
 import torch
 
 from megatron.bridge import AutoBridge
-from megatron.bridge.data.vlm_datasets import HFDatasetConversationProvider
-from megatron.bridge.recipes.utils.dataset_utils import get_blend_fields_from_data_paths
+from megatron.bridge.data.vlm_datasets import (
+    HFDatasetConversationProvider,
+    PreloadedQwen25VLConversationProvider,
+)
 from megatron.bridge.recipes.utils.optimizer_utils import distributed_fused_adam_with_cosine_annealing
 from megatron.bridge.recipes.utils.tokenizer_utils import DEFAULT_NULL_TOKENIZER_VOCAB_SIZE
 from megatron.bridge.training.comm_overlap import CommOverlapConfig
@@ -47,6 +49,8 @@ def pretrain_config(
     test_data_path: Optional[List[str]] = None,
     per_split_data_args_path: Optional[str] = None,
     mock: bool = False,
+    use_preloaded: bool = False,
+    image_folder: Optional[str] = None,
     # Model configuration
     tensor_parallelism: int = 2,
     pipeline_parallelism: int = 1,
@@ -84,10 +88,6 @@ def pretrain_config(
     checkpoint_dir = os.path.join(run_output_dir, "checkpoints")
     tensorboard_dir = os.path.join(run_output_dir, "tb_logs")
 
-    blend, blend_per_split, split = get_blend_fields_from_data_paths(
-        data_paths, data_args_path, train_data_path, valid_data_path, test_data_path, per_split_data_args_path, mock
-    )
-
     # Build provider via AutoBridge and set parallel/seq params here
     bridge = AutoBridge.from_hf_pretrained("Qwen/Qwen2.5-VL-3B-Instruct")
     model_cfg = bridge.to_megatron_provider(load_weights=False)
@@ -124,18 +124,35 @@ def pretrain_config(
             pad_to_max_length=True,
         )
     else:
-        # Use HF-based VLM conversation dataset provider
-        dataset_cfg: DatasetProvider = HFDatasetConversationProvider(
-            sequence_length=seq_length,
-            hf_processor_path=tokenizer_model,
-            maker_name="make_rdr_dataset",
-            # Dataloader config parameters
-            num_workers=2,
-            dataloader_type="single",
-            data_sharding=True,
-            pin_memory=True,
-            persistent_workers=False,
-        )
+        if use_preloaded:
+            # Build from preloaded JSON/JSONL files using HF AutoProcessor conversation schema
+            dataset_cfg = PreloadedQwen25VLConversationProvider(
+                sequence_length=seq_length,
+                hf_processor_path=tokenizer_model,
+                train_data_path=train_data_path[0] if isinstance(train_data_path, list) else train_data_path,
+                valid_data_path=valid_data_path[0] if isinstance(valid_data_path, list) else valid_data_path,
+                test_data_path=test_data_path[0] if isinstance(test_data_path, list) else test_data_path,
+                image_folder=image_folder,
+                # Dataloader config parameters
+                num_workers=2,
+                dataloader_type="single",
+                data_sharding=True,
+                pin_memory=True,
+                persistent_workers=False,
+            )
+        else:
+            # Use HF-based VLM conversation dataset provider
+            dataset_cfg = HFDatasetConversationProvider(
+                sequence_length=seq_length,
+                hf_processor_path=tokenizer_model,
+                maker_name="make_rdr_dataset",
+                # Dataloader config parameters
+                num_workers=2,
+                dataloader_type="single",
+                data_sharding=True,
+                pin_memory=True,
+                persistent_workers=False,
+            )
 
     cfg = ConfigContainer(
         model=model_cfg,

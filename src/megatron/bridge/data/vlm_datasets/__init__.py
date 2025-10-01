@@ -13,24 +13,38 @@
 # limitations under the License.
 
 """
-Adapt from https://github.com/NVIDIA-NeMo/Automodel/tree/main/nemo_automodel/components/datasets/vlm
+VLM dataset utilities.
+
+Public API re-exports:
+- Makers: functions to build conversation examples from HF datasets
+- Providers: classes that build PyTorch datasets bound to HF processors
+- Collate fns: model-specific batch builders
 """
 
-from .datasets import (
-    HFDatasetConversationProvider,
-    VLMConversationDataset,
+from .makers import (
     make_cord_v2_dataset,
     make_cv17_dataset,
     make_medpix_dataset,
     make_rdr_dataset,
 )
+from .dataset_provider import VLMConversationDataset, HFDatasetConversationProvider
+from .preloaded_provider import PreloadedQwen25VLConversationProvider
+from .collate import COLLATE_FNS, default_collate_fn, qwen2_5_collate_fn, phi4_mm_collate_fn
 
 
 __all__ = [
+    # Makers
     "make_rdr_dataset",
     "make_cord_v2_dataset",
     "make_medpix_dataset",
     "make_cv17_dataset",
+    # Dataset types/providers
     "VLMConversationDataset",
     "HFDatasetConversationProvider",
+    "PreloadedQwen25VLConversationProvider",
+    # Collation utilities
+    "COLLATE_FNS",
+    "default_collate_fn",
+    "qwen2_5_collate_fn",
+    "phi4_mm_collate_fn",
 ]

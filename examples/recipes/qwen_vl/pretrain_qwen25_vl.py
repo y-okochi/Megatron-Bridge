@@ -71,6 +71,23 @@ def parse_cli_args() -> Tuple[argparse.Namespace, list[str]]:
         default=str(DEFAULT_CONFIG_FILE_PATH),
         help="Path to the YAML OmegaConf override file. Default: conf/qwen25_vl_pretrain_override_example.yaml",
     )
+    parser.add_argument(
+        "--data-path",
+        type=str,
+        default=None,
+        help="Path to JSON/JSONL dataset (preloaded conversation or legacy messages format).",
+    )
+    parser.add_argument(
+        "--image-folder",
+        type=str,
+        default=None,
+        help="Optional root for resolving relative image/video paths in dataset records.",
+    )
+    parser.add_argument(
+        "--use-preloaded",
+        action="store_true",
+        help="Use preloaded dataset provider (enabled automatically when --data-path is set).",
+    )
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
     args, cli_dotlist_overrides = parser.parse_known_args()
     return args, cli_dotlist_overrides
@@ -82,7 +99,16 @@ def main() -> None:
     logger.info("Megatron-Bridge Qwen2.5-VL Pretraining Script with YAML & CLI Overrides")
     logger.info("-----------------------------------------------------------------------")
 
-    cfg: ConfigContainer = pretrain_config()
+    # Determine whether to use the preloaded dataset provider
+    use_preloaded_flag = bool(args.data_path) or bool(args.use_preloaded)
+
+    cfg: ConfigContainer = pretrain_config(
+        use_preloaded=use_preloaded_flag,
+        train_data_path=args.data_path,
+        valid_data_path=None,
+        test_data_path=None,
+        image_folder=args.image_folder,
+    )
     logger.info("Loaded base configuration")
 
     if get_rank_safe() == 0:
