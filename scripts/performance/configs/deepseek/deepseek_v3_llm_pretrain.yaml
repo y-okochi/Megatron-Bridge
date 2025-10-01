@@ -50,7 +50,7 @@ ConfigContainer:
     delay_wgrad_compute: true
     overlap_moe_expert_parallel_comm: true
     overlap_grad_reduce: false
-    overlap_param_gather: false
+    # overlap_param_gather: false
 
   profiling:
     # For optional fields in the config, specify the target to instantiate the object.
