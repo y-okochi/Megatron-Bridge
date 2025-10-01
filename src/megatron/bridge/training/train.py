@@ -229,7 +229,10 @@ def train(
             if prof_config.use_nsys_profiler:
                 if global_state.train_state.step == prof_config.profile_step_start:
                     torch.cuda.check_error(torch.cuda.cudart().cudaProfilerStart())
-                    torch.autograd.profiler.emit_nvtx(record_shapes=prof_config.record_shapes).__enter__()
+                    if prof_config.record_shapes:
+                        torch.autograd.profiler.emit_nvtx(record_shapes=True).__enter__()
+                    else:
+                        torch.autograd.profiler.emit_nvtx().__enter__()
 
         fault_tolerance.on_checkpointing_start(global_state)
         maybe_finalize_async_save(global_state=global_state, ckpt_cfg=config.checkpoint, blocking=False)
@@ -654,6 +657,7 @@ def post_training_step_callbacks(
             prof.stop()
         if config.profiling.use_nsys_profiler:
             torch.cuda.check_error(torch.cuda.cudart().cudaProfilerStop())
+            torch.autograd.profiler.emit_nvtx().__exit__(None, None, None)
 
     # Manual garbage collection.
     if train_config.manual_gc:
