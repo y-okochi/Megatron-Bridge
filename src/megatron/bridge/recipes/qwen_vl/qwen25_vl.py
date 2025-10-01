@@ -124,7 +124,7 @@ def pretrain_config(
             pad_to_max_length=True,
         )
     else:
-        # Use HF-based VLM conversation dataset provider (CORD-V2 maker)
+        # Use HF-based VLM conversation dataset provider
         dataset_cfg: DatasetProvider = HFDatasetConversationProvider(
             sequence_length=seq_length,
             hf_processor_path=tokenizer_model,
