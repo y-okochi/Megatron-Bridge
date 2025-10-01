@@ -58,7 +58,7 @@ def shuffle_data(
     num_workers: int = 1,
     lines_per_split: int = 1000000,
 ) -> None:
-    """Merges hundreds of small .jsonl files into single .json file.
+    """Shuffles .jsonl file.
 
     Args:
         path_to_save (str): path where to save shuffled file.
