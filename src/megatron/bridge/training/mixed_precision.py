@@ -142,8 +142,19 @@ MIXED_PRECISION_RECIPES: dict[str, Callable[[], "MixedPrecisionConfig"]] = {}
 
 
 def register(func: Callable[[], "MixedPrecisionConfig"]):
-    """Decorator that registers a mixed-precision recipe factory by its function name."""
-    MIXED_PRECISION_RECIPES[func.__name__] = func
+    """Decorator that registers a mixed-precision recipe factory by its function name.
+
+    Automatically registers both underscore and hyphen versions (e.g., 'bf16_mixed' and 'bf16-mixed')
+    to simplify migrating from NeMo2.
+    """
+    name = func.__name__
+    MIXED_PRECISION_RECIPES[name] = func
+
+    # Also register hyphen version if the name contains underscores
+    if "_" in name:
+        hyphen_name = name.replace("_", "-")
+        MIXED_PRECISION_RECIPES[hyphen_name] = func
+
     return func
 
 
