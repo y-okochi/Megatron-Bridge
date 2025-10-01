@@ -99,6 +99,7 @@ class Qwen25VLModel(MegatronModule):
         self.vp_stage = vp_stage
 
         if pre_process:
+            config.vision_config._attn_implementation = "flash_attention_2"
             self.visual = Qwen2_5_VisionTransformerPretrainedModel._from_config(config.vision_config)
         self.language_model = self.config.provide_language_model(
             pre_process=pre_process, post_process=post_process, vp_stage=vp_stage
