@@ -20,11 +20,11 @@ from omegaconf import OmegaConf
 
 try:
     from argument_parser import parse_cli_args
-    from utils.common import get_perf_matrix_overrides
+    from utils.helpers import get_perf_matrix_overrides
     from utils.executors import slurm_executor
 except (ImportError, ModuleNotFoundError):
     from .argument_parser import parse_cli_args
-    from .utils.common import get_perf_matrix_overrides
+    from .utils.helpers import get_perf_matrix_overrides
     from .utils.executors import slurm_executor
 
 
@@ -141,9 +141,30 @@ if __name__ == "__main__":
         args=target_script_args,
     )
 
-    # workaround: update the experiment name to align LLMB naming convention
-    train_config =  yaml_overrides_omega["perf_matrix"][args.gpu][f"num_gpus_{args.num_gpus}"]["common"]
-    exp_config = f"gpus{args.num_gpus}_tp{train_config["tp"]}_pp{train_config["pp"]}_cp{train_config["cp"]}_vp{train_config["vp"]}_ep{train_config["ep"]}_mbs{train_config["mbs"]}_gbs{train_config["gbs"]}"
-    exp_name = f"pretrain_{args.model_name}_{args.model_size}_{args.compute_dtype}_{exp_config}"
-
+    num_gpus_supported = [
+        int(k.split("_")[-1])
+        for k in yaml_overrides_omega["perf_matrix"][args.gpu]
+        if k.startswith("num_gpus_")
+    ]
+    default_num_gpus = args.num_gpus if args.num_gpus in num_gpus_supported else num_gpus_supported[0]
+    train_config = yaml_overrides_omega["perf_matrix"][args.gpu][f"num_gpus_{default_num_gpus}"]["common"]
+    gbs = args.num_gpus * 8 if args.model_name in ["deepseek"] else train_config["gbs"]
+    exp_config = (
+        f"gpus{args.num_gpus}_"
+        f"tp{train_config['tp']}_"
+        f"pp{train_config['pp']}_"
+        f"cp{train_config['cp']}_"
+        f"vp{train_config['vp']}_"
+        f"ep{train_config['ep']}_"
+        f"mbs{train_config['mbs']}_"
+        f"gbs{gbs}"
+    )
+    compute_dtype = (
+        "bf16"
+        if args.compute_dtype == "bf16"
+        else f"{args.compute_dtype}_{args.fp8_recipe}"
+    )
+    compute_dtype = "bf16" if args.compute_dtype == "bf16" else f"{args.compute_dtype}_{args.fp8_recipe}"
+    exp_name = f"pretrain_{args.model_name}_{args.model_size}_{compute_dtype}_{exp_config}"
+ 
     run.run(train_script, executor=executor, plugins=plugins, dryrun=args.dryrun, detach=True, name=exp_name)
