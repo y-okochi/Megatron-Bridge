@@ -231,13 +231,11 @@ def parse_cli_args():
         required=False,
         default=None,
     )
-
     parser.add_argument(
         "-pgm",
         "--profiling_gpu_metrics",
         help="Enable nsys gpu metrics. Disabled by default.",
         action="store_true",
     )
-
     args, cli_dotlist_overrides = parser.parse_known_args()
     return args, cli_dotlist_overrides

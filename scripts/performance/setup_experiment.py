@@ -45,8 +45,10 @@ logger: logging.Logger = logging.getLogger(__name__)
 
 if __name__ == "__main__":
     args, _ = parse_cli_args()
-    exp_name = f"{args.model_name}_{args.model_size}_{args.domain}_{args.task}"
-    exp_name += "_bf16" if args.compute_dtype == "bf16" else f"_{args.compute_dtype}_{args.fp8_recipe}"
+    dtype = "bf16" if args.compute_dtype == "bf16" else f"{args.compute_dtype}_{args.fp8_recipe}"
+
+    if args.model_name in ["qwen3"] and args.model_size in ["30b_a3b", "235b_a22b"]:
+        assert args.hf_token is not None, "HF token is required for Qwen3 tokenizer. NullTokenizer to be used soon."
 
     if args.model_name in ["qwen3"] and args.model_size in ["30b_a3b", "235b_a22b"]:
         assert args.hf_token is not None, "HF token is required for Qwen3 tokenizer. NullTokenizer to be used soon."
@@ -159,12 +161,6 @@ if __name__ == "__main__":
         f"mbs{train_config['mbs']}_"
         f"gbs{gbs}"
     )
-    compute_dtype = (
-        "bf16"
-        if args.compute_dtype == "bf16"
-        else f"{args.compute_dtype}_{args.fp8_recipe}"
-    )
-    compute_dtype = "bf16" if args.compute_dtype == "bf16" else f"{args.compute_dtype}_{args.fp8_recipe}"
-    exp_name = f"pretrain_{args.model_name}_{args.model_size}_{compute_dtype}_{exp_config}"
- 
+    exp_name = f"pretrain_{args.model_name}_{args.model_size}_{dtype}_{exp_config}"
+
     run.run(train_script, executor=executor, plugins=plugins, dryrun=args.dryrun, detach=True, name=exp_name)
