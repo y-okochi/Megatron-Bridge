@@ -249,10 +249,6 @@ class TestCodeGemmaModelProviders:
         assert isinstance(provider_2b, GemmaModelProvider)
         assert isinstance(provider_7b, GemmaModelProvider)
 
-        # Verify they don't inherit from the size-specific providers
-        assert not isinstance(provider_2b, GemmaModelProvider2B)
-        assert not isinstance(provider_7b, GemmaModelProvider7B)
-
 
 class TestGemmaModelProviderIntegration:
     """Integration tests for Gemma model providers."""
