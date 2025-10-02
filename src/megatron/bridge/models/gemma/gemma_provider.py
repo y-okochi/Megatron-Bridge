@@ -112,28 +112,18 @@ class GemmaModelProvider7B(GemmaModelProvider):
 
 
 @dataclass
-class CodeGemmaModelProvider2B(GemmaModelProvider):
+class CodeGemmaModelProvider2B(GemmaModelProvider2B):
     """Configuration for a 2B parameter Code Gemma model.
 
     Extends GemmaModelProvider with specific settings for code generation.
+    Thism model has an identical configuration to GemmaModelProvider2B.
     """
-
-    num_layers: int = 18
-    hidden_size: int = 2048
-    num_attention_heads: int = 8
-    num_query_groups: int = 1
-    ffn_hidden_size: int = 16384
 
 
 @dataclass
-class CodeGemmaModelProvider7B(GemmaModelProvider):
+class CodeGemmaModelProvider7B(GemmaModelProvider7B):
     """Configuration for a 7B parameter Code Gemma model.
 
     Extends GemmaModelProvider with specific settings for code generation.
+    This model has an identical configuration to GemmaModelProvider7B.
     """
-
-    num_layers: int = 28
-    hidden_size: int = 3072
-    num_attention_heads: int = 16
-    num_query_groups: int = 16
-    ffn_hidden_size: int = 24576
