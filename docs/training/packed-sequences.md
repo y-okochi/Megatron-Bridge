@@ -4,7 +4,7 @@ This guide explains how to use packed sequences in Megatron Bridge for efficient
 
 ## Overview
 
-When fine-tuning large language models, GPU under-utilization often occurs due to inefficient input data structure. This inefficiency arises because many fine-tuning datasets have a skewed distribution of sequence lengths, with many short sequences and a few long ones, following Zipf's Law. Since transformer models require fixed-length inputs, shorter sequences must be padded with many padding tokens.
+When fine-tuning large language models, GPU under-utilization often occurs due to inefficient input data structure. This inefficiency arises because many fine-tuning datasets have a skewed distribution of sequence lengths, with many short sequences and a few long ones, following [Zipf's Law](https://en.wikipedia.org/wiki/Zipf%27s_law). Since transformer models require fixed-length inputs, shorter sequences must be padded with many padding tokens.
 
 This leads to two main inefficiencies:
 
@@ -13,7 +13,7 @@ This leads to two main inefficiencies:
 
 Packed sequences is a training technique where multiple training sequences (examples) are concatenated into one long sequence (pack). This technique greatly reduces the number of padding tokens, allowing more meaningful tokens to be processed in each micro batch. As a result, it maximizes both GPU compute and GPU memory utilization.
 
-While sequences for pretraining can be concatenated naively without carefully minding the sequence boundaries, this is often not the case for supervised and instruction fine-tuning. This is because the data quality is much higher in fine-tuning workloads, so each input sequence should be treated individually.
+**Note:** Sequence packing is primarily beneficial for fine-tuning workloads. Megatron-style pretraining datasets (using `IndexedDataset` and `GPTDataset`) already concatenate documents during sampling to fill sequences to the target length, eliminating padding tokens without requiring the boundary-aware packing infrastructure described here. For supervised fine-tuning, however, naive concatenation is insufficient—each training example must be treated individually to preserve data quality.
 
 The conventional solution is to build a custom attention mask (specifically, a block triangular mask) to mask out attention values between sequences. However, this increases the complexity of attention from $\sum_i {s_i}^2$ to $\Big({\sum_i {s_i}}\Big)^2$, where $s_i$ is the length of the $i$th subsequence. In practice, the conventional solution puts a limit on the packed sequence size.
 
