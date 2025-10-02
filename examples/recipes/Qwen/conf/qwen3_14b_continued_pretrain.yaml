@@ -1,0 +1,109 @@
+# Qwen3 14B Continued Pretraining Configuration Override
+# This configuration modifies the base pretrain_config for continued pretraining
+# Key changes:
+# - Enables checkpoint loading from existing model
+# - Adjusts learning rate for continued training
+# - Sets appropriate training iterations for continuation
+# - Configures checkpoint saving for resumed training
+
+# Model configuration - use same parallelism as base model
+model:
+  # Keep same parallelism configuration as base model
+  tensor_model_parallel_size: 8
+  pipeline_model_parallel_size: 1
+  context_parallel_size: 1
+  sequence_parallel: false
+
+# Training configuration for continued pretraining
+train:
+  # Reduced iterations since this is continuation, not full training
+  train_iters: 50000
+  # More frequent evaluation during continued training
+  eval_interval: 100
+  eval_iters: 32
+  # Keep same batch sizes
+  global_batch_size: 32
+  micro_batch_size: 2
+  # Manual garbage collection settings
+  manual_gc: true
+  manual_gc_interval: 100
+  manual_gc_eval: 100
+
+# Optimizer settings for continued pretraining
+optimizer:
+  # Lower learning rate for continued training to avoid catastrophic forgetting
+  lr: 1e-4
+  min_lr: 1e-5
+  # Shorter warmup for continued training
+  lr_warmup_iters: 100
+  weight_decay: 0.01
+  clip_grad: 1.0
+
+# Checkpoint configuration - crucial for continued pretraining
+checkpoint:
+  # Checkpoint saving interval
+  save_interval: 1000
+  # Directory to save new checkpoints (will be set in script)
+  save: null
+  # Directory to load existing checkpoint from (must be specified)
+  load: null  # This should be overridden via CLI or set to existing checkpoint path
+  # Use distributed checkpoint format
+  ckpt_format: "torch_dist"
+  fully_parallel_save: true
+  # Important: don't exit after loading checkpoint
+  exit_on_missing_checkpoint: false
+  # Load optimizer and scheduler state for proper continuation
+  # Set to false if checkpoint doesn't contain optimizer/scheduler states
+  load_optimizer_states: false
+  load_scheduler_states: false
+
+# Dataset configuration
+
+dataset:
+  blend: [["/workspace/llm-training/datasets/pretraining/megatron/Qwen3-14B-Base-web-fin-ja-texts_text_document"], [1.0]]
+  sequence_length: 8192
+
+# dataset:
+#   sequence_length: 8192
+
+# dataset:
+#   random_seed: 1234
+#   sequence_length: 8192
+#   # Data sharding settings
+#   data_sharding: true
+#   dataloader_type: "single"
+#   skip_getting_attention_mask_from_dataset: true
+#   # Reset settings for continued training
+#   reset_attention_mask: false
+#   reset_position_ids: false
+#   eod_mask_loss: false
+#   num_dataset_builder_threads: 1
+
+# Logging configuration
+logger:
+  # More frequent logging for monitoring continued training
+  log_interval: 1
+  log_timers_to_tensorboard: true
+  # Tensorboard directory will be set in script
+
+# Tokenizer configuration (same as base)
+tokenizer:
+  tokenizer_type: "HuggingFaceTokenizer"
+  tokenizer_model: "Qwen/Qwen3-14B"
+
+# Mixed precision configuration
+mixed_precision: "bf16_mixed"
+
+# RNG configuration
+rng:
+  seed: 1234
+
+# Distributed training configuration
+ddp:
+  check_for_nan_in_grad: true
+  grad_reduce_in_fp32: true
+  overlap_grad_reduce: true
+  overlap_param_gather: true
+  average_in_collective: true
+  use_distributed_optimizer: true
+  use_megatron_fsdp: false
